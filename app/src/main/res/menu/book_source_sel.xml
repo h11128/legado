@@ -53,4 +53,11 @@
         android:title="@string/check_select_source"
         app:showAsAction="never" />
 
+    <item
+        android:id="@+id/menu_debug_source"
+        android:icon="@drawable/ic_check_source"
+        android:title="@string/debug_select_source"
+        app:showAsAction="never" />
+
+
 </menu>

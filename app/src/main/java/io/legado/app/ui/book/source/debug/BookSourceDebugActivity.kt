@@ -2,6 +2,7 @@ package io.legado.app.ui.book.source.debug
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import androidx.activity.viewModels
@@ -43,6 +44,7 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
                 if (state == -1 || state == 1000) {
                     binding.rotateLoading.hide()
                 }
+                Log.d("Jason", msg)
             }
         }
     }
