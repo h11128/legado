@@ -49,7 +49,7 @@ class DebugSource(val source: BookSource) {
         onNext: (sourceUrl: String) -> Unit
     ): Coroutine<*> {
         val webBook = WebBook(source)
-        return webBook.searchBook(keyword, scope = scope, context = context)
+        return webBook.searchBook(keyword, scope = scope, context = context).timeout(60000L)
             .timeout(60000L)
             .onError(Dispatchers.IO) {
                 source.addGroup("失效")
