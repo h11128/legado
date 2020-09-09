@@ -160,7 +160,6 @@ data class BookSource(
                 && enabled == source.enabled
                 && enabledExplore == source.enabledExplore
                 && equal(header, source.header)
-                && equal(bookSourceComment, source.bookSourceComment)
                 && equal(loginUrl, source.loginUrl)
                 && equal(exploreUrl, source.exploreUrl)
                 && equal(searchUrl, source.searchUrl)
