@@ -49,7 +49,13 @@ class Coroutine<T>(
     init {
         this.job = executeInternal(context, block)
     }
-
+    fun getTime(): Long{
+        return if (this.timeMillis == null){
+            -1
+        } else{
+            this.timeMillis!!
+        }
+    }
     fun timeout(timeMillis: () -> Long): Coroutine<T> {
         this.timeMillis = timeMillis()
         return this@Coroutine
