@@ -44,7 +44,7 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
                 if (state == -1 || state == 1000) {
                     binding.rotateLoading.hide()
                 }
-                Log.d("Jason", msg)
+                Log.d("h11128", msg)
             }
         }
     }

@@ -51,7 +51,7 @@ class DebugSource(val source: BookSource): Debug.Callback1 {
             App.db.bookSourceDao().getBookSource(sourceUrl)?.let {
                 if (!it.searchUrl.isNullOrEmpty()) {
                     printLog(state, msg, it)
-                    Log.d("Jason", "msg")
+                    Log.d("h11128", "msg")
                 }
             }
         }
@@ -99,7 +99,7 @@ class DebugSource(val source: BookSource): Debug.Callback1 {
         val variableBook = SearchBook(origin = source.bookSourceUrl)
         //Debug.simpleDebug(source, keyword)
         log(source.bookSourceUrl, "校验搜索")
-        Log.d("Jason", source.bookSourceUrl.toString())
+        Log.d("h11128", source.bookSourceUrl.toString())
         return webBook.searchBook(keyword, scope = scope, context = context, variableBook = variableBook).timeout(60000L)
             .timeout(60000L)
             .onError(Dispatchers.IO) {
