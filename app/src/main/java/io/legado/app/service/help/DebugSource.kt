@@ -48,7 +48,7 @@ class DebugSource(val source: BookSource): Debug.Callback1 {
         }
 
         if (sourceUrl != null && msg != null){
-            App.db.bookSourceDao().getBookSource(sourceUrl)?.let {
+            App.db.bookSourceDao.getBookSource(sourceUrl)?.let {
                 if (!it.searchUrl.isNullOrEmpty()) {
                     printLog(state, msg, it)
                     Log.d("h11128", "msg")
@@ -100,15 +100,15 @@ class DebugSource(val source: BookSource): Debug.Callback1 {
         //Debug.simpleDebug(source, keyword)
         log(source.bookSourceUrl, "校验搜索")
         Log.d("h11128", source.bookSourceUrl.toString())
-        return webBook.searchBook(keyword, scope = scope, context = context, variableBook = variableBook).timeout(60000L)
+        return webBook.searchBook(scope, keyword, context = context, page = 1).timeout(60000L)
             .timeout(60000L)
             .onError(Dispatchers.IO) {
                 source.addGroup("失效")
-                App.db.bookSourceDao().update(source)
+                App.db.bookSourceDao.update(source)
                 log(source.bookSourceUrl, "校验失败")
             }.onSuccess(Dispatchers.IO) {
                 source.removeGroup("失效")
-                App.db.bookSourceDao().update(source)
+                App.db.bookSourceDao.update(source)
                 log(source.bookSourceUrl, "校验成功")
             }.onFinally(Dispatchers.IO) {
                 onNext(source.bookSourceUrl)

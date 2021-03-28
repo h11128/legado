@@ -100,8 +100,7 @@ object OldRule {
                 source.loginUrl = sourceAny.loginUrl
                 source.bookSourceComment = sourceAny.bookSourceComment
                 source.lastUpdateTime = sourceAny.lastUpdateTime
-                source.bookSourceCheckState = sourceAny.bookSourceCheckState      // 校验状态
-                source.respondTime = sourceAny.respondTime                      // 响应时间
+                //source.respondTime = sourceAny.respondTime                      // 响应时间
                 source.weight = sourceAny.weight
                 source.exploreUrl = sourceAny.exploreUrl
                 source.ruleExplore = if (sourceAny.ruleExplore is String) {
@@ -150,7 +149,6 @@ object OldRule {
         var header: String? = null,                     // 请求头
         var loginUrl: String? = null,                   // 登录地址
         var bookSourceComment: String? = "",             //书源注释
-        var bookSourceCheckState: Int = -2,              // 校验状态
         var respondTime: Int = -1,                      // 响应时间
         var lastUpdateTime: Long = 0,                   // 最后更新时间，用于排序
         var weight: Int = 0,                            // 智能排序的权重

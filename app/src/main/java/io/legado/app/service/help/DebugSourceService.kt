@@ -73,7 +73,7 @@ class DebugSourceService : BaseService() {
         execute {
             if (index < allIds.size) {
                 val sourceUrl = allIds[index]
-                App.db.bookSourceDao().getBookSource(sourceUrl)?.let { source ->
+                App.db.bookSourceDao.getBookSource(sourceUrl)?.let { source ->
                     if (source.searchUrl.isNullOrEmpty()) {
                         onNext(sourceUrl)
                     } else {
