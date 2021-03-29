@@ -84,7 +84,7 @@ class EpubFile(var book: Book) {
                 }
                 if (!File(book.coverUrl!!).exists()) {
                     /*部分书籍DRM处理后，封面获取异常，待优化*/
-                    epubBook!!.coverImage.inputStream.use {
+                    epubBook!!.coverImage?.inputStream?.use {
                         val cover = BitmapFactory.decodeStream(it)
                         val out = FileOutputStream(FileUtils.createFileIfNotExist(book.coverUrl!!))
                         cover.compress(Bitmap.CompressFormat.JPEG, 90, out)
@@ -135,7 +135,7 @@ class EpubFile(var book: Book) {
     }
 
     private fun getChildChapter(chapter: BookChapter, href: String): String? {
-        epubBook.let {
+        epubBook?.let {
             val body = Jsoup.parse(String(it.resources.getByHref(href).data, mCharset)).body()
 
             if (chapter.url == href) {
@@ -183,7 +183,7 @@ class EpubFile(var book: Book) {
 
     private fun getImage(href: String): InputStream? {
         val abHref = href.replace("../", "")
-        return epubBook.resources.getByHref(abHref).inputStream
+        return epubBook?.resources?.getByHref(abHref)?.inputStream
     }
 
     private fun upBookInfo() {
@@ -206,7 +206,7 @@ class EpubFile(var book: Book) {
 
     private fun getChapterList(): ArrayList<BookChapter> {
         val chapterList = ArrayList<BookChapter>()
-        epubBook.tableOfContents.allUniqueResources.forEachIndexed { index, resource ->
+        epubBook?.tableOfContents?.allUniqueResources?.forEachIndexed { index, resource ->
             var title = resource.title
             if (TextUtils.isEmpty(title)) {
                 try {
