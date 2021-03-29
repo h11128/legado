@@ -6,6 +6,7 @@ import android.util.Log
 import io.legado.app.App
 import io.legado.app.R
 import io.legado.app.constant.IntentAction
+import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.SearchBook
@@ -13,20 +14,15 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.Debug
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.CheckSourceService
-import io.legado.app.utils.htmlFormat
+import io.legado.app.utils.HtmlFormatter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import org.jetbrains.anko.toast
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.collections.ArrayList
 import kotlin.coroutines.CoroutineContext
 
-class DebugSource(val source: BookSource): Debug.Callback1 {
-
-    override fun printLog(state: Int, msg: String, source: BookSource) {
-        callback?.invoke(state, msg, source)
-    }
+class DebugSource(val source: BookSource){
 
     @Synchronized
     fun log(
@@ -40,20 +36,11 @@ class DebugSource(val source: BookSource): Debug.Callback1 {
         if (callback == null || !print) return
         var printMsg = msg ?: ""
         if (isHtml) {
-            printMsg = printMsg.htmlFormat()
+            printMsg = HtmlFormatter.format(msg)
         }
         if (showTime) {
             printMsg =
                 "${DEBUG_TIME_FORMAT.format(Date(System.currentTimeMillis() - startTime))} $printMsg"
-        }
-
-        if (sourceUrl != null && msg != null){
-            App.db.bookSourceDao.getBookSource(sourceUrl)?.let {
-                if (!it.searchUrl.isNullOrEmpty()) {
-                    printLog(state, msg, it)
-                    Log.d("h11128", "msg")
-                }
-            }
         }
     }
 
@@ -68,7 +55,6 @@ class DebugSource(val source: BookSource): Debug.Callback1 {
 
         fun start(context: Context, sources: List<BookSource>) {
             if (sources.isEmpty()) {
-                context.toast(R.string.non_select)
                 return
             }
             val selectedIds: ArrayList<String> = arrayListOf()
@@ -104,11 +90,11 @@ class DebugSource(val source: BookSource): Debug.Callback1 {
             .timeout(60000L)
             .onError(Dispatchers.IO) {
                 source.addGroup("失效")
-                App.db.bookSourceDao.update(source)
+                appDb.bookSourceDao.update(source)
                 log(source.bookSourceUrl, "校验失败")
             }.onSuccess(Dispatchers.IO) {
                 source.removeGroup("失效")
-                App.db.bookSourceDao.update(source)
+                appDb.bookSourceDao.update(source)
                 log(source.bookSourceUrl, "校验成功")
             }.onFinally(Dispatchers.IO) {
                 onNext(source.bookSourceUrl)
