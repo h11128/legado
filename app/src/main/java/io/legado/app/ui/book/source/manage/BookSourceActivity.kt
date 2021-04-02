@@ -62,6 +62,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     private var sort = Sort.Default
     private var sortAscending = true
     private var snackBar: Snackbar? = null
+    val checkSourceViewModel: CheckSourceViewModel by viewModels()
 
     override fun getViewBinding(): ActivityBookSourceBinding {
         return ActivityBookSourceBinding.inflate(layoutInflater)
@@ -77,6 +78,14 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         if (!LocalConfig.bookSourcesHelpVersionIsLast) {
             showHelp()
         }
+        initCheckSourceViewModel()
+    }
+
+    private fun initCheckSourceViewModel() {
+        val num = appDb.bookSourceDao.allCount()
+        checkSourceViewModel.statusLiveData.value = List(num) { "" }
+        checkSourceViewModel.checkTextVisibility.value = List(num) { false }
+        checkSourceViewModel.loadingPanelVisibility.value = List(num) { false }
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
@@ -299,6 +308,41 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     @SuppressLint("InflateParams")
     private fun checkSource() {
+        eventObservable<Pair<String, CheckSourceState>>(EventBus.CHECK_SOURCE_PROGRESS).observe(this,
+                                                                                                { pair ->
+                                                                                                    val statusLiveDataList =
+                                                                                                            checkSourceViewModel.statusLiveData.value?.toMutableList()
+                                                                                                    val checkTextVisibilityList =
+                                                                                                            checkSourceViewModel.checkTextVisibility.value?.toMutableList()
+                                                                                                    val loadingPanelVisibilityList =
+                                                                                                            checkSourceViewModel.checkTextVisibility.value?.toMutableList()
+                                                                                                    val position =
+                                                                                                            adapter.getIndexFromUrl(
+                                                                                                                    pair.first)
+                                                                                                    val checkResult =
+                                                                                                            pair.second
+                                                                                                    statusLiveDataList?.set(
+                                                                                                            position,
+                                                                                                            checkResult.toString())
+                                                                                                    if (checkResult.ordinal >= 5) {
+                                                                                                        loadingPanelVisibilityList?.set(
+                                                                                                                position,
+                                                                                                                false)
+                                                                                                    } else {
+                                                                                                        loadingPanelVisibilityList?.set(
+                                                                                                                position,
+                                                                                                                true)
+                                                                                                    }
+                                                                                                    checkTextVisibilityList?.set(
+                                                                                                            position,
+                                                                                                            true)
+                                                                                                    checkSourceViewModel.statusLiveData.value =
+                                                                                                            statusLiveDataList
+                                                                                                    checkSourceViewModel.checkTextVisibility.value =
+                                                                                                            checkTextVisibilityList
+                                                                                                    checkSourceViewModel.loadingPanelVisibility.value =
+                                                                                                            loadingPanelVisibilityList
+                                                                                                })
         alert(titleResource = R.string.search_book_key) {
             val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
                 editView.setText(CheckSource.keyword)

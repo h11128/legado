@@ -7,6 +7,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.PopupMenu
+import android.widget.ProgressBar
+import android.widget.TextView
 import androidx.core.os.bundleOf
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -28,7 +30,8 @@ class BookSourceAdapter(context: Context, val callBack: CallBack) :
     Callback {
 
     private val selected = linkedSetOf<BookSource>()
-
+    private val checkSourceViewModel: CheckSourceViewModel =
+            (context as BookSourceActivity).checkSourceViewModel
     val diffItemCallback: DiffUtil.ItemCallback<BookSource>
         get() = object : DiffUtil.ItemCallback<BookSource>() {
 
@@ -37,8 +40,7 @@ class BookSourceAdapter(context: Context, val callBack: CallBack) :
             }
 
             override fun areContentsTheSame(oldItem: BookSource, newItem: BookSource): Boolean {
-                if (oldItem.bookSourceName != newItem.bookSourceName)
-                    return false
+                if (oldItem.bookSourceName != newItem.bookSourceName) return false
                 if (oldItem.bookSourceGroup != newItem.bookSourceGroup)
                     return false
                 if (oldItem.enabled != newItem.enabled)
@@ -87,6 +89,7 @@ class BookSourceAdapter(context: Context, val callBack: CallBack) :
         with(binding) {
             val payload = payloads.getOrNull(0) as? Bundle
             if (payload == null) {
+                checkSectionUpdate(ivLoadingPanel, ivText, holder.layoutPosition)
                 root.setBackgroundColor(ColorUtils.withAlpha(context.backgroundColor, 0.5f))
                 if (item.bookSourceGroup.isNullOrEmpty()) {
                     cbBookSource.text = item.bookSourceName
@@ -105,6 +108,38 @@ class BookSourceAdapter(context: Context, val callBack: CallBack) :
                 }
             }
         }
+    }
+
+    fun getItemIndex(bookSource: BookSource): Int {
+        return getItems().indexOf(bookSource)
+    }
+
+    fun getIndexFromUrl(url: String): Int {
+        return getItems().map { it.bookSourceUrl }.indexOf(url)
+    }
+
+
+    private fun checkSectionUpdate(ivLoadingPanel: ProgressBar, ivText: TextView, indexOf: Int) {
+        checkSourceViewModel.loadingPanelVisibility.observe(context as BookSourceActivity, {
+            if (it[indexOf]) {
+                ivLoadingPanel.visibility = View.VISIBLE
+            } else {
+                ivLoadingPanel.visibility = View.GONE
+            }
+        })
+
+        checkSourceViewModel.checkTextVisibility.observe(context, {
+            if (it[indexOf]) {
+                ivText.visibility = View.VISIBLE
+            } else {
+                ivText.visibility = View.GONE
+            }
+        })
+
+        checkSourceViewModel.statusLiveData.observe(context, {
+            ivText.text = it[indexOf]
+        })
+
     }
 
     override fun registerListener(holder: ItemViewHolder, binding: ItemBookSourceBinding) {
