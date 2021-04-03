@@ -13,6 +13,7 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.help.AppConfig
 import io.legado.app.help.IntentHelp
 import io.legado.app.help.coroutine.CompositeCoroutine
+import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.help.CheckSource
 import io.legado.app.ui.book.source.manage.BookSourceActivity
@@ -33,7 +34,7 @@ class CheckSourceService : BaseService() {
     private val checkedIds = ArrayList<String>()
     private var processIndex = 0
     private var notificationMsg = ""
-    lateinit var statusObservable: Observable<Pair<String, CheckSourceState>>
+    lateinit var statusObservable: Observable<Pair<String, String>>
     private var stateMap: ConcurrentHashMap<String, CheckSourceState> = ConcurrentHashMap()
     private val notificationBuilder by lazy {
         NotificationCompat.Builder(this, AppConst.channelIdReadAloud)
@@ -110,10 +111,10 @@ class CheckSourceService : BaseService() {
     }
 
     fun check(source: BookSource) {
-        execute(context = searchCoroutine) {
+        val job = Coroutine.async(this, searchCoroutine) {
             var currentState = CheckSourceState.CheckContent
             stateMap[source.bookSourceUrl] = currentState
-            statusObservable.post(Pair(source.bookSourceUrl, currentState))
+            statusObservable.post(Pair(source.bookSourceUrl, currentState.toString()))
             val webBook = WebBook(source)
             var books = webBook.searchBookAwait(this, CheckSource.keyword)
             if (books.isEmpty()) {
@@ -130,7 +131,7 @@ class CheckSourceService : BaseService() {
                 }
                 currentState = CheckSourceState.CheckExplore
                 stateMap[source.bookSourceUrl] = currentState
-                statusObservable.post(Pair(source.bookSourceUrl, currentState))
+                statusObservable.post(Pair(source.bookSourceUrl, currentState.toString()))
 
                 books = webBook.exploreBookAwait(this, url!!)
             }
@@ -140,45 +141,45 @@ class CheckSourceService : BaseService() {
             }
             currentState = CheckSourceState.CheckInfo
             stateMap[source.bookSourceUrl] = currentState
-            statusObservable.post(Pair(source.bookSourceUrl, currentState))
+            statusObservable.post(Pair(source.bookSourceUrl, currentState.toString()))
 
             val book = webBook.getBookInfoAwait(this, books.first().toBook())
             currentState = CheckSourceState.CheckChapterList
             stateMap[source.bookSourceUrl] = currentState
-            statusObservable.post(Pair(source.bookSourceUrl, currentState))
+            statusObservable.post(Pair(source.bookSourceUrl, currentState.toString()))
 
             val toc = webBook.getChapterListAwait(this, book)
             currentState = CheckSourceState.CheckContent
             stateMap[source.bookSourceUrl] = currentState
-            statusObservable.post(Pair(source.bookSourceUrl, currentState))
+            statusObservable.post(Pair(source.bookSourceUrl, currentState.toString()))
 
             val content = webBook.getContentAwait(this, book, toc.first())
             if (content.isBlank()) {
                 currentState = CheckSourceState.CheckContent
                 stateMap[source.bookSourceUrl] = currentState
-                statusObservable.post(Pair(source.bookSourceUrl, currentState))
+                statusObservable.post(Pair(source.bookSourceUrl, currentState.toString()))
                 throw Exception("正文内容为空")
             }
         }.timeout(180000L)
             .onError {
                 source.addGroup("失效")
-                source.bookSourceComment =
-                        "error:${it.localizedMessage}\n${source.bookSourceComment}"
-                val currentState =
-                        CheckSourceState.values()[stateMap[source.bookSourceUrl]!!.ordinal + 5]
+                source.bookSourceComment = "error:${it.localizedMessage}\n${source.bookSourceComment}"
+                val currentState = CheckSourceState.values()[stateMap[source.bookSourceUrl]!!.ordinal + 5]
                 stateMap[source.bookSourceUrl] = currentState
-                statusObservable.post(Pair(source.bookSourceUrl, currentState))
+                statusObservable.post(Pair(source.bookSourceUrl, currentState.toString()))
                 appDb.bookSourceDao.update(source)
             }.onSuccess {
-                    source.removeGroup("失效")
-                    val currentState =
-                            CheckSourceState.values()[stateMap[source.bookSourceUrl]!!.ordinal + 10]
-                    stateMap[source.bookSourceUrl] = currentState
-                    statusObservable.post(Pair(source.bookSourceUrl, currentState))
-                    appDb.bookSourceDao.update(source)
+                source.removeGroup("失效")
+                val currentState = CheckSourceState.values()[stateMap[source.bookSourceUrl]!!.ordinal + 10]
+                stateMap[source.bookSourceUrl] = currentState
+                statusObservable.post(Pair(source.bookSourceUrl, currentState.toString()))
+                appDb.bookSourceDao.update(source)
             }.onFinally {
-                    onNext(source.bookSourceUrl, source.bookSourceName)
+
+                onNext(source.bookSourceUrl, source.bookSourceName)
             }
+        statusObservable.post(Pair(source.bookSourceUrl, job.getTime().toString()))
+
     }
 
     private fun onNext(sourceUrl: String, sourceName: String) {

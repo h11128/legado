@@ -89,7 +89,7 @@ class BookSourceAdapter(context: Context, val callBack: CallBack) :
         with(binding) {
             val payload = payloads.getOrNull(0) as? Bundle
             if (payload == null) {
-                checkSectionUpdate(ivLoadingPanel, ivText, holder.layoutPosition)
+                //checkSectionUpdate(ivLoadingPanel, ivText, holder.layoutPosition)
                 root.setBackgroundColor(ColorUtils.withAlpha(context.backgroundColor, 0.5f))
                 if (item.bookSourceGroup.isNullOrEmpty()) {
                     cbBookSource.text = item.bookSourceName
@@ -176,6 +176,25 @@ class BookSourceAdapter(context: Context, val callBack: CallBack) :
             ivMenuMore.setOnClickListener {
                 showMenu(ivMenuMore, holder.layoutPosition)
             }
+            checkSourceViewModel.loadingPanelVisibility.observe(context as BookSourceActivity, {
+                if (it[holder.layoutPosition + 1]) {
+                    ivLoadingPanel.visibility = View.VISIBLE
+                } else {
+                    ivLoadingPanel.visibility = View.GONE
+                }
+            })
+
+            checkSourceViewModel.checkTextVisibility.observe(context, {
+                if (it[holder.layoutPosition + 1]) {
+                    ivText.visibility = View.VISIBLE
+                } else {
+                    ivText.visibility = View.GONE
+                }
+            })
+
+            checkSourceViewModel.statusLiveData.observe(context, {
+                ivText.text = it[holder.layoutPosition + 1]
+            })
         }
     }
 

@@ -43,13 +43,9 @@ import io.legado.app.utils.*
 import java.io.File
 
 class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceViewModel>(),
-    PopupMenu.OnMenuItemClickListener,
-    BookSourceAdapter.CallBack,
-    FilePickerDialog.CallBack,
-    SelectActionBar.CallBack,
-    SearchView.OnQueryTextListener {
-    override val viewModel: BookSourceViewModel
-            by viewModels()
+                           PopupMenu.OnMenuItemClickListener, BookSourceAdapter.CallBack, FilePickerDialog.CallBack,
+                           SelectActionBar.CallBack, SearchView.OnQueryTextListener {
+    override val viewModel: BookSourceViewModel by viewModels()
     private val importRecordKey = "bookSourceRecordKey"
     private val qrRequestCode = 101
     private val importRequestCode = 132
@@ -70,6 +66,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         searchView = binding.titleBar.findViewById(R.id.search_view)
+        initCheckSourceViewModel()
         initRecyclerView()
         initSearchView()
         initLiveDataBookSource()
@@ -78,14 +75,13 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         if (!LocalConfig.bookSourcesHelpVersionIsLast) {
             showHelp()
         }
-        initCheckSourceViewModel()
     }
 
     private fun initCheckSourceViewModel() {
         val num = appDb.bookSourceDao.allCount()
-        checkSourceViewModel.statusLiveData.value = List(num) { "" }
-        checkSourceViewModel.checkTextVisibility.value = List(num) { false }
-        checkSourceViewModel.loadingPanelVisibility.value = List(num) { false }
+        checkSourceViewModel.statusLiveData.value = MutableList(num) { "" }
+        checkSourceViewModel.checkTextVisibility.value = MutableList(num) { false }
+        checkSourceViewModel.loadingPanelVisibility.value = MutableList(num) { false }
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
@@ -95,61 +91,60 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
         groupMenu = menu?.findItem(R.id.menu_group)?.subMenu
-        groupMenu?.findItem(R.id.action_sort)?.subMenu
-            ?.setGroupCheckable(R.id.menu_group_sort, true, true)
+        groupMenu?.findItem(R.id.action_sort)?.subMenu?.setGroupCheckable(R.id.menu_group_sort, true, true)
         upGroupMenu()
         return super.onPrepareOptionsMenu(menu)
     }
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.menu_add_book_source -> startActivity<BookSourceEditActivity>()
-            R.id.menu_import_source_qr -> startActivityForResult<QrCodeActivity>(qrRequestCode)
-            R.id.menu_share_source -> viewModel.shareSelection(adapter.getSelection()) {
+            R.id.menu_add_book_source      -> startActivity<BookSourceEditActivity>()
+            R.id.menu_import_source_qr     -> startActivityForResult<QrCodeActivity>(qrRequestCode)
+            R.id.menu_share_source         -> viewModel.shareSelection(adapter.getSelection()) {
                 startActivity(Intent.createChooser(it, getString(R.string.share_selected_source)))
             }
-            R.id.menu_group_manage ->
-                GroupManageDialog().show(supportFragmentManager, "groupManage")
-            R.id.menu_import_source_local -> FilePicker
-                .selectFile(this, importRequestCode, allowExtensions = arrayOf("txt", "json"))
+            R.id.menu_group_manage         -> GroupManageDialog().show(supportFragmentManager, "groupManage")
+            R.id.menu_import_source_local  -> FilePicker.selectFile(
+                this, importRequestCode, allowExtensions = arrayOf("txt", "json")
+                                                                   )
             R.id.menu_import_source_onLine -> showImportDialog()
-            R.id.menu_sort_manual -> {
+            R.id.menu_sort_manual          -> {
                 item.isChecked = true
                 sortCheck(Sort.Default)
                 initLiveDataBookSource(searchView.query?.toString())
             }
-            R.id.menu_sort_auto -> {
+            R.id.menu_sort_auto            -> {
                 item.isChecked = true
                 sortCheck(Sort.Weight)
                 initLiveDataBookSource(searchView.query?.toString())
             }
-            R.id.menu_sort_name -> {
+            R.id.menu_sort_name            -> {
                 item.isChecked = true
                 sortCheck(Sort.Name)
                 initLiveDataBookSource(searchView.query?.toString())
             }
-            R.id.menu_sort_url -> {
+            R.id.menu_sort_url             -> {
                 item.isChecked = true
                 sortCheck(Sort.Url)
                 initLiveDataBookSource(searchView.query?.toString())
             }
-            R.id.menu_sort_time -> {
+            R.id.menu_sort_time            -> {
                 item.isChecked = true
                 sortCheck(Sort.Update)
                 initLiveDataBookSource(searchView.query?.toString())
             }
-            R.id.menu_sort_enable -> {
+            R.id.menu_sort_enable          -> {
                 item.isChecked = true
                 sortCheck(Sort.Enable)
                 initLiveDataBookSource(searchView.query?.toString())
             }
-            R.id.menu_enabled_group -> {
+            R.id.menu_enabled_group        -> {
                 searchView.setQuery(getString(R.string.enabled), true)
             }
-            R.id.menu_disabled_group -> {
+            R.id.menu_disabled_group       -> {
                 searchView.setQuery(getString(R.string.disabled), true)
             }
-            R.id.menu_help -> showHelp()
+            R.id.menu_help                 -> showHelp()
         }
         if (item.groupId == R.id.source_group) {
             searchView.setQuery("group:${item.title}", true)
@@ -163,8 +158,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         adapter = BookSourceAdapter(this, this)
         binding.recyclerView.adapter = adapter
         // When this page is opened, it is in selection mode
-        val dragSelectTouchHelper =
-            DragSelectTouchHelper(adapter.dragSelectCallback).setSlideArea(16, 50)
+        val dragSelectTouchHelper = DragSelectTouchHelper(adapter.dragSelectCallback).setSlideArea(16, 50)
         dragSelectTouchHelper.attachToRecyclerView(binding.recyclerView)
         dragSelectTouchHelper.activeSlideSelect()
         // Note: need judge selection first, so add ItemTouchHelper after it.
@@ -184,57 +178,56 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     private fun initLiveDataBookSource(searchKey: String? = null) {
         bookSourceLiveDate?.removeObservers(this)
         bookSourceLiveDate = when {
-            searchKey.isNullOrEmpty() -> {
+            searchKey.isNullOrEmpty()                 -> {
                 appDb.bookSourceDao.liveDataAll()
             }
-            searchKey == getString(R.string.enabled) -> {
+            searchKey == getString(R.string.enabled)  -> {
                 appDb.bookSourceDao.liveDataEnabled()
             }
             searchKey == getString(R.string.disabled) -> {
                 appDb.bookSourceDao.liveDataDisabled()
             }
-            searchKey.startsWith("group:") -> {
+            searchKey.startsWith("group:")            -> {
                 val key = searchKey.substringAfter("group:")
                 appDb.bookSourceDao.liveDataGroupSearch("%$key%")
             }
-            else -> {
+            else                                      -> {
                 appDb.bookSourceDao.liveDataSearch("%$searchKey%")
             }
         }.apply {
             observe(this@BookSourceActivity, { data ->
-                val sourceList =
-                    if (sortAscending) when (sort) {
-                        Sort.Weight -> data.sortedBy { it.weight }
-                        Sort.Name -> data.sortedWith { o1, o2 ->
-                            o1.bookSourceName.cnCompare(o2.bookSourceName)
-                        }
-                        Sort.Url -> data.sortedBy { it.bookSourceUrl }
-                        Sort.Update -> data.sortedByDescending { it.lastUpdateTime }
-                        Sort.Enable -> data.sortedWith { o1, o2 ->
-                            var sort = -o1.enabled.compareTo(o2.enabled)
-                            if (sort == 0) {
-                                sort = o1.bookSourceName.cnCompare(o2.bookSourceName)
-                            }
-                            sort
-                        }
-                        else -> data
+                val sourceList = if (sortAscending) when (sort) {
+                    Sort.Weight -> data.sortedBy { it.weight }
+                    Sort.Name   -> data.sortedWith { o1, o2 ->
+                        o1.bookSourceName.cnCompare(o2.bookSourceName)
                     }
-                    else when (sort) {
-                        Sort.Weight -> data.sortedByDescending { it.weight }
-                        Sort.Name -> data.sortedWith { o1, o2 ->
-                            o2.bookSourceName.cnCompare(o1.bookSourceName)
+                    Sort.Url    -> data.sortedBy { it.bookSourceUrl }
+                    Sort.Update -> data.sortedByDescending { it.lastUpdateTime }
+                    Sort.Enable -> data.sortedWith { o1, o2 ->
+                        var sort = -o1.enabled.compareTo(o2.enabled)
+                        if (sort == 0) {
+                            sort = o1.bookSourceName.cnCompare(o2.bookSourceName)
                         }
-                        Sort.Url -> data.sortedByDescending { it.bookSourceUrl }
-                        Sort.Update -> data.sortedBy { it.lastUpdateTime }
-                        Sort.Enable -> data.sortedWith { o1, o2 ->
-                            var sort = o1.enabled.compareTo(o2.enabled)
-                            if (sort == 0) {
-                                sort = o1.bookSourceName.cnCompare(o2.bookSourceName)
-                            }
-                            sort
-                        }
-                        else -> data.reversed()
+                        sort
                     }
+                    else        -> data
+                }
+                else when (sort) {
+                    Sort.Weight -> data.sortedByDescending { it.weight }
+                    Sort.Name   -> data.sortedWith { o1, o2 ->
+                        o2.bookSourceName.cnCompare(o1.bookSourceName)
+                    }
+                    Sort.Url    -> data.sortedByDescending { it.bookSourceUrl }
+                    Sort.Update -> data.sortedBy { it.lastUpdateTime }
+                    Sort.Enable -> data.sortedWith { o1, o2 ->
+                        var sort = o1.enabled.compareTo(o2.enabled)
+                        if (sort == 0) {
+                            sort = o1.bookSourceName.cnCompare(o2.bookSourceName)
+                        }
+                        sort
+                    }
+                    else        -> data.reversed()
+                }
                 adapter.setItems(sourceList, adapter.diffItemCallback)
             })
         }
@@ -292,57 +285,27 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun onMenuItemClick(item: MenuItem?): Boolean {
         when (item?.itemId) {
-            R.id.menu_enable_selection -> viewModel.enableSelection(adapter.getSelection())
+            R.id.menu_enable_selection  -> viewModel.enableSelection(adapter.getSelection())
             R.id.menu_disable_selection -> viewModel.disableSelection(adapter.getSelection())
-            R.id.menu_enable_explore -> viewModel.enableSelectExplore(adapter.getSelection())
-            R.id.menu_disable_explore -> viewModel.disableSelectExplore(adapter.getSelection())
-            R.id.menu_check_source -> checkSource()
-            R.id.menu_top_sel -> viewModel.topSource(*adapter.getSelection().toTypedArray())
-            R.id.menu_bottom_sel -> viewModel.bottomSource(*adapter.getSelection().toTypedArray())
-            R.id.menu_add_group -> selectionAddToGroups()
-            R.id.menu_remove_group -> selectionRemoveFromGroups()
-            R.id.menu_export_selection -> FilePicker.selectFolder(this, exportRequestCode)
+            R.id.menu_enable_explore    -> viewModel.enableSelectExplore(adapter.getSelection())
+            R.id.menu_disable_explore   -> viewModel.disableSelectExplore(adapter.getSelection())
+            R.id.menu_check_source      -> checkSource()
+            R.id.menu_top_sel           -> viewModel.topSource(*adapter.getSelection().toTypedArray())
+            R.id.menu_bottom_sel        -> viewModel.bottomSource(*adapter.getSelection().toTypedArray())
+            R.id.menu_add_group         -> selectionAddToGroups()
+            R.id.menu_remove_group      -> selectionRemoveFromGroups()
+            R.id.menu_export_selection  -> FilePicker.selectFolder(this, exportRequestCode)
         }
         return true
     }
 
     @SuppressLint("InflateParams")
     private fun checkSource() {
-        eventObservable<Pair<String, CheckSourceState>>(EventBus.CHECK_SOURCE_PROGRESS).observe(this,
-                                                                                                { pair ->
-                                                                                                    val statusLiveDataList =
-                                                                                                            checkSourceViewModel.statusLiveData.value?.toMutableList()
-                                                                                                    val checkTextVisibilityList =
-                                                                                                            checkSourceViewModel.checkTextVisibility.value?.toMutableList()
-                                                                                                    val loadingPanelVisibilityList =
-                                                                                                            checkSourceViewModel.checkTextVisibility.value?.toMutableList()
-                                                                                                    val position =
-                                                                                                            adapter.getIndexFromUrl(
-                                                                                                                    pair.first)
-                                                                                                    val checkResult =
-                                                                                                            pair.second
-                                                                                                    statusLiveDataList?.set(
-                                                                                                            position,
-                                                                                                            checkResult.toString())
-                                                                                                    if (checkResult.ordinal >= 5) {
-                                                                                                        loadingPanelVisibilityList?.set(
-                                                                                                                position,
-                                                                                                                false)
-                                                                                                    } else {
-                                                                                                        loadingPanelVisibilityList?.set(
-                                                                                                                position,
-                                                                                                                true)
-                                                                                                    }
-                                                                                                    checkTextVisibilityList?.set(
-                                                                                                            position,
-                                                                                                            true)
-                                                                                                    checkSourceViewModel.statusLiveData.value =
-                                                                                                            statusLiveDataList
-                                                                                                    checkSourceViewModel.checkTextVisibility.value =
-                                                                                                            checkTextVisibilityList
-                                                                                                    checkSourceViewModel.loadingPanelVisibility.value =
-                                                                                                            loadingPanelVisibilityList
-                                                                                                })
+        eventObservable<Pair<String, String>>(EventBus.CHECK_SOURCE_PROGRESS).observe(this, { pair ->
+            val position = adapter.getIndexFromUrl(pair.first)
+            val checkResult = pair.second
+            checkSourceViewModel.updateStatus(position, checkResult)
+        })
         alert(titleResource = R.string.search_book_key) {
             val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
                 editView.setText(CheckSource.keyword)
@@ -412,10 +375,8 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     @SuppressLint("InflateParams")
     private fun showImportDialog() {
         val aCache = ACache.get(this, cacheDir = false)
-        val cacheUrls: MutableList<String> = aCache
-            .getAsString(importRecordKey)
-            ?.splitNotBlank(",")
-            ?.toMutableList() ?: mutableListOf()
+        val cacheUrls: MutableList<String> =
+            aCache.getAsString(importRecordKey)?.splitNotBlank(",")?.toMutableList() ?: mutableListOf()
         alert(titleResource = R.string.import_book_source_on_line) {
             val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
                 editView.setFilterValues(cacheUrls)
@@ -444,11 +405,9 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     override fun observeLiveBus() {
         observeEvent<String>(EventBus.CHECK_SOURCE) { msg ->
             snackBar?.setText(msg) ?: let {
-                snackBar = Snackbar
-                    .make(binding.root, msg, Snackbar.LENGTH_INDEFINITE)
-                    .setAction(R.string.cancel) {
-                        CheckSource.stop(this)
-                    }.apply { show() }
+                snackBar = Snackbar.make(binding.root, msg, Snackbar.LENGTH_INDEFINITE).setAction(R.string.cancel) {
+                    CheckSource.stop(this)
+                }.apply { show() }
             }
         }
         observeEvent<Int>(EventBus.CHECK_SOURCE_DONE) {
@@ -464,8 +423,8 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     }
 
     override fun upCountView() {
-        binding.selectActionBar
-            .upCountView(adapter.getSelection().size, adapter.itemCount)
+        binding.selectActionBar.upCountView(adapter.getSelection().size, adapter.itemCount)
+        initCheckSourceViewModel()
     }
 
     override fun onQueryTextChange(newText: String?): Boolean {
@@ -514,7 +473,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         when (requestCode) {
-            qrRequestCode -> if (resultCode == RESULT_OK) {
+            qrRequestCode     -> if (resultCode == RESULT_OK) {
                 data?.getStringExtra("result")?.let {
                     startActivity<ImportBookSourceActivity> {
                         putExtra("source", it)
