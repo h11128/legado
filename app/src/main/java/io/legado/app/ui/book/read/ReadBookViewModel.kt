@@ -13,7 +13,6 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.help.AppConfig
 import io.legado.app.help.BookHelp
 import io.legado.app.help.ContentProcessor
-import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.storage.AppWebDav
 import io.legado.app.model.NoStackTraceException
 import io.legado.app.model.ReadAloud
@@ -21,18 +20,15 @@ import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.BaseReadAloudService
-import io.legado.app.ui.book.read.page.entities.TextChapter
-import io.legado.app.ui.book.searchContent.SearchResult
+import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.utils.msg
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.ensureActive
 
 class ReadBookViewModel(application: Application) : BaseViewModel(application) {
     var isInitFinish = false
     var searchContentQuery = ""
-    var changeSourceCoroutine: Coroutine<*>? = null
 
     fun initData(intent: Intent) {
         execute {
@@ -149,9 +145,10 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
 
     fun syncBookProgress(
         book: Book,
+        syncBookProgress: Boolean = AppConfig.syncBookProgress,
         alertSync: ((progress: BookProgress) -> Unit)? = null
     ) {
-        if (AppConfig.syncBookProgress)
+        if (syncBookProgress)
             execute {
                 AppWebDav.getBookProgress(book)
             }.onSuccess {
@@ -168,15 +165,12 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
     }
 
     fun changeTo(source: BookSource, book: Book) {
-        changeSourceCoroutine?.cancel()
-        changeSourceCoroutine = execute {
+        execute {
             ReadBook.upMsg(context.getString(R.string.loading))
             if (book.tocUrl.isEmpty()) {
                 WebBook.getBookInfoAwait(this, source, book)
             }
-            ensureActive()
             val chapters = WebBook.getChapterListAwait(this, source, book)
-            ensureActive()
             val oldBook = ReadBook.book!!
             book.durChapterIndex = BookHelp.getDurChapter(
                 oldBook.durChapterIndex,
@@ -271,16 +265,17 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
      * 内容搜索跳转
      */
     fun searchResultPositions(
-        textChapter: TextChapter,
-        searchResult: SearchResult
+        pages: List<TextPage>,
+        resultCountWithinChapter: Int
     ): Array<Int> {
         // calculate search result's pageIndex
-        val pages = textChapter.pages
-        val content = textChapter.getContent()
-
-        var count = 0
+        var content = ""
+        pages.map {
+            content += it.text
+        }
+        var count = 1
         var index = content.indexOf(searchContentQuery)
-        while (count != searchResult.resultCountWithinChapter) {
+        while (count != resultCountWithinChapter) {
             index = content.indexOf(searchContentQuery, index + 1)
             count += 1
         }

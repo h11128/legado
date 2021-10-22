@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.viewModels
 import androidx.appcompat.widget.SearchView
-import com.github.liuyueyi.quick.transfer.ChineseUtils
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.EventBus
@@ -13,7 +12,6 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.databinding.ActivitySearchContentBinding
-import io.legado.app.help.AppConfig
 import io.legado.app.help.BookHelp
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
@@ -169,7 +167,7 @@ class SearchContentActivity :
         val searchData = Intent()
         searchData.putExtra("searchResultIndex", viewModel.searchResultList.indexOf(searchResult))
         searchData.putExtra("chapterIndex", searchResult.chapterIndex)
-        searchData.putExtra("contentPosition", searchResult.queryIndexInChapter)
+        searchData.putExtra("contentPosition", searchResult.contentPosition)
         searchData.putExtra("query", searchResult.query)
         searchData.putExtra("resultCountWithinChapter", searchResult.resultCountWithinChapter)
         setResult(RESULT_OK, searchData)

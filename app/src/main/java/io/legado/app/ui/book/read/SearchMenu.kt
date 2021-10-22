@@ -10,11 +10,15 @@ import android.view.animation.Animation
 import android.widget.FrameLayout
 import androidx.appcompat.widget.SearchView
 import androidx.core.view.isVisible
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.databinding.ViewSearchMenuBinding
 import io.legado.app.help.*
 import io.legado.app.lib.theme.*
+import io.legado.app.model.ReadBook
+import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.utils.*
 import splitties.views.*
@@ -40,43 +44,23 @@ class SearchMenu @JvmOverloads constructor(
     private val bottomBackgroundList: ColorStateList =
         Selector.colorBuild().setDefaultColor(bgColor).setPressedColor(ColorUtils.darkenColor(bgColor)).create()
     private var onMenuOutEnd: (() -> Unit)? = null
+    private var searchResultList: List<SearchResult> = listOf()
+    private var currentSearchResultIndex : Int = -1
 
-    private val searchResultList: MutableList<SearchResult> = mutableListOf()
-    private var currentSearchResultIndex: Int = 0
-    private var lastSearchResultIndex: Int = 0
     private val hasSearchResult: Boolean
-        get() = searchResultList.isNotEmpty()
+        get() = searchResultList.size > currentSearchResultIndex && currentSearchResultIndex > 0
 
-    val selectedSearchResult: SearchResult?
-        get() = if (searchResultList.isNotEmpty()) searchResultList[currentSearchResultIndex] else null
-    val previousSearchResult: SearchResult
-        get() = searchResultList[lastSearchResultIndex]
     init {
+
         initAnimation()
         initView()
-        initSearchView()
         bindEvent()
-        observeSearchResultList()
-    }
-
-    private fun observeSearchResultList() {
         activity?.let { owner ->
             eventObservable<List<SearchResult>>(EventBus.SEARCH_RESULT).observe(owner, {
-                searchResultList.clear()
-                searchResultList.addAll(it)
-                if (it.isNotEmpty()) {
-                    searchView.setQuery(selectedSearchResult?.query ?: "", true)
-                }
+                searchResultList = it
             })
         }
-    }
 
-    private fun initSearchView() {
-        searchView.applyTint(bgColor)
-        searchView.onActionViewExpanded()
-        searchView.isSubmitButtonEnabled = true
-        searchView.queryHint = activity?.getString(R.string.search) ?: "search"
-        searchView.clearFocus()
     }
 
     private fun initView() = binding.run {
@@ -119,16 +103,21 @@ class SearchMenu @JvmOverloads constructor(
         }
     }
 
-    fun updateSearchResultIndex(updateIndex: Int) {
-        lastSearchResultIndex = currentSearchResultIndex
-        currentSearchResultIndex = when {
-            updateIndex < 0                      -> 0
-            updateIndex >= searchResultList.size -> searchResultList.size - 1
-            else                                 -> updateIndex
+    fun updateSearchResultIndex(updateIndex: Int){
+        if(updateIndex >= 0 && updateIndex < searchResultList.size){
+            currentSearchResultIndex = updateIndex
         }
     }
 
     private fun bindEvent() = binding.run {
+        titleBar.toolbar.setOnClickListener {
+            ReadBook.book?.let {
+                context.startActivity<BookInfoActivity> {
+                    putExtra("name", it.name)
+                    putExtra("author", it.author)
+                }
+            }
+        }
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String): Boolean {
                 runMenuOut {
@@ -173,14 +162,14 @@ class SearchMenu @JvmOverloads constructor(
         fabLeft.setOnClickListener {
             runMenuOut {
                 updateSearchResultIndex(currentSearchResultIndex - 1)
-                callBack.navigateToSearch(searchResultList[currentSearchResultIndex])
+                callBack.navigateToSearch(searchResultList[currentSearchResultIndex], currentSearchResultIndex)
             }
         }
 
         fabRight.setOnClickListener {
             runMenuOut {
                 updateSearchResultIndex(currentSearchResultIndex + 1)
-                callBack.navigateToSearch(searchResultList[currentSearchResultIndex])
+                callBack.navigateToSearch(searchResultList[currentSearchResultIndex], currentSearchResultIndex)
             }
         }
     }
@@ -244,7 +233,7 @@ class SearchMenu @JvmOverloads constructor(
         fun upSystemUiVisibility()
         fun exitSearchMenu()
         fun showMenuBar()
-        fun navigateToSearch(searchResult: SearchResult)
+        fun navigateToSearch(searchResult: SearchResult, searchResultIndex: Int)
     }
 
 }
