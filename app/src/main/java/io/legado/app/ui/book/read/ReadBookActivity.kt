@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.view.*
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.core.view.get
 import androidx.core.view.isVisible
 import androidx.core.view.size
@@ -46,6 +47,7 @@ import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.entities.PageDirection
 import io.legado.app.ui.book.read.page.provider.TextPageFactory
 import io.legado.app.ui.book.searchContent.SearchContentActivity
+import io.legado.app.ui.book.searchContent.SearchContentViewModel
 import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.BookmarkDialog
@@ -95,16 +97,17 @@ class ReadBookActivity : BaseReadBookActivity(),
                 viewModel.replaceRuleChanged()
             }
         }
-    private val searchContentActivity = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        it ?: return@registerForActivityResult
-        it.data?.let { data ->
-            data.getIntExtra("chapterIndex", ReadBook.durChapterIndex).let { _ ->
-                viewModel.searchContentQuery = data.getStringExtra("query") ?: ""
-                val searchResultIndex = data.getIntExtra("searchResultIndex", 0)
-                isShowingSearchResult = true
-                binding.searchMenu.updateSearchResultIndex(searchResultIndex)
-                binding.searchMenu.selectedSearchResult?.let { currentResult ->
-                    skipToSearch(currentResult)
+    private val searchContentActivity =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            it ?: return@registerForActivityResult
+            it.data?.let { data ->
+                data.getIntExtra("chapterIndex", ReadBook.durChapterIndex).let { chapterIndex ->
+                    viewModel.searchContentQuery = data.getStringExtra("query") ?: ""
+                    val resultCountWithinChapter = data.getIntExtra("resultCountWithinChapter", 0)
+                    val searchResultIndex = data.getIntExtra("searchResultIndex", 0)
+                    isShowingSearchResult = true
+                    binding.searchMenu.updateSearchResultIndex(searchResultIndex)
+                    skipToSearch(chapterIndex, resultCountWithinChapter, searchResultIndex)
                 }
             }
         }
@@ -785,7 +788,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     override fun exitSearchMenu() {
-        if (isShowingSearchResult) {
+        if(isShowingSearchResult){
             isShowingSearchResult = false
             binding.searchMenu.invalidate()
         }
