@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.view.*
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.core.view.get
 import androidx.core.view.isVisible
 import androidx.core.view.size
@@ -46,6 +47,8 @@ import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.entities.PageDirection
 import io.legado.app.ui.book.read.page.provider.TextPageFactory
 import io.legado.app.ui.book.searchContent.SearchContentActivity
+import io.legado.app.ui.book.searchContent.SearchContentViewModel
+import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.BookmarkDialog
 import io.legado.app.ui.book.toc.TocActivityResult
@@ -65,6 +68,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     TextActionMenu.CallBack,
     ContentTextView.CallBack,
     ReadMenu.CallBack,
+    SearchMenu.CallBack,
     ReadAloudDialog.CallBack,
     ChangeSourceDialog.CallBack,
     ReadBook.CallBack,
@@ -97,10 +101,13 @@ class ReadBookActivity : BaseReadBookActivity(),
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             it ?: return@registerForActivityResult
             it.data?.let { data ->
-                data.getIntExtra("index", ReadBook.durChapterIndex).let { index ->
+                data.getIntExtra("chapterIndex", ReadBook.durChapterIndex).let { chapterIndex ->
                     viewModel.searchContentQuery = data.getStringExtra("query") ?: ""
-                    val indexWithinChapter = data.getIntExtra("indexWithinChapter", 0)
-                    skipToSearch(index, indexWithinChapter)
+                    val resultCountWithinChapter = data.getIntExtra("resultCountWithinChapter", 0)
+                    val searchResultIndex = data.getIntExtra("searchResultIndex", 0)
+                    isShowingSearchResult = true
+                    binding.searchMenu.updateSearchResultIndex(searchResultIndex)
+                    skipToSearch(chapterIndex, resultCountWithinChapter, searchResultIndex)
                 }
             }
         }
@@ -116,6 +123,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     private var backupJob: Job? = null
     override var autoPageProgress = 0
     override var isAutoPage = false
+    override var isShowingSearchResult = false
     private var screenTimeOut: Long = 0
     private var timeBatteryReceiver: TimeBatteryReceiver? = null
     private var loadStates: Boolean = false
@@ -634,6 +642,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         when {
             BaseReadAloudService.isRun -> showReadAloudDialog()
             isAutoPage -> showDialogFragment<AutoReadDialog>()
+            isShowingSearchResult -> binding.searchMenu.runMenuIn()
             else -> binding.readMenu.runMenuIn()
         }
     }
@@ -765,12 +774,23 @@ class ReadBookActivity : BaseReadBookActivity(),
         showDialogFragment<MoreConfigDialog>()
     }
 
+    override fun showSearchSetting() {
+        TODO("Not yet implemented")
+    }
+
     /**
      * 更新状态栏,导航栏
      */
     override fun upSystemUiVisibility() {
         upSystemUiVisibility(isInMultiWindow, !binding.readMenu.isVisible)
         upNavigationBarColor()
+    }
+
+    override fun exitSearchMenu() {
+        if(isShowingSearchResult){
+            isShowingSearchResult = false
+            binding.searchMenu.invalidate()
+        }
     }
 
     override fun showLogin() {
@@ -869,10 +889,14 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
 
-    private fun skipToSearch(index: Int, indexWithinChapter: Int) {
-        viewModel.openChapter(index) {
+    override fun navigateToSearch(searchResult: SearchResult, searchResultIndex: Int) {
+        skipToSearch(searchResult.chapterIndex, searchResult.resultCountWithinChapter, searchResultIndex)
+    }
+
+    private fun skipToSearch(chapterIndex: Int, resultCountWithinChapter: Int, searchResultIndex: Int) {
+        viewModel.openChapter(chapterIndex) {
             val pages = ReadBook.curTextChapter?.pages ?: return@openChapter
-            val positions = viewModel.searchResultPositions(pages, indexWithinChapter)
+            val positions = viewModel.searchResultPositions(pages, resultCountWithinChapter)
             ReadBook.skipToPage(positions[0]) {
                 launch {
                     binding.readView.curPage.selectStartMoveIndex(0, positions[1], positions[2])
@@ -897,6 +921,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                 }
             }
         }
+        showActionMenu()
     }
 
     private fun startBackupJob() {

@@ -271,7 +271,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
      */
     fun searchResultPositions(
         pages: List<TextPage>,
-        indexWithinChapter: Int
+        resultCountWithinChapter: Int
     ): Array<Int> {
         // calculate search result's pageIndex
         var content = ""
@@ -280,7 +280,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         }
         var count = 1
         var index = content.indexOf(searchContentQuery)
-        while (count != indexWithinChapter) {
+        while (count != resultCountWithinChapter) {
             index = content.indexOf(searchContentQuery, index + 1)
             count += 1
         }
