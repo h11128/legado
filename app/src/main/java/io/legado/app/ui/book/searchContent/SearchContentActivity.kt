@@ -21,6 +21,7 @@ import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.observeEvent
+import io.legado.app.utils.postEvent
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -162,11 +163,13 @@ class SearchContentActivity :
         get() = viewModel.book?.isLocalBook() == true
 
     override fun openSearchResult(searchResult: SearchResult) {
+        postEvent(EventBus.SEARCH_RESULT, viewModel.searchResultList as List<SearchResult>)
         val searchData = Intent()
-        searchData.putExtra("index", searchResult.chapterIndex)
+        searchData.putExtra("searchResultIndex", viewModel.searchResultList.indexOf(searchResult))
+        searchData.putExtra("chapterIndex", searchResult.chapterIndex)
         searchData.putExtra("contentPosition", searchResult.contentPosition)
         searchData.putExtra("query", searchResult.query)
-        searchData.putExtra("indexWithinChapter", searchResult.resultCountWithinChapter)
+        searchData.putExtra("resultCountWithinChapter", searchResult.resultCountWithinChapter)
         setResult(RESULT_OK, searchData)
         finish()
     }

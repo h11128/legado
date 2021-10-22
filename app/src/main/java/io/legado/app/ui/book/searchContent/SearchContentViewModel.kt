@@ -21,6 +21,7 @@ class SearchContentViewModel(application: Application) : BaseViewModel(applicati
     var searchResultCounts = 0
     val cacheChapterNames = hashSetOf<String>()
     val searchResultList: MutableList<SearchResult> = mutableListOf()
+    var selectedIndex = 0
 
     fun initBook(bookUrl: String, success: () -> Unit) {
         this.bookUrl = bookUrl

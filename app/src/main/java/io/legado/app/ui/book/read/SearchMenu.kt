@@ -3,30 +3,23 @@ package io.legado.app.ui.book.read
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.view.Gravity
 import android.view.LayoutInflater
-import android.view.View.OnClickListener
-import android.view.View.OnLongClickListener
-import android.view.WindowManager
 import android.view.animation.Animation
 import android.widget.FrameLayout
-import android.widget.SeekBar
-import androidx.activity.viewModels
 import androidx.appcompat.widget.SearchView
 import androidx.core.view.isVisible
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
-import io.legado.app.constant.PreferKey
+import io.legado.app.constant.EventBus
 import io.legado.app.databinding.ViewSearchMenuBinding
 import io.legado.app.help.*
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.*
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.info.BookInfoActivity
-import io.legado.app.ui.book.searchContent.SearchContentViewModel
-import io.legado.app.ui.browser.WebViewActivity
-import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
+import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.utils.*
 import splitties.views.*
 
@@ -40,8 +33,6 @@ class SearchMenu @JvmOverloads constructor(
         binding.titleBar.findViewById(R.id.search_view)
     }
 
-    val viewModel by viewModels<SearchContentViewModel>()
-
     private val callBack: CallBack get() = activity as CallBack
     private val binding = ViewSearchMenuBinding.inflate(LayoutInflater.from(context), this, true)
     private val menuTopIn: Animation = AnimationUtilsSupport.loadAnimation(context, R.anim.anim_readbook_top_in)
@@ -53,12 +44,23 @@ class SearchMenu @JvmOverloads constructor(
     private val bottomBackgroundList: ColorStateList =
         Selector.colorBuild().setDefaultColor(bgColor).setPressedColor(ColorUtils.darkenColor(bgColor)).create()
     private var onMenuOutEnd: (() -> Unit)? = null
-    private var hasSearchResult: Boolean  = true
+    private var searchResultList: List<SearchResult> = listOf()
+    private var currentSearchResultIndex : Int = -1
+
+    private val hasSearchResult: Boolean
+        get() = searchResultList.size > currentSearchResultIndex && currentSearchResultIndex > 0
 
     init {
+
         initAnimation()
         initView()
         bindEvent()
+        activity?.let { owner ->
+            eventObservable<List<SearchResult>>(EventBus.SEARCH_RESULT).observe(owner, {
+                searchResultList = it
+            })
+        }
+
     }
 
     private fun initView() = binding.run {
@@ -101,6 +103,12 @@ class SearchMenu @JvmOverloads constructor(
         }
     }
 
+    fun updateSearchResultIndex(updateIndex: Int){
+        if(updateIndex >= 0 && updateIndex < searchResultList.size){
+            currentSearchResultIndex = updateIndex
+        }
+    }
+
     private fun bindEvent() = binding.run {
         titleBar.toolbar.setOnClickListener {
             ReadBook.book?.let {
@@ -110,10 +118,22 @@ class SearchMenu @JvmOverloads constructor(
                 }
             }
         }
+        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+            override fun onQueryTextSubmit(query: String): Boolean {
+                runMenuOut {
+                    callBack.openSearchActivity(query)
+                }
+                return false
+            }
+
+            override fun onQueryTextChange(newText: String?): Boolean {
+                return false
+            }
+        })
 
         llSearchResults.setOnClickListener {
             runMenuOut {
-                callBack.returnSearchActivity()
+                callBack.openSearchActivity(searchView.query.toString())
             }
         }
 
@@ -128,7 +148,7 @@ class SearchMenu @JvmOverloads constructor(
         //目录
         llSearchExit.setOnClickListener {
             runMenuOut {
-                callBack.searchExit()
+                callBack.exitSearchMenu()
             }
         }
 
@@ -136,6 +156,20 @@ class SearchMenu @JvmOverloads constructor(
         llSetting.setOnClickListener {
             runMenuOut {
                 callBack.showSearchSetting()
+            }
+        }
+
+        fabLeft.setOnClickListener {
+            runMenuOut {
+                updateSearchResultIndex(currentSearchResultIndex - 1)
+                callBack.navigateToSearch(searchResultList[currentSearchResultIndex], currentSearchResultIndex)
+            }
+        }
+
+        fabRight.setOnClickListener {
+            runMenuOut {
+                updateSearchResultIndex(currentSearchResultIndex + 1)
+                callBack.navigateToSearch(searchResultList[currentSearchResultIndex], currentSearchResultIndex)
             }
         }
     }
@@ -194,11 +228,12 @@ class SearchMenu @JvmOverloads constructor(
 
     interface CallBack {
         var isShowingSearchResult: Boolean
-        fun returnSearchActivity()
+        fun openSearchActivity(searchWord: String?)
         fun showSearchSetting()
         fun upSystemUiVisibility()
-        fun searchExit()
+        fun exitSearchMenu()
         fun showMenuBar()
+        fun navigateToSearch(searchResult: SearchResult, searchResultIndex: Int)
     }
 
 }
