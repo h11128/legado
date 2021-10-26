@@ -13,7 +13,7 @@ data class SearchResult(
     val chapterIndex: Int = 0,
     val pageIndex: Int = 0,
     val queryIndexInResult: Int = 0,
-    val contentPosition: Int = 0
+    val queryIndexInChapter: Int = 0
 ) {
 
     fun getHtmlCompat(textColor: String, accentColor: String): Spanned {
