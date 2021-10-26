@@ -10,8 +10,6 @@ import android.view.animation.Animation
 import android.widget.FrameLayout
 import androidx.appcompat.widget.SearchView
 import androidx.core.view.isVisible
-import androidx.lifecycle.findViewTreeLifecycleOwner
-import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.databinding.ViewSearchMenuBinding
@@ -42,11 +40,11 @@ class SearchMenu @JvmOverloads constructor(
     private val bottomBackgroundList: ColorStateList =
         Selector.colorBuild().setDefaultColor(bgColor).setPressedColor(ColorUtils.darkenColor(bgColor)).create()
     private var onMenuOutEnd: (() -> Unit)? = null
-    private var searchResultList: List<SearchResult> = listOf()
-    private var currentSearchResultIndex : Int = -1
 
+    private val searchResultList: MutableList<SearchResult> = mutableListOf()
+    private var currentSearchResultIndex : Int = -1
     private val hasSearchResult: Boolean
-        get() = searchResultList.size > currentSearchResultIndex && currentSearchResultIndex > 0
+        get() = searchResultList.isNotEmpty()
 
     private val searchResultList: MutableList<SearchResult> = mutableListOf()
     private var currentSearchResultIndex: Int = 0
@@ -59,7 +57,6 @@ class SearchMenu @JvmOverloads constructor(
     val previousSearchResult: SearchResult
         get() = searchResultList[lastSearchResultIndex]
     init {
-
         initAnimation()
         initView()
         initSearchView()
@@ -128,11 +125,10 @@ class SearchMenu @JvmOverloads constructor(
     }
 
     fun updateSearchResultIndex(updateIndex: Int) {
-        lastSearchResultIndex = currentSearchResultIndex
-        currentSearchResultIndex = when {
-            updateIndex < 0                      -> 0
+        currentSearchResultIndex = when{
+            updateIndex < 0 -> 0
             updateIndex >= searchResultList.size -> searchResultList.size - 1
-            else                                 -> updateIndex
+            else -> updateIndex
         }
     }
 
