@@ -278,7 +278,8 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         pages.map {
             content += it.text
         }
-        var count = 1
+        var count = 0
+        
         var index = content.indexOf(searchContentQuery)
         while (count != resultCountWithinChapter) {
             index = content.indexOf(searchContentQuery, index + 1)

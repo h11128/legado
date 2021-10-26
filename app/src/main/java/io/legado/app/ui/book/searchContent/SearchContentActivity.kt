@@ -169,7 +169,7 @@ class SearchContentActivity :
         val searchData = Intent()
         searchData.putExtra("searchResultIndex", viewModel.searchResultList.indexOf(searchResult))
         searchData.putExtra("chapterIndex", searchResult.chapterIndex)
-        searchData.putExtra("contentPosition", searchResult.contentPosition)
+        searchData.putExtra("contentPosition", searchResult.queryIndexInChapter)
         searchData.putExtra("query", searchResult.query)
         searchData.putExtra("resultCountWithinChapter", searchResult.resultCountWithinChapter)
         setResult(RESULT_OK, searchData)

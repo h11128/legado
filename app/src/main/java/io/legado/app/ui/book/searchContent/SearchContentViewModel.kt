@@ -62,7 +62,7 @@ class SearchContentViewModel(application: Application) : BaseViewModel(applicati
                             query = query,
                             chapterIndex = chapter.index,
                             queryIndexInResult = construct.first,
-                            contentPosition = position
+                            queryIndexInChapter = position
                         )
                         searchResultsWithinChapter.add(result)
                     }
@@ -73,12 +73,12 @@ class SearchContentViewModel(application: Application) : BaseViewModel(applicati
         return searchResultsWithinChapter
     }
 
-    private fun searchPosition(content: String, pattern: String): List<Int> {
+    private fun searchPosition(chapterContent: String, pattern: String): List<Int> {
         val position: MutableList<Int> = mutableListOf()
-        var index = content.indexOf(pattern)
+        var index = chapterContent.indexOf(pattern)
         while (index >= 0) {
             position.add(index)
-            index = content.indexOf(pattern, index + 1)
+            index = chapterContent.indexOf(pattern, index + 1)
         }
         return position
     }
