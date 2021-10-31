@@ -42,10 +42,15 @@ class SearchMenu @JvmOverloads constructor(
     private var onMenuOutEnd: (() -> Unit)? = null
 
     private val searchResultList: MutableList<SearchResult> = mutableListOf()
-    private var currentSearchResultIndex : Int = -1
+    private var currentSearchResultIndex: Int = 0
+    private var lastSearchResultIndex: Int = 0
     private val hasSearchResult: Boolean
         get() = searchResultList.isNotEmpty()
 
+    val selectedSearchResult: SearchResult?
+        get() = if (searchResultList.isNotEmpty()) searchResultList[currentSearchResultIndex] else null
+    val previousSearchResult: SearchResult
+        get() = searchResultList[lastSearchResultIndex]
     init {
         initAnimation()
         initView()
@@ -59,6 +64,9 @@ class SearchMenu @JvmOverloads constructor(
             eventObservable<List<SearchResult>>(EventBus.SEARCH_RESULT).observe(owner, {
                 searchResultList.clear()
                 searchResultList.addAll(it)
+                if (it.isNotEmpty()) {
+                    searchView.setQuery(selectedSearchResult?.query ?: "", true)
+                }
             })
         }
     }
@@ -112,10 +120,11 @@ class SearchMenu @JvmOverloads constructor(
     }
 
     fun updateSearchResultIndex(updateIndex: Int) {
-        currentSearchResultIndex = when{
-            updateIndex < 0 -> 0
+        lastSearchResultIndex = currentSearchResultIndex
+        currentSearchResultIndex = when {
+            updateIndex < 0                      -> 0
             updateIndex >= searchResultList.size -> searchResultList.size - 1
-            else -> updateIndex
+            else                                 -> updateIndex
         }
     }
 
