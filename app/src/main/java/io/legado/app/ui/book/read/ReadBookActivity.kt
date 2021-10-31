@@ -95,17 +95,16 @@ class ReadBookActivity : BaseReadBookActivity(),
                 viewModel.replaceRuleChanged()
             }
         }
-    private val searchContentActivity =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            it ?: return@registerForActivityResult
-            it.data?.let { data ->
-                data.getIntExtra("chapterIndex", ReadBook.durChapterIndex).let { chapterIndex ->
-                    viewModel.searchContentQuery = data.getStringExtra("query") ?: ""
-                    val resultCountWithinChapter = data.getIntExtra("resultCountWithinChapter", 0)
-                    val searchResultIndex = data.getIntExtra("searchResultIndex", 0)
-                    isShowingSearchResult = true
-                    binding.searchMenu.updateSearchResultIndex(searchResultIndex)
-                    skipToSearch(chapterIndex, resultCountWithinChapter)
+    private val searchContentActivity = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        it ?: return@registerForActivityResult
+        it.data?.let { data ->
+            data.getIntExtra("chapterIndex", ReadBook.durChapterIndex).let { _ ->
+                viewModel.searchContentQuery = data.getStringExtra("query") ?: ""
+                val searchResultIndex = data.getIntExtra("searchResultIndex", 0)
+                isShowingSearchResult = true
+                binding.searchMenu.updateSearchResultIndex(searchResultIndex)
+                binding.searchMenu.selectedSearchResult?.let { currentResult ->
+                    skipToSearch(currentResult)
                 }
             }
         }
@@ -786,7 +785,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     override fun exitSearchMenu() {
-        if(isShowingSearchResult){
+        if (isShowingSearchResult) {
             isShowingSearchResult = false
             binding.searchMenu.invalidate()
         }

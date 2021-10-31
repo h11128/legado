@@ -42,11 +42,6 @@ class SearchMenu @JvmOverloads constructor(
     private var onMenuOutEnd: (() -> Unit)? = null
 
     private val searchResultList: MutableList<SearchResult> = mutableListOf()
-    private var currentSearchResultIndex : Int = -1
-    private val hasSearchResult: Boolean
-        get() = searchResultList.isNotEmpty()
-
-    private val searchResultList: MutableList<SearchResult> = mutableListOf()
     private var currentSearchResultIndex: Int = 0
     private var lastSearchResultIndex: Int = 0
     private val hasSearchResult: Boolean
@@ -125,10 +120,11 @@ class SearchMenu @JvmOverloads constructor(
     }
 
     fun updateSearchResultIndex(updateIndex: Int) {
-        currentSearchResultIndex = when{
-            updateIndex < 0 -> 0
+        lastSearchResultIndex = currentSearchResultIndex
+        currentSearchResultIndex = when {
+            updateIndex < 0                      -> 0
             updateIndex >= searchResultList.size -> searchResultList.size - 1
-            else -> updateIndex
+            else                                 -> updateIndex
         }
     }
 
