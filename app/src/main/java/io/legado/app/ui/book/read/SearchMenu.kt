@@ -25,12 +25,10 @@ import splitties.views.*
 class SearchMenu @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : FrameLayout(context, attrs) {
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
 
     private val callBack: CallBack get() = activity as CallBack
     private val binding = ViewSearchMenuBinding.inflate(LayoutInflater.from(context), this, true)
+
     private val menuTopIn: Animation = AnimationUtilsSupport.loadAnimation(context, R.anim.anim_readbook_top_in)
     private val menuTopOut: Animation = AnimationUtilsSupport.loadAnimation(context, R.anim.anim_readbook_top_out)
     private val menuBottomIn: Animation = AnimationUtilsSupport.loadAnimation(context, R.anim.anim_readbook_bottom_in)
@@ -54,7 +52,6 @@ class SearchMenu @JvmOverloads constructor(
     init {
         initAnimation()
         initView()
-        initSearchView()
         bindEvent()
         observeSearchResultList()
     }
@@ -64,19 +61,8 @@ class SearchMenu @JvmOverloads constructor(
             eventObservable<List<SearchResult>>(EventBus.SEARCH_RESULT).observe(owner, {
                 searchResultList.clear()
                 searchResultList.addAll(it)
-                if (it.isNotEmpty()) {
-                    searchView.setQuery(selectedSearchResult?.query ?: "", true)
-                }
             })
         }
-    }
-
-    private fun initSearchView() {
-        searchView.applyTint(bgColor)
-        searchView.onActionViewExpanded()
-        searchView.isSubmitButtonEnabled = true
-        searchView.queryHint = activity?.getString(R.string.search) ?: "search"
-        searchView.clearFocus()
     }
 
     private fun initView() = binding.run {
@@ -95,17 +81,15 @@ class SearchMenu @JvmOverloads constructor(
         ivSearchResults.setColorFilter(textColor)
         ivSearchExit.setColorFilter(textColor)
         ivSetting.setColorFilter(textColor)
-        ivSearchContentBottom.setColorFilter(textColor)
-        ivSearchContentTop.setColorFilter(textColor)
+        ivSearchContentUp.setColorFilter(textColor)
+        ivSearchContentDown.setColorFilter(textColor)
     }
 
 
     fun runMenuIn() {
         this.visible()
-        binding.titleBar.visible()
         binding.llSearchBaseInfo.visible()
         binding.llBottomBg.visible()
-        binding.titleBar.startAnimation(menuTopIn)
         binding.llSearchBaseInfo.startAnimation(menuBottomIn)
         binding.llBottomBg.startAnimation(menuBottomIn)
     }
@@ -113,7 +97,6 @@ class SearchMenu @JvmOverloads constructor(
     fun runMenuOut(onMenuOutEnd: (() -> Unit)? = null) {
         this.onMenuOutEnd = onMenuOutEnd
         if (this.isVisible) {
-            binding.titleBar.startAnimation(menuTopOut)
             binding.llSearchBaseInfo.startAnimation(menuBottomOut)
             binding.llBottomBg.startAnimation(menuBottomOut)
         }
@@ -129,22 +112,10 @@ class SearchMenu @JvmOverloads constructor(
     }
 
     private fun bindEvent() = binding.run {
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String): Boolean {
-                runMenuOut {
-                    callBack.openSearchActivity(query)
-                }
-                return false
-            }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                return false
-            }
-        })
 
         llSearchResults.setOnClickListener {
             runMenuOut {
-                callBack.openSearchActivity(searchView.query.toString())
+                callBack.openSearchActivity(selectedSearchResult?.query)
             }
         }
 
@@ -154,7 +125,6 @@ class SearchMenu @JvmOverloads constructor(
                 callBack.showMenuBar()
             }
         }
-
 
         //目录
         llSearchExit.setOnClickListener {
@@ -177,6 +147,16 @@ class SearchMenu @JvmOverloads constructor(
             }
         }
 
+        ivSearchContentUp.setOnClickListener {
+            updateSearchResultIndex(currentSearchResultIndex - 1)
+            callBack.navigateToSearch(searchResultList[currentSearchResultIndex])
+        }
+
+        ivSearchContentDown.setOnClickListener {
+            updateSearchResultIndex(currentSearchResultIndex + 1)
+            callBack.navigateToSearch(searchResultList[currentSearchResultIndex])
+        }
+
         fabRight.setOnClickListener {
             runMenuOut {
                 updateSearchResultIndex(currentSearchResultIndex + 1)
@@ -187,7 +167,7 @@ class SearchMenu @JvmOverloads constructor(
 
     private fun initAnimation() {
         //显示菜单
-        menuTopIn.setAnimationListener(object : Animation.AnimationListener {
+        menuBottomIn.setAnimationListener(object : Animation.AnimationListener {
             override fun onAnimationStart(animation: Animation) {
                 callBack.upSystemUiVisibility()
                 binding.fabLeft.visible(hasSearchResult)
@@ -217,14 +197,13 @@ class SearchMenu @JvmOverloads constructor(
         })
 
         //隐藏菜单
-        menuTopOut.setAnimationListener(object : Animation.AnimationListener {
+        menuBottomOut.setAnimationListener(object : Animation.AnimationListener {
             override fun onAnimationStart(animation: Animation) {
                 binding.vwMenuBg.setOnClickListener(null)
             }
 
             override fun onAnimationEnd(animation: Animation) {
                 this@SearchMenu.invisible()
-                binding.titleBar.invisible()
                 binding.llSearchBaseInfo.invisible()
                 binding.llBottomBg.invisible()
                 binding.fabRight.invisible()
