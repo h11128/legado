@@ -105,6 +105,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                 binding.searchMenu.updateSearchResultIndex(searchResultIndex)
                 binding.searchMenu.selectedSearchResult?.let { currentResult ->
                     skipToSearch(currentResult)
+                    showActionMenu()
                 }
             }
         }
@@ -773,7 +774,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     override fun showSearchSetting() {
-        TODO("Not yet implemented")
+        showDialogFragment<MoreConfigDialog>()
     }
 
     /**
@@ -923,7 +924,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         } else {
             jumpToPosition()
         }
-        showActionMenu()
     }
 
     private fun startBackupJob() {
