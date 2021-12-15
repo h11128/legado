@@ -178,6 +178,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             val chapters = WebBook.getChapterListAwait(this, source, book)
             ensureActive()
             val oldBook = ReadBook.book!!
+            ensureActive()
             book.durChapterIndex = BookHelp.getDurChapter(
                 oldBook.durChapterIndex,
                 oldBook.totalChapterNum,
