@@ -20,7 +20,7 @@ import io.legado.app.utils.*
 import splitties.views.*
 
 /**
- * 阅读界面菜单
+ * 搜索界面菜单
  */
 class SearchMenu @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
@@ -76,11 +76,11 @@ class SearchMenu @JvmOverloads constructor(
         tvMainMenu.setTextColor(textColor)
         tvSearchResults.setTextColor(textColor)
         tvSearchExit.setTextColor(textColor)
-        tvSetting.setTextColor(textColor)
+        //tvSetting.setTextColor(textColor)
         ivMainMenu.setColorFilter(textColor)
         ivSearchResults.setColorFilter(textColor)
         ivSearchExit.setColorFilter(textColor)
-        ivSetting.setColorFilter(textColor)
+        //ivSetting.setColorFilter(textColor)
         ivSearchContentUp.setColorFilter(textColor)
         ivSearchContentDown.setColorFilter(textColor)
         tvCurrentSearchInfo.setTextColor(textColor)
@@ -144,11 +144,11 @@ class SearchMenu @JvmOverloads constructor(
         }
 
         //设置
-        llSetting.setOnClickListener {
-            runMenuOut {
-                callBack.showSearchSetting()
-            }
-        }
+//        llSetting.setOnClickListener {
+//            runMenuOut {
+//                callBack.showSearchSetting()
+//            }
+//        }
 
         fabLeft.setOnClickListener {
             updateSearchResultIndex(currentSearchResultIndex - 1)
