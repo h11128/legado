@@ -8,13 +8,13 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.animation.Animation
 import android.widget.FrameLayout
-import androidx.appcompat.widget.SearchView
 import androidx.core.view.isVisible
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.databinding.ViewSearchMenuBinding
 import io.legado.app.help.*
 import io.legado.app.lib.theme.*
+import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.utils.*
 import splitties.views.*
@@ -29,8 +29,6 @@ class SearchMenu @JvmOverloads constructor(
     private val callBack: CallBack get() = activity as CallBack
     private val binding = ViewSearchMenuBinding.inflate(LayoutInflater.from(context), this, true)
 
-    private val menuTopIn: Animation = AnimationUtilsSupport.loadAnimation(context, R.anim.anim_readbook_top_in)
-    private val menuTopOut: Animation = AnimationUtilsSupport.loadAnimation(context, R.anim.anim_readbook_top_out)
     private val menuBottomIn: Animation = AnimationUtilsSupport.loadAnimation(context, R.anim.anim_readbook_bottom_in)
     private val menuBottomOut: Animation = AnimationUtilsSupport.loadAnimation(context, R.anim.anim_readbook_bottom_out)
     private val bgColor: Int = context.bottomBackground
@@ -44,15 +42,16 @@ class SearchMenu @JvmOverloads constructor(
     private var lastSearchResultIndex: Int = 0
     private val hasSearchResult: Boolean
         get() = searchResultList.isNotEmpty()
-
     val selectedSearchResult: SearchResult?
         get() = if (searchResultList.isNotEmpty()) searchResultList[currentSearchResultIndex] else null
     val previousSearchResult: SearchResult
         get() = searchResultList[lastSearchResultIndex]
+
     init {
         initAnimation()
         initView()
         bindEvent()
+        updateSearchInfo()
         observeSearchResultList()
     }
 
@@ -61,6 +60,7 @@ class SearchMenu @JvmOverloads constructor(
             eventObservable<List<SearchResult>>(EventBus.SEARCH_RESULT).observe(owner, {
                 searchResultList.clear()
                 searchResultList.addAll(it)
+                updateSearchInfo()
             })
         }
     }
@@ -83,6 +83,7 @@ class SearchMenu @JvmOverloads constructor(
         ivSetting.setColorFilter(textColor)
         ivSearchContentUp.setColorFilter(textColor)
         ivSearchContentDown.setColorFilter(textColor)
+        tvCurrentSearchInfo.setTextColor(textColor)
     }
 
 
@@ -90,6 +91,7 @@ class SearchMenu @JvmOverloads constructor(
         this.visible()
         binding.llSearchBaseInfo.visible()
         binding.llBottomBg.visible()
+        binding.vwMenuBg.visible()
         binding.llSearchBaseInfo.startAnimation(menuBottomIn)
         binding.llBottomBg.startAnimation(menuBottomIn)
     }
@@ -99,6 +101,12 @@ class SearchMenu @JvmOverloads constructor(
         if (this.isVisible) {
             binding.llSearchBaseInfo.startAnimation(menuBottomOut)
             binding.llBottomBg.startAnimation(menuBottomOut)
+        }
+    }
+
+    fun updateSearchInfo() {
+        ReadBook.curTextChapter?.let {
+            binding.tvCurrentSearchInfo.text = context.getString(R.string.search_content_size) + ": ${searchResultList.size} / 当前章节: ${it.title}"
         }
     }
 
@@ -123,6 +131,7 @@ class SearchMenu @JvmOverloads constructor(
         llMainMenu.setOnClickListener {
             runMenuOut {
                 callBack.showMenuBar()
+                this@SearchMenu.invisible()
             }
         }
 
@@ -130,6 +139,7 @@ class SearchMenu @JvmOverloads constructor(
         llSearchExit.setOnClickListener {
             runMenuOut {
                 callBack.exitSearchMenu()
+                this@SearchMenu.invisible()
             }
         }
 
@@ -141,10 +151,8 @@ class SearchMenu @JvmOverloads constructor(
         }
 
         fabLeft.setOnClickListener {
-            runMenuOut {
-                updateSearchResultIndex(currentSearchResultIndex - 1)
-                callBack.navigateToSearch(searchResultList[currentSearchResultIndex])
-            }
+            updateSearchResultIndex(currentSearchResultIndex - 1)
+            callBack.navigateToSearch(searchResultList[currentSearchResultIndex])
         }
 
         ivSearchContentUp.setOnClickListener {
@@ -158,10 +166,8 @@ class SearchMenu @JvmOverloads constructor(
         }
 
         fabRight.setOnClickListener {
-            runMenuOut {
-                updateSearchResultIndex(currentSearchResultIndex + 1)
-                callBack.navigateToSearch(searchResultList[currentSearchResultIndex])
-            }
+            updateSearchResultIndex(currentSearchResultIndex + 1)
+            callBack.navigateToSearch(searchResultList[currentSearchResultIndex])
         }
     }
 
@@ -203,11 +209,11 @@ class SearchMenu @JvmOverloads constructor(
             }
 
             override fun onAnimationEnd(animation: Animation) {
-                this@SearchMenu.invisible()
                 binding.llSearchBaseInfo.invisible()
                 binding.llBottomBg.invisible()
-                binding.fabRight.invisible()
-                binding.fabLeft.invisible()
+                binding.vwMenuBg.invisible()
+                binding.vwMenuBg.setOnClickListener { runMenuOut() }
+
                 onMenuOutEnd?.invoke()
                 callBack.upSystemUiVisibility()
             }

@@ -102,7 +102,7 @@ class SearchContentActivity :
 
     @SuppressLint("SetTextI18n")
     private fun initBook() {
-        binding.tvCurrentSearchInfo.text = "搜索结果：${viewModel.searchResultCounts}"
+        binding.tvCurrentSearchInfo.text = this.getString(R.string.search_content_size) +": ${viewModel.searchResultCounts}"
         viewModel.book?.let {
             initCacheFileNames(it)
             durChapterIndex = it.durChapterIndex
@@ -152,7 +152,7 @@ class SearchContentActivity :
                     if (searchResults.isNotEmpty()) {
                         viewModel.searchResultList.addAll(searchResults)
                         binding.refreshProgressBar.isAutoLoading = false
-                        binding.tvCurrentSearchInfo.text = "搜索结果：${viewModel.searchResultCounts}"
+                        binding.tvCurrentSearchInfo.text = this@SearchContentActivity.getString(R.string.search_content_size) +": ${viewModel.searchResultCounts}"
                         adapter.addItems(searchResults)
                         searchResults = listOf()
                     }

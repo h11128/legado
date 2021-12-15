@@ -123,6 +123,10 @@ class ReadBookActivity : BaseReadBookActivity(),
     override var autoPageProgress = 0
     override var isAutoPage = false
     override var isShowingSearchResult = false
+    override var isSelectingSearchResult = false
+        set(value) {
+            field = value && isShowingSearchResult
+        }
     private var screenTimeOut: Long = 0
     private var timeBatteryReceiver: TimeBatteryReceiver? = null
     private var loadStates: Boolean = false
@@ -897,9 +901,11 @@ class ReadBookActivity : BaseReadBookActivity(),
 
         fun jumpToPosition(){
             ReadBook.curTextChapter?.let {
+                binding.searchMenu.updateSearchInfo()
                 val positions = viewModel.searchResultPositions(it, searchResult)
                 ReadBook.skipToPage(positions[0]) {
                     launch {
+                        isSelectingSearchResult = true
                         binding.readView.curPage.selectStartMoveIndex(0, positions[1], positions[2])
                         when (positions[3]) {
                             0  -> binding.readView.curPage.selectEndMoveIndex(
@@ -912,6 +918,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                             -1 -> binding.readView.curPage.selectEndMoveIndex(1, 0, positions[4])
                         }
                         binding.readView.isTextSelected = true
+                        isSelectingSearchResult = false
                     }
                 }
             }
