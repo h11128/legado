@@ -201,6 +201,13 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
                 return false
             }
         })
+        searchView.setOnQueryTextFocusChangeListener { _, hasFocus ->
+            if (binding.refreshProgressBar.isAutoLoading || (!hasFocus && adapter.isNotEmpty() && searchView.query.isNotBlank())){
+                visibleInputHelp(false)
+            } else {
+                visibleInputHelp(true)
+            }
+        }
         visibleInputHelp(true)
     }
 
