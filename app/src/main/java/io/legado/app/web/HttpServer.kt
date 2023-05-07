@@ -7,10 +7,12 @@ import io.legado.app.api.controller.BookController
 import io.legado.app.api.controller.BookSourceController
 import io.legado.app.api.controller.ReplaceRuleController
 import io.legado.app.api.controller.RssSourceController
+import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.service.WebService
 import io.legado.app.utils.*
 import io.legado.app.web.utils.AssetsWeb
-import splitties.init.appCtx
+import okio.Pipe
+import okio.buffer
 import java.io.*
 
 class HttpServer(port: Int) : NanoHTTPD(port) {
@@ -33,6 +35,7 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
                     //response.addHeader("Access-Control-Max-Age", "3600");
                     return response
                 }
+
                 Method.POST -> {
                     val files = HashMap<String, String>()
                     session.parseBody(files)
@@ -56,6 +59,7 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
                         else -> null
                     }
                 }
+
                 Method.GET -> {
                     val parameters = session.parameters
 
@@ -75,6 +79,7 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
                         else -> null
                     }
                 }
+
                 else -> Unit
             }
 
@@ -97,25 +102,23 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
                     byteArray.size.toLong()
                 )
             } else {
-                try {
-                    newFixedLengthResponse(GSON.toJson(returnData))
-                } catch (e: OutOfMemoryError) {
-                    val path = FileUtils.getPath(
-                        appCtx.externalFiles,
-                        "book_cache",
-                        "bookSources.json"
-                    )
-                    val file = FileUtils.createFileIfNotExist(path)
-                    BufferedWriter(FileWriter(file)).use {
-                        GSON.toJson(returnData, it)
+                val data = returnData.data
+                if (data is List<*> && data.size > 3000) {
+                    val pipe = Pipe(16 * 1024)
+                    Coroutine.async {
+                        pipe.sink.buffer().outputStream().use { out ->
+                            BufferedWriter(OutputStreamWriter(out, "UTF-8")).use {
+                                GSON.toJson(returnData, it)
+                            }
+                        }
                     }
-                    val fis = FileInputStream(file)
-                    newFixedLengthResponse(
+                    newChunkedResponse(
                         Response.Status.OK,
                         "application/json",
-                        fis,
-                        fis.available().toLong()
+                        pipe.source.buffer().inputStream()
                     )
+                } else {
+                    newFixedLengthResponse(GSON.toJson(returnData))
                 }
             }
             response.addHeader("Access-Control-Allow-Methods", "GET, POST")

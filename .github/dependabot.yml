@@ -23,17 +23,16 @@ registries:
 
 updates:
   - package-ecosystem: gradle
-    directory: "app"
-    schedule:
-      interval: "weekly"
-    registries: "*"
-  - package-ecosystem: gradle
-    directory: "modules/book"
+    directory: "/"
     schedule:
       interval: "weekly"
     registries: "*"
   # Maintain dependencies for GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: npm
+    directory: "modules/web"
     schedule:
       interval: "weekly"
