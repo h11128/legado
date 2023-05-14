@@ -183,7 +183,7 @@ data class BookSource(
 
     fun getInvalidGroupNames(): String {
         return bookSourceGroup?.splitNotBlank(AppPattern.splitGroupRegex)?.toHashSet()?.filter {
-            "失效" in it
+            ("失效" in it) || ("规则为空" in it)
         }?.joinToString() ?: ""
     }
 
