@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: "test"
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -84,7 +84,7 @@ jobs:
           sed '$a\RELEASE_KEY_PASSWORD=gedoor_legado'       $GITHUB_WORKSPACE/gradle.properties -i
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Build With Gradle
         continue-on-error: true
@@ -129,6 +129,10 @@ jobs:
 
       - name: Check Build production
         run: |
+          if [ ! -d ${{ github.workspace }}/apk ]; then
+            echo "Build production not found! Check gradle logs."
+            exit 1
+          fi
           cd ${{ github.workspace }}/apk/
           if [ ! -e legado_*.apk ]; then
             echo "Build production not found! Check gradle logs."
@@ -151,7 +155,7 @@ jobs:
 
   prerelease:
     needs: [ prepare, build ]
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.repository == 'gedoor/legado'
     runs-on: ubuntu-latest
     env: 
       VERSION: ${{ needs.prepare.outputs.version }}
@@ -175,9 +179,19 @@ jobs:
           done
 
       - name: Delete Pre-Release
-        run: gh release delete beta -y --cleanup-tag
+        run: |
+          if gh release view beta &>/dev/null; then
+            gh release delete beta -y
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
+      
+      - name: Create or update beta tag
+        uses: richardsimko/update-tag@v1
+        with:
+          tag_name: beta
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish Pre-Release
         uses: ncipollo/release-action@v1

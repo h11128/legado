@@ -2,22 +2,29 @@ package io.legado.app.ui.book.import
 
 import android.os.Bundle
 import android.view.MotionEvent
-import android.widget.EditText
 import androidx.appcompat.widget.SearchView
 import androidx.lifecycle.ViewModel
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppPattern
 import io.legado.app.data.appDb
+import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ActivityImportBookBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.localBook.LocalBook
+import io.legado.app.ui.book.manga.ReadMangaActivity
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.utils.*
+import io.legado.app.utils.ArchiveUtils
+import io.legado.app.utils.FileDoc
+import io.legado.app.utils.applyTint
+import io.legado.app.utils.hideSoftInput
+import io.legado.app.utils.shouldHideSoftInput
+import io.legado.app.utils.startReadOrMangaActivity
+import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -46,7 +53,7 @@ abstract class BaseImportBookActivity<VM : ViewModel> : VMBaseActivity<ActivityI
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (ev.action == MotionEvent.ACTION_DOWN) {
             currentFocus?.let {
-                if (it is EditText) {
+                if (it.shouldHideSoftInput(ev)) {
                     it.clearFocus()
                     it.hideSoftInput()
                 }
@@ -91,9 +98,9 @@ abstract class BaseImportBookActivity<VM : ViewModel> : VMBaseActivity<ActivityI
 
     abstract fun onSearchTextChange(newText: String?)
 
-    protected fun startReadBook(bookUrl: String) {
-        startActivity<ReadBookActivity> {
-            putExtra("bookUrl", bookUrl)
+    protected fun startReadBook(book: Book) {
+        startReadOrMangaActivity<ReadBookActivity, ReadMangaActivity>(book) {
+            putExtra("bookUrl", book.bookUrl)
         }
     }
 
@@ -104,7 +111,7 @@ abstract class BaseImportBookActivity<VM : ViewModel> : VMBaseActivity<ActivityI
         if (fileNames.size == 1) {
             val name = fileNames[0]
             appDb.bookDao.getBookByFileName(name)?.let {
-                startReadBook(it.bookUrl)
+                startReadBook(it)
             } ?: showImportAlert(fileDoc, name)
         } else {
             showSelectBookReadAlert(fileDoc, fileNames)
@@ -121,7 +128,7 @@ abstract class BaseImportBookActivity<VM : ViewModel> : VMBaseActivity<ActivityI
             fileNames
         ) { _, name, _ ->
             appDb.bookDao.getBookByFileName(name)?.let {
-                startReadBook(it.bookUrl)
+                startReadBook(it)
             } ?: showImportAlert(fileDoc, name)
         }
     }
@@ -130,12 +137,12 @@ abstract class BaseImportBookActivity<VM : ViewModel> : VMBaseActivity<ActivityI
     private inline fun addArchiveToBookShelf(
         fileDoc: FileDoc,
         fileName: String,
-        onSuccess: (String) -> Unit
+        onSuccess: (Book) -> Unit
     ) {
         LocalBook.importArchiveFile(fileDoc.uri, fileName) {
             it.contains(fileName)
         }.firstOrNull()?.run {
-            onSuccess.invoke(bookUrl)
+            onSuccess.invoke(this)
         }
     }
 
@@ -156,9 +163,7 @@ abstract class BaseImportBookActivity<VM : ViewModel> : VMBaseActivity<ActivityI
 
     private fun initSearchView() {
         searchView.applyTint(primaryTextColor)
-        searchView.onActionViewExpanded()
         searchView.isSubmitButtonEnabled = true
-        searchView.clearFocus()
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?): Boolean {
                 return false

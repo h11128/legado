@@ -24,14 +24,16 @@ import io.legado.app.ui.book.read.page.entities.column.ReviewColumn
 import io.legado.app.ui.book.read.page.entities.column.TextColumn
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.fastSum
+import io.legado.app.utils.getTextWidthsCompat
 import io.legado.app.utils.splitNotBlank
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import java.util.LinkedList
-import java.util.Locale
 import kotlin.coroutines.coroutineContext
 import kotlin.math.roundToInt
 
@@ -70,20 +72,32 @@ class TextChapterLayout(
     private val indentCharWidth = ChapterProvider.indentCharWidth
     private val stringBuilder = StringBuilder()
 
+    private val paragraphIndent = ReadBookConfig.paragraphIndent
+
     private var pendingTextPage = TextPage()
 
-    private var isCompleted = false
-    private val job: Coroutine<*>
     private val bookChapter inline get() = textChapter.chapter
     private val displayTitle inline get() = textChapter.title
     private val chaptersSize inline get() = textChapter.chaptersSize
 
+    private var durY = 0f
+    private var absStartX = paddingLeft
+    private var floatArray = FloatArray(128)
+
+    private var isCompleted = false
+    private val job: Coroutine<*>
+
     var exception: Throwable? = null
 
-    var channel = Channel<TextPage>(Int.MAX_VALUE)
+    var channel = Channel<TextPage>(Channel.UNLIMITED)
+
 
     init {
-        job = Coroutine.async(scope) {
+        job = Coroutine.async(
+            scope,
+            start = CoroutineStart.LAZY,
+            executeContext = IO
+        ) {
             launch {
                 val bookSource = book.getBookSource() ?: return@launch
                 BookHelp.saveImages(bookSource, book, bookChapter, bookContent.toString())
@@ -95,6 +109,7 @@ class TextChapterLayout(
         }.onFinally {
             isCompleted = true
         }
+        job.start()
     }
 
     fun setProgressListener(l: LayoutProgressListener?) {
@@ -118,8 +133,8 @@ class TextChapterLayout(
     }
 
     private fun onPageCompleted() {
-        val textPage = textPages.last()
-        textPage.index = textPages.lastIndex
+        val textPage = pendingTextPage
+        textPage.index = textPages.size
         textPage.chapterIndex = bookChapter.index
         textPage.chapterSize = chaptersSize
         textPage.title = displayTitle
@@ -128,6 +143,8 @@ class TextChapterLayout(
         textPage.isCompleted = true
         textPage.textChapter = textChapter
         textPage.upLinesPosition()
+        textPage.upRenderHeight()
+        textPages.add(textPage)
         channel.trySend(textPage)
         try {
             listener?.onLayoutPageCompleted(textPages.lastIndex, textPage)
@@ -175,33 +192,40 @@ class TextChapterLayout(
         bookContent: BookContent,
     ) {
         val contents = bookContent.textList
-        var absStartX = paddingLeft
-        var durY = 0f
+        val imageStyle = book.getImageStyle()
+        val isSingleImageStyle = imageStyle.equals(Book.imgStyleSingle, true)
+        val isTextImageStyle = imageStyle.equals(Book.imgStyleText, true)
+
         if (ReadBookConfig.titleMode != 2 || bookChapter.isVolume || contents.isEmpty()) {
             //标题非隐藏
             displayTitle.splitNotBlank("\n").forEach { text ->
                 setTypeText(
-                    book, absStartX, durY,
+                    book,
                     if (AppConfig.enableReview) text + ChapterProvider.reviewChar else text,
                     titlePaint,
                     titlePaintTextHeight,
                     titlePaintFontMetrics,
+                    imageStyle,
                     isTitle = true,
                     emptyContent = contents.isEmpty(),
                     isVolumeTitle = bookChapter.isVolume
-                ).let {
-                    absStartX = it.first
-                    durY = it.second
-                }
+                )
             }
             pendingTextPage.lines.last().isParagraphEnd = true
             stringBuilder.append("\n")
             durY += titleBottomSpacing
+
+            // 如果是单图模式且当前页有内容，强制分页
+            if (isSingleImageStyle && pendingTextPage.lines.isNotEmpty()) {
+                prepareNextPageIfNeed()
+            }
         }
+
         val sb = StringBuffer()
+        var isSetTypedImage = false
         contents.forEach { content ->
             coroutineContext.ensureActive()
-            if (book.getImageStyle().equals(Book.imgStyleText, true)) {
+            if (isTextImageStyle) {
                 //图片样式为文字嵌入类型
                 var text = content.replace(ChapterProvider.srcReplaceChar, "▣")
                 val srcList = LinkedList<String>()
@@ -217,71 +241,67 @@ class TextChapterLayout(
                 text = sb.toString()
                 setTypeText(
                     book,
-                    absStartX,
-                    durY,
                     text,
                     contentPaint,
                     contentPaintTextHeight,
                     contentPaintFontMetrics,
+                    imageStyle,
                     srcList = srcList
-                ).let {
-                    absStartX = it.first
-                    durY = it.second
-                }
+                )
             } else {
-                val matcher = AppPattern.imgPattern.matcher(content)
+                if (isSingleImageStyle && isSetTypedImage) {
+                    isSetTypedImage = false
+                    prepareNextPageIfNeed()
+                }
                 var start = 0
-                while (matcher.find()) {
-                    coroutineContext.ensureActive()
-                    val text = content.substring(start, matcher.start())
-                    if (text.isNotBlank()) {
-                        setTypeText(
-                            book,
-                            absStartX,
-                            durY,
-                            text,
-                            contentPaint,
-                            contentPaintTextHeight,
-                            contentPaintFontMetrics
-                        ).let {
-                            absStartX = it.first
-                            durY = it.second
+                if (content.contains("<img")) {
+                    val matcher = AppPattern.imgPattern.matcher(content)
+                    while (matcher.find()) {
+                        coroutineContext.ensureActive()
+                        val text = content.substring(start, matcher.start())
+                        if (text.isNotBlank()) {
+                            setTypeText(
+                                book,
+                                text,
+                                contentPaint,
+                                contentPaintTextHeight,
+                                contentPaintFontMetrics,
+                                imageStyle,
+                                isFirstLine = start == 0
+                            )
                         }
+                        setTypeImage(
+                            book,
+                            matcher.group(1)!!,
+                            contentPaintTextHeight,
+                            imageStyle
+                        )
+                        isSetTypedImage = true
+                        start = matcher.end()
                     }
-                    setTypeImage(
-                        book,
-                        matcher.group(1)!!,
-                        absStartX,
-                        durY,
-                        contentPaintTextHeight,
-                        stringBuilder,
-                        book.getImageStyle()
-                    ).let {
-                        absStartX = it.first
-                        durY = it.second
-                    }
-                    start = matcher.end()
                 }
                 if (start < content.length) {
+                    if (isSingleImageStyle && isSetTypedImage) {
+                        isSetTypedImage = false
+                        prepareNextPageIfNeed()
+                    }
                     val text = content.substring(start, content.length)
                     if (text.isNotBlank()) {
                         setTypeText(
-                            book, absStartX, durY,
+                            book,
                             if (AppConfig.enableReview) text + ChapterProvider.reviewChar else text,
                             contentPaint,
                             contentPaintTextHeight,
-                            contentPaintFontMetrics
-                        ).let {
-                            absStartX = it.first
-                            durY = it.second
-                        }
+                            contentPaintFontMetrics,
+                            imageStyle,
+                            isFirstLine = start == 0
+                        )
                     }
                 }
             }
             pendingTextPage.lines.last().isParagraphEnd = true
             stringBuilder.append("\n")
         }
-        textPages.add(pendingTextPage)
         val textPage = pendingTextPage
         val endPadding = 20.dpToPx()
         val durYPadding = durY + endPadding
@@ -302,35 +322,36 @@ class TextChapterLayout(
     private suspend fun setTypeImage(
         book: Book,
         src: String,
-        x: Int,
-        y: Float,
         textHeight: Float,
-        stringBuilder: StringBuilder,
         imageStyle: String?,
-    ): Pair<Int, Float> {
-        var absStartX = x
-        var durY = y
+    ) {
         val size = ImageProvider.getImageSize(book, src, ReadBook.bookSource)
         if (size.width > 0 && size.height > 0) {
-            if (durY > visibleHeight) {
-                val textPage = pendingTextPage
-                if (textPage.height < durY) {
-                    textPage.height = durY
-                }
-                textPage.text = stringBuilder.toString().ifEmpty { "本页无文字内容" }
-                stringBuilder.clear()
-                textPages.add(textPage)
-                coroutineContext.ensureActive()
-                onPageCompleted()
-                pendingTextPage = TextPage()
-                durY = 0f
-            }
+            prepareNextPageIfNeed(durY)
             var height = size.height
             var width = size.width
-            when (imageStyle?.uppercase(Locale.ROOT)) {
+            when (imageStyle?.uppercase()) {
                 Book.imgStyleFull -> {
                     width = visibleWidth
                     height = size.height * visibleWidth / size.width
+                }
+
+                Book.imgStyleSingle -> {
+                    width = visibleWidth
+                    height = size.height * visibleWidth / size.width
+                    if (height > visibleHeight) {
+                        width = width * visibleHeight / height
+                        height = visibleHeight
+                    }
+                    if (durY > 0f) {
+                        prepareNextPageIfNeed()
+                    }
+
+                    // 图片竖直方向居中：调整 Y 坐标
+                    if (height < visibleHeight) {
+                        val adjustHeight = (visibleHeight - height) / 2f
+                        durY = adjustHeight // 将 Y 坐标设置为居中位置
+                    }
                 }
 
                 else -> {
@@ -342,30 +363,7 @@ class TextChapterLayout(
                         width = width * visibleHeight / height
                         height = visibleHeight
                     }
-                    if (durY + height > visibleHeight) {
-                        val textPage = pendingTextPage
-                        // 双页的 durY 不正确，可能会小于实际高度
-                        if (textPage.height < durY) {
-                            textPage.height = durY
-                        }
-                        if (doublePage && absStartX < viewWidth / 2) {
-                            //当前页面左列结束
-                            textPage.leftLineSize = textPage.lineSize
-                            absStartX = viewWidth / 2 + paddingLeft
-                        } else {
-                            //当前页面结束
-                            if (textPage.leftLineSize == 0) {
-                                textPage.leftLineSize = textPage.lineSize
-                            }
-                            textPage.text = stringBuilder.toString().ifEmpty { "本页无文字内容" }
-                            stringBuilder.clear()
-                            textPages.add(textPage)
-                            coroutineContext.ensureActive()
-                            onPageCompleted()
-                            pendingTextPage = TextPage()
-                        }
-                        durY = 0f
-                    }
+                    prepareNextPageIfNeed(durY + height)
                 }
             }
             val textLine = TextLine(isImage = true)
@@ -380,13 +378,13 @@ class TextChapterLayout(
                 Pair(0f, width.toFloat())
             }
             textLine.addColumn(
-                ImageColumn(start = x + start, end = x + end, src = src)
+                ImageColumn(start = absStartX + start, end = absStartX + end, src = src)
             )
             calcTextLinePosition(textPages, textLine, stringBuilder.length)
             stringBuilder.append(" ") // 确保翻页时索引计算正确
             pendingTextPage.addLine(textLine)
         }
-        return absStartX to durY + textHeight * paragraphSpacing / 10f
+        durY += textHeight * paragraphSpacing / 10f
     }
 
     /**
@@ -395,27 +393,27 @@ class TextChapterLayout(
     @Suppress("DEPRECATION")
     private suspend fun setTypeText(
         book: Book,
-        x: Int,
-        y: Float,
         text: String,
         textPaint: TextPaint,
         textHeight: Float,
         fontMetrics: Paint.FontMetrics,
+        imageStyle: String?,
         isTitle: Boolean = false,
+        isFirstLine: Boolean = true,
         emptyContent: Boolean = false,
         isVolumeTitle: Boolean = false,
         srcList: LinkedList<String>? = null
-    ): Pair<Int, Float> {
-        var absStartX = x
-        val widthsArray = FloatArray(text.length)
-        textPaint.getTextWidths(text, widthsArray)
+    ) {
+        val widthsArray = allocateFloatArray(text.length)
+        textPaint.getTextWidthsCompat(text, widthsArray)
         val layout = if (ReadBookConfig.useZhLayout) {
             val (words, widths) = measureTextSplit(text, widthsArray)
-            ZhLayout(text, textPaint, visibleWidth, words, widths)
+            val indentSize = if (isFirstLine) paragraphIndent.length else 0
+            ZhLayout(text, textPaint, visibleWidth, words, widths, indentSize)
         } else {
             StaticLayout(text, textPaint, visibleWidth, Layout.Alignment.ALIGN_NORMAL, 0f, 0f, true)
         }
-        var durY = when {
+        durY = when {
             //标题y轴居中
             emptyContent && textPages.isEmpty() -> {
                 val textPage = pendingTextPage
@@ -433,42 +431,26 @@ class TextChapterLayout(
                         it.lineBase -= textLayoutHeight
                         it.lineBottom -= textLayoutHeight
                     }
-                    y - textLayoutHeight
+                    durY - textLayoutHeight
                 }
             }
 
-            isTitle && textPages.isEmpty() && pendingTextPage.lines.isEmpty() ->
-                y + titleTopSpacing
+            isTitle && textPages.isEmpty() && pendingTextPage.lines.isEmpty() -> {
+                when (imageStyle?.uppercase()) {
+                    Book.imgStyleSingle -> {
+                        val ty = (visibleHeight - layout.lineCount * textHeight) / 2
+                        if (ty > titleTopSpacing) ty else titleTopSpacing.toFloat()
+                    }
 
-            else -> y
+                    else -> durY + titleTopSpacing
+                }
+            }
+
+            else -> durY
         }
         for (lineIndex in 0 until layout.lineCount) {
             val textLine = TextLine(isTitle = isTitle)
-            if (durY + textHeight > visibleHeight) {
-                val textPage = pendingTextPage
-                if (textPage.height < durY) {
-                    textPage.height = durY
-                }
-                if (doublePage && absStartX < viewWidth / 2) {
-                    //当前页面左列结束
-                    textPage.leftLineSize = textPage.lineSize
-                    absStartX = viewWidth / 2 + paddingLeft
-                } else {
-                    //当前页面结束,设置各种值
-                    if (textPage.leftLineSize == 0) {
-                        textPage.leftLineSize = textPage.lineSize
-                    }
-                    textPage.text = stringBuilder.toString()
-                    textPages.add(textPage)
-                    coroutineContext.ensureActive()
-                    onPageCompleted()
-                    //新建页面
-                    pendingTextPage = TextPage()
-                    stringBuilder.clear()
-                    absStartX = paddingLeft
-                }
-                durY = 0f
-            }
+            prepareNextPageIfNeed(durY + textHeight)
             val lineStart = layout.getLineStart(lineIndex)
             val lineEnd = layout.getLineEnd(lineIndex)
             val lineText = text.substring(lineStart, lineEnd)
@@ -476,7 +458,7 @@ class TextChapterLayout(
             val desiredWidth = widths.fastSum()
             textLine.text = lineText
             when {
-                lineIndex == 0 && layout.lineCount > 1 && !isTitle -> {
+                lineIndex == 0 && layout.lineCount > 1 && !isTitle && isFirstLine -> {
                     //多行的第一行 非标题
                     addCharsToLineFirst(
                         book, absStartX, textLine, words, textPaint,
@@ -489,7 +471,8 @@ class TextChapterLayout(
                     //标题x轴居中
                     val startX = if (
                         isTitle &&
-                        (ReadBookConfig.isMiddleTitle || emptyContent || isVolumeTitle)
+                        (ReadBookConfig.isMiddleTitle || emptyContent || isVolumeTitle
+                                || imageStyle?.uppercase() == Book.imgStyleSingle)
                     ) {
                         (visibleWidth - desiredWidth) / 2
                     } else {
@@ -504,7 +487,8 @@ class TextChapterLayout(
                 else -> {
                     if (
                         isTitle &&
-                        (ReadBookConfig.isMiddleTitle || emptyContent || isVolumeTitle)
+                        (ReadBookConfig.isMiddleTitle || emptyContent || isVolumeTitle
+                                || imageStyle?.uppercase() == Book.imgStyleSingle)
                     ) {
                         //标题居中
                         val startX = (visibleWidth - desiredWidth) / 2
@@ -535,7 +519,6 @@ class TextChapterLayout(
             }
         }
         durY += textHeight * paragraphSpacing / 10f
-        return Pair(absStartX, durY)
     }
 
     private fun calcTextLinePosition(
@@ -580,8 +563,8 @@ class TextChapterLayout(
             )
             return
         }
-        val bodyIndent = ReadBookConfig.paragraphIndent
-        for (i in bodyIndent.indices) {
+        val bodyIndent = paragraphIndent
+        repeat(bodyIndent.length) {
             val x1 = x + indentCharWidth
             textLine.addColumn(
                 TextColumn(
@@ -650,7 +633,7 @@ class TextChapterLayout(
             }
         } else {
             val gapCount: Int = words.lastIndex
-            val d = residualWidth / gapCount
+            val d = if (gapCount > 0) residualWidth / gapCount else 0f
             textLine.extraLetterSpacingOffsetX = -d / 2
             textLine.extraLetterSpacing = d / textPaint.textSize
             var x = startX
@@ -770,6 +753,41 @@ class TextChapterLayout(
         }
     }
 
+    private suspend fun prepareNextPageIfNeed(requestHeight: Float = -1f) {
+        if (requestHeight > visibleHeight || requestHeight == -1f) {
+            val textPage = pendingTextPage
+            // 双页的 durY 不正确，可能会小于实际高度
+            if (textPage.height < durY) {
+                textPage.height = durY
+            }
+            if (doublePage && absStartX < viewWidth / 2) {
+                //当前页面左列结束
+                textPage.leftLineSize = textPage.lineSize
+                absStartX = viewWidth / 2 + paddingLeft
+            } else {
+                //当前页面结束,设置各种值
+                if (textPage.leftLineSize == 0) {
+                    textPage.leftLineSize = textPage.lineSize
+                }
+                textPage.text = stringBuilder.toString()
+                coroutineContext.ensureActive()
+                onPageCompleted()
+                //新建页面
+                pendingTextPage = TextPage()
+                stringBuilder.clear()
+                absStartX = paddingLeft
+            }
+            durY = 0f
+        }
+    }
+
+    private fun allocateFloatArray(size: Int): FloatArray {
+        if (size > floatArray.size) {
+            floatArray = FloatArray(size)
+        }
+        return floatArray
+    }
+
     private fun measureTextSplit(
         text: String,
         widthsArray: FloatArray,
@@ -796,7 +814,7 @@ class TextChapterLayout(
 
     private fun isZeroWidthChar(char: Char): Boolean {
         val code = char.code
-        return code == 8203 || code == 8204 || code == 8288
+        return code == 8203 || code == 8204 || code == 8205 || code == 8288
     }
 
 }

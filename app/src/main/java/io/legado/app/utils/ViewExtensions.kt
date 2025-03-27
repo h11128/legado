@@ -16,6 +16,7 @@ import android.view.View.GONE
 import android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
 import android.view.View.INVISIBLE
 import android.view.View.VISIBLE
+import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.EdgeEffect
 import android.widget.EditText
@@ -23,12 +24,17 @@ import android.widget.RadioGroup
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.annotation.ColorInt
+import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.menu.MenuPopupHelper
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.graphics.record
 import androidx.core.graphics.withTranslation
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.get
+import androidx.core.view.marginBottom
+import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager.widget.ViewPager
 import io.legado.app.help.config.AppConfig
@@ -36,6 +42,8 @@ import io.legado.app.lib.theme.TintHelper
 import io.legado.app.utils.canvasrecorder.CanvasRecorder
 import io.legado.app.utils.canvasrecorder.record
 import splitties.systemservices.inputMethodManager
+import splitties.views.bottomPadding
+import splitties.views.topPadding
 import java.lang.reflect.Field
 
 
@@ -255,3 +263,44 @@ fun View.shouldHideSoftInput(event: MotionEvent): Boolean {
     }
     return false
 }
+
+fun View.applyStatusBarPadding(withInitialPadding: Boolean = false) {
+    val initialPadding = if (withInitialPadding) topPadding else 0
+    ViewCompat.setOnApplyWindowInsetsListener(this) { _, windowInsets ->
+        val insets = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars())
+        topPadding = initialPadding + insets.top
+        windowInsets
+    }
+}
+
+fun View.applyNavigationBarPadding(withInitialPadding: Boolean = false) {
+    val initialPadding = if (withInitialPadding) bottomPadding else 0
+    ViewCompat.setOnApplyWindowInsetsListener(this) { _, windowInsets ->
+        bottomPadding = initialPadding + windowInsets.navigationBarHeight
+        windowInsets
+    }
+}
+
+fun View.applyNavigationBarMargin(withInitialMargin: Boolean = false) {
+    val initialMargin = if (withInitialMargin) marginBottom else 0
+    ViewCompat.setOnApplyWindowInsetsListener(this) { _, windowInsets ->
+        updateLayoutParams<ViewGroup.MarginLayoutParams> {
+            bottomMargin = initialMargin + windowInsets.navigationBarHeight
+        }
+        windowInsets
+    }
+}
+
+fun View.setBackgroundKeepPadding(@DrawableRes backgroundResId: Int) {
+    val paddingLeft = paddingLeft
+    val paddingTop = paddingTop
+    val paddingRight = paddingRight
+    val paddingBottom = paddingBottom
+    setBackgroundResource(backgroundResId)
+    setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom)
+}
+
+fun View.canScroll(direction: Int): Boolean {
+    return canScrollVertically(direction) || canScrollHorizontally(direction)
+}
+

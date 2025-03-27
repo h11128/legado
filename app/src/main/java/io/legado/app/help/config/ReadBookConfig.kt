@@ -56,6 +56,7 @@ object ReadBookConfig {
             }
         }
 
+    var isComic: Boolean = false
     var bg: Drawable? = null
     var bgMeanColor: Int = 0
     val textColor: Int get() = durConfig.curTextColor()
@@ -149,9 +150,13 @@ object ReadBookConfig {
 
     fun deleteDur(): Boolean {
         if (configList.size > 5) {
-            configList.removeAt(styleSelect)
-            if (styleSelect > 0) {
-                styleSelect -= 1
+            val removeIndex = styleSelect
+            configList.removeAt(removeIndex)
+            if (removeIndex <= readStyleSelect) {
+                readStyleSelect -= 1
+            }
+            if (removeIndex <= comicStyleSelect) {
+                comicStyleSelect -= 1
             }
             return true
         }
@@ -173,11 +178,27 @@ object ReadBookConfig {
             field = value
             appCtx.putPrefInt(PreferKey.autoReadSpeed, value)
         }
-    var styleSelect = appCtx.getPrefInt(PreferKey.readStyleSelect)
+    var styleSelect: Int
+        get() = if (isComic) comicStyleSelect else readStyleSelect
+        set(value) {
+            if (isComic) {
+                comicStyleSelect = value
+            } else {
+                readStyleSelect = value
+            }
+        }
+    var readStyleSelect = appCtx.getPrefInt(PreferKey.readStyleSelect)
         set(value) {
             field = value
             if (appCtx.getPrefInt(PreferKey.readStyleSelect) != value) {
                 appCtx.putPrefInt(PreferKey.readStyleSelect, value)
+            }
+        }
+    var comicStyleSelect = appCtx.getPrefInt(PreferKey.comicStyleSelect, readStyleSelect)
+        set(value) {
+            field = value
+            if (appCtx.getPrefInt(PreferKey.comicStyleSelect) != value) {
+                appCtx.putPrefInt(PreferKey.comicStyleSelect, value)
             }
         }
     var shareLayout = appCtx.getPrefBoolean(PreferKey.shareLayout)
@@ -497,7 +518,7 @@ object ReadBookConfig {
         private var textColorNight: String = "#ADADAD",//夜间文字颜色
         private var textColorEInk: String = "#000000",
         private var pageAnim: Int = 0,//翻页动画
-        private var pageAnimEInk: Int = 3,
+        private var pageAnimEInk: Int = 4,
         var textFont: String = "",//字体
         var textBold: Int = 0,//是否粗体字 0:正常, 1:粗体, 2:细体
         var textSize: Int = 20,//文字大小

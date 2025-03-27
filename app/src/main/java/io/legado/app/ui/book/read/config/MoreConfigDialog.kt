@@ -11,9 +11,9 @@ import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.LinearLayout
-import androidx.fragment.app.DialogFragment
 import androidx.preference.Preference
 import io.legado.app.R
+import io.legado.app.base.BasePrefDialogFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
@@ -30,7 +30,7 @@ import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.setEdgeEffectColor
 
-class MoreConfigDialog : DialogFragment() {
+class MoreConfigDialog : BasePrefDialogFragment() {
     private val readPreferTag = "readPreferenceFragment"
 
     override fun onStart() {
@@ -112,12 +112,12 @@ class MoreConfigDialog : DialogFragment() {
                 PreferKey.readBodyToLh -> activity?.recreate()
                 PreferKey.hideStatusBar -> {
                     ReadBookConfig.hideStatusBar = getPrefBoolean(PreferKey.hideStatusBar)
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(0))
+                    postEvent(EventBus.UP_CONFIG, arrayListOf(0, 2))
                 }
 
                 PreferKey.hideNavigationBar -> {
                     ReadBookConfig.hideNavigationBar = getPrefBoolean(PreferKey.hideNavigationBar)
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(0))
+                    postEvent(EventBus.UP_CONFIG, arrayListOf(0, 2))
                 }
 
                 PreferKey.keepLight -> postEvent(key, true)

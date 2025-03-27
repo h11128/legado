@@ -120,7 +120,6 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
                 AppLog.put("TXT目录规则界面获取数据失败\n${it.localizedMessage}", it)
             }.flowOn(IO).conflate().collect { tocRules ->
                 adapter.setItems(tocRules, adapter.diffItemCallBack)
-                upCountView()
             }
         }
     }
@@ -233,7 +232,7 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
             okButton {
                 val text = alertBinding.editView.text?.toString()
                 text?.let {
-                    if (!cacheUrls.contains(it)) {
+                    if (it.isAbsUrl() && !cacheUrls.contains(it)) {
                         cacheUrls.add(0, it)
                         aCache.put(importTocRuleKey, cacheUrls.joinToString(","))
                     }

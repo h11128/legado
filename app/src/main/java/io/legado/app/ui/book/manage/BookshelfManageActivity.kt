@@ -47,6 +47,7 @@ import io.legado.app.utils.hideSoftInput
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setEdgeEffectColor
+import io.legado.app.utils.shouldHideSoftInput
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -122,7 +123,7 @@ class BookshelfManageActivity :
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (ev.action == MotionEvent.ACTION_DOWN) {
             currentFocus?.let {
-                if (it is EditText) {
+                if (it.shouldHideSoftInput(ev)) {
                     it.clearFocus()
                     it.hideSoftInput()
                 }
@@ -176,9 +177,7 @@ class BookshelfManageActivity :
 
     private fun initSearchView() {
         searchView.applyTint(primaryTextColor)
-        searchView.onActionViewExpanded()
         searchView.isSubmitButtonEnabled = true
-        searchView.clearFocus()
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?): Boolean {
                 return false

@@ -290,7 +290,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var elevation: Int
-        get() = appCtx.getPrefInt(PreferKey.barElevation, AppConst.sysElevation)
+        get() = if (isEInkMode) 0 else appCtx.getPrefInt(
+            PreferKey.barElevation,
+            AppConst.sysElevation
+        )
         set(value) {
             appCtx.putPrefInt(PreferKey.barElevation, value)
         }
@@ -378,6 +381,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.tocUiUseReplace, value)
         }
 
+    var tocCountWords: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.tocCountWords, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.tocCountWords, value)
+        }
+
     var enableReadRecord: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.enableReadRecord, true)
         set(value) {
@@ -451,7 +460,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     val syncBookProgress get() = appCtx.getPrefBoolean(PreferKey.syncBookProgress, true)
 
+    val syncBookProgressPlus get() = appCtx.getPrefBoolean(PreferKey.syncBookProgressPlus, false)
+
     val mediaButtonOnExit get() = appCtx.getPrefBoolean("mediaButtonOnExit", true)
+
+    val readAloudByMediaButton
+        get() = appCtx.getPrefBoolean(PreferKey.readAloudByMediaButton, false)
 
     val replaceEnableDefault get() = appCtx.getPrefBoolean(PreferKey.replaceEnableDefault, true)
 
@@ -467,11 +481,17 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     val ignoreAudioFocus get() = appCtx.getPrefBoolean(PreferKey.ignoreAudioFocus, false)
 
+    var pauseReadAloudWhilePhoneCalls
+        get() = appCtx.getPrefBoolean(PreferKey.pauseReadAloudWhilePhoneCalls, false)
+        set(value) = appCtx.putPrefBoolean(PreferKey.pauseReadAloudWhilePhoneCalls, value)
+
     val onlyLatestBackup get() = appCtx.getPrefBoolean(PreferKey.onlyLatestBackup, true)
 
     val defaultHomePage get() = appCtx.getPrefString(PreferKey.defaultHomePage, "bookshelf")
 
     val updateToVariant get() = appCtx.getPrefString(PreferKey.updateToVariant, "default_version")
+
+    val streamReadAloudAudio get() = appCtx.getPrefBoolean(PreferKey.streamReadAloudAudio, false)
 
     val doublePageHorizontal: String?
         get() = appCtx.getPrefString(PreferKey.doublePageHorizontal)
@@ -534,6 +554,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.bitmapCacheSize, value)
         }
 
+    var imageRetainNum: Int
+        get() = appCtx.getPrefInt(PreferKey.imageRetainNum, 0)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.imageRetainNum, value)
+        }
+
     var showReadTitleBarAddition: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showReadTitleAddition, true)
         set(value) {
@@ -578,5 +604,64 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.toastOnUi("当前没有配置菜单区域,自动恢复中间区域为菜单.")
         }
     }
+
+    //跳转到漫画界面不使用富文本模式
+    val showMangaUi: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.showMangaUi, true)
+
+    //禁用漫画缩放
+    var disableMangaScale: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.disableMangaScale, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.disableMangaScale, value)
+        }
+
+    //漫画预加载数量
+    var mangaPreDownloadNum
+        get() = appCtx.getPrefInt(PreferKey.mangaPreDownloadNum, 10)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.mangaPreDownloadNum, value)
+        }
+
+    //点击翻页
+    var disableClickScroll
+        get() = appCtx.getPrefBoolean(PreferKey.disableClickScroll, false)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.disableClickScroll, value)
+        }
+
+    //漫画滚动速度
+    var mangaAutoPageSpeed
+        get() = appCtx.getPrefInt(PreferKey.mangaAutoPageSpeed, 3)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.mangaAutoPageSpeed, value)
+        }
+
+    //漫画页脚配置
+    var mangaFooterConfig
+        get() = appCtx.getPrefString(PreferKey.mangaFooterConfig, "")
+        set(value) {
+            appCtx.putPrefString(PreferKey.mangaFooterConfig, value)
+        }
+
+    //漫画水平滚动
+    var enableMangaHorizontalScroll
+        get() = appCtx.getPrefBoolean(PreferKey.enableMangaHorizontalScroll, false)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.enableMangaHorizontalScroll, value)
+        }
+
+    var mangaColorFilter
+        get() = appCtx.getPrefString(PreferKey.mangaColorFilter, "")
+        set(value) {
+            appCtx.putPrefString(PreferKey.mangaColorFilter, value)
+        }
+
+    //禁用漫画内标题
+    var hideMangaTitle
+        get() = appCtx.getPrefBoolean(PreferKey.hideMangaTitle, false)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.hideMangaTitle, value)
+        }
 }
 

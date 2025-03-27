@@ -73,6 +73,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
 
     private fun startSearch() {
         val precision = appCtx.getPrefBoolean(PreferKey.precisionSearch)
+        var hasMore = false
         searchJob = scope.launch(searchPool!!) {
             flow {
                 for (bs in bookSourceParts) {
@@ -84,18 +85,24 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                 callBack.onSearchStart()
             }.mapParallelSafe(threadCount) {
                 withTimeout(30000L) {
-                    WebBook.searchBookAwait(it, searchKey, searchPage)
+                    WebBook.searchBookAwait(
+                        it, searchKey, searchPage,
+                        filter = { name, author ->
+                            !precision || name.contains(searchKey) ||
+                                    author.contains(searchKey)
+                        })
                 }
             }.onEach { items ->
                 for (book in items) {
                     book.releaseHtmlData()
                 }
+                hasMore = hasMore || items.isNotEmpty()
                 appDb.searchBookDao.insert(*items.toTypedArray())
                 mergeItems(items, precision)
                 currentCoroutineContext().ensureActive()
                 callBack.onSearchSuccess(searchBooks)
             }.onCompletion {
-                if (it == null) callBack.onSearchFinish(searchBooks.isEmpty())
+                if (it == null) callBack.onSearchFinish(searchBooks.isEmpty(), hasMore)
             }.catch {
                 AppLog.put("书源搜索出错\n${it.localizedMessage}", it)
             }.collect()
@@ -185,7 +192,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
         fun getSearchScope(): SearchScope
         fun onSearchStart()
         fun onSearchSuccess(searchBooks: List<SearchBook>)
-        fun onSearchFinish(isEmpty: Boolean)
+        fun onSearchFinish(isEmpty: Boolean, hasMore: Boolean)
         fun onSearchCancel(exception: Throwable? = null)
     }
 

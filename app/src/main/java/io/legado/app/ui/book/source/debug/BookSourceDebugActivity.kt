@@ -17,6 +17,7 @@ import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.dialog.TextDialog
+import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.launch
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
@@ -61,6 +62,7 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
     private fun initRecyclerView() {
         binding.recyclerView.setEdgeEffectColor(primaryColor)
         binding.recyclerView.adapter = adapter
+        binding.recyclerView.applyNavigationBarPadding()
         binding.rotateLoading.loadingColor = accentColor
     }
 
@@ -128,7 +130,8 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
                     return@launch
                 }
             }
-            exploreKinds?.map { it.title }?.let { exploreKindTitles ->
+            @Suppress("USELESS_ELVIS")
+            exploreKinds?.map { it.title ?: "" }?.let { exploreKindTitles ->
                 binding.textFx.onLongClick {
                     selector("选择发现", exploreKindTitles) { _, index ->
                         val explore = exploreKinds[index]

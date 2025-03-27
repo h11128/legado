@@ -17,7 +17,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
-import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -27,6 +26,7 @@ import io.legado.app.data.entities.SearchBook
 import io.legado.app.databinding.DialogBookChangeSourceBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.theme.elevation
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.book.read.ReadBookActivity
@@ -122,6 +122,7 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
         binding.toolBar.subtitle = viewModel.author
         binding.toolBar.navigationIcon =
             getCompatDrawable(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
+        binding.toolBar.elevation = requireContext().elevation
     }
 
     private fun initMenu() {
@@ -304,8 +305,8 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
     }
 
     override fun changeTo(searchBook: SearchBook) {
-        val oldBookType = callBack?.oldBook?.type?.and(BookType.updateError.inv())
-        if (searchBook.type == oldBookType) {
+        val oldBookType = callBack?.oldBook?.type ?: 0
+        if (searchBook.sameBookTypeLocal(oldBookType)) {
             changeSource(searchBook) {
                 dismissAllowingStateLoss()
             }
@@ -365,7 +366,7 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
     private fun changeSource(searchBook: SearchBook, onSuccess: (() -> Unit)? = null) {
         waitDialog.setText(R.string.load_toc)
         waitDialog.show()
-        val book = viewModel.bookMap[searchBook.bookUrl] ?: searchBook.toBook()
+        val book = viewModel.bookMap[searchBook.primaryStr()] ?: searchBook.toBook()
         val coroutine = viewModel.getToc(book, {
             waitDialog.dismiss()
             toastOnUi(it)

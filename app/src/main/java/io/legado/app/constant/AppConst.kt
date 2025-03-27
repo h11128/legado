@@ -6,7 +6,8 @@ import android.provider.Settings
 import androidx.annotation.Keep
 import cn.hutool.crypto.digest.DigestUtil
 import io.legado.app.BuildConfig
-import io.legado.app.model.AppVariant
+import io.legado.app.help.config.AppConfig
+import io.legado.app.help.update.AppVariant
 import splitties.init.appCtx
 import java.text.SimpleDateFormat
 
@@ -64,7 +65,7 @@ object AppConst {
         @Suppress("DEPRECATION")
         appCtx.packageManager.getPackageInfo(appCtx.packageName, PackageManager.GET_ACTIVITIES)
             ?.let {
-                appInfo.versionName = it.versionName
+                appInfo.versionName = it.versionName!!
                 appInfo.appVariant = when {
                     it.packageName.contains("releaseA") -> AppVariant.BETA_RELEASEA
                     isBeta -> AppVariant.BETA_RELEASE
@@ -86,7 +87,7 @@ object AppConst {
     private val sha256Signature: String by lazy {
         val packageInfo =
             appCtx.packageManager.getPackageInfo(appCtx.packageName, PackageManager.GET_SIGNATURES)
-        DigestUtil.sha256Hex(packageInfo.signatures[0].toByteArray()).uppercase()
+        DigestUtil.sha256Hex(packageInfo.signatures!![0].toByteArray()).uppercase()
     }
 
     private val isOfficial = sha256Signature == OFFICIAL_SIGNATURE

@@ -54,6 +54,10 @@ abstract class AbstractScriptEngine(val bindings: Bindings? = null) : ScriptEngi
         return getBindings(ENGINE_SCOPE)?.get(key)
     }
 
+    override fun eval(reader: Reader, scope: Scriptable): Any? {
+        return eval(reader, scope, null)
+    }
+
     override suspend fun evalSuspend(script: String, scope: Scriptable): Any? {
         return this.evalSuspend(StringReader(script), scope)
     }
@@ -79,6 +83,11 @@ abstract class AbstractScriptEngine(val bindings: Bindings? = null) : ScriptEngi
     @Throws(ScriptException::class)
     override fun eval(script: String, bindings: Bindings): Any? {
         return this.eval(script, getScriptContext(bindings))
+    }
+
+    @Throws(ScriptException::class)
+    override fun eval(script: String, bindings: ScriptBindings): Any? {
+        return this.eval(script, getRuntimeScope(bindings))
     }
 
     @Throws(ScriptException::class)

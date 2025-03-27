@@ -24,16 +24,38 @@
  */
 package com.script.rhino
 
-import com.script.*
+import com.script.AbstractScriptEngine
+import com.script.Bindings
+import com.script.Compilable
+import com.script.CompiledScript
+import com.script.Invocable
+import com.script.ScriptBindings
+import com.script.ScriptContext
+import com.script.ScriptException
+import com.script.SimpleBindings
 import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.withContext
-import org.mozilla.javascript.*
+import org.mozilla.javascript.Callable
+import org.mozilla.javascript.ConsString
+import org.mozilla.javascript.Context
+import org.mozilla.javascript.ContextFactory
+import org.mozilla.javascript.ContinuationPending
 import org.mozilla.javascript.Function
+import org.mozilla.javascript.JavaScriptException
+import org.mozilla.javascript.RhinoException
+import org.mozilla.javascript.Scriptable
+import org.mozilla.javascript.ScriptableObject
+import org.mozilla.javascript.Undefined
+import org.mozilla.javascript.Wrapper
 import java.io.IOException
 import java.io.Reader
 import java.io.StringReader
 import java.lang.reflect.Method
-import java.security.*
+import java.security.AccessControlContext
+import java.security.AccessControlException
+import java.security.AccessController
+import java.security.AllPermission
+import java.security.PrivilegedAction
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn
@@ -53,36 +75,15 @@ object RhinoScriptEngine : AbstractScriptEngine(), Invocable, Compilable {
     private val indexedProps: MutableMap<Any, Any?>
     private val implementor: InterfaceImplementor
 
-    fun eval(js: String, bindingsConfig: SimpleBindings.() -> Unit = {}): Any? {
-        val bindings = SimpleBindings()
-        bindings.apply(bindingsConfig)
-        return eval(js, bindings)
-    }
-
-    @Throws(ScriptException::class)
-    override fun eval(reader: Reader, scope: Scriptable): Any? {
-        val cx = Context.enter()
-        val ret: Any?
+    fun eval(js: String, bindingsConfig: ScriptBindings.() -> Unit = {}): Any? {
+        val bindings = ScriptBindings()
+        Context.enter()
         try {
-            var filename = this["javax.script.filename"] as? String
-            filename = filename ?: "<Unknown source>"
-            ret = cx.evaluateReader(scope, reader, filename, 1, null)
-        } catch (re: RhinoException) {
-            val line = if (re.lineNumber() == 0) -1 else re.lineNumber()
-            val msg: String = if (re is JavaScriptException) {
-                re.value.toString()
-            } else {
-                re.toString()
-            }
-            val se = ScriptException(msg, re.sourceName(), line)
-            se.initCause(re)
-            throw se
-        } catch (var14: IOException) {
-            throw ScriptException(var14)
+            bindings.apply(bindingsConfig)
         } finally {
             Context.exit()
         }
-        return unwrapReturnValue(ret)
+        return eval(js, bindings)
     }
 
     override fun eval(
@@ -92,7 +93,10 @@ object RhinoScriptEngine : AbstractScriptEngine(), Invocable, Compilable {
     ): Any? {
         val cx = Context.enter() as RhinoContext
         val previousCoroutineContext = cx.coroutineContext
-        cx.coroutineContext = coroutineContext
+        if (coroutineContext != null) {
+            cx.coroutineContext = coroutineContext
+        }
+        cx.allowScriptRun = true
         val ret: Any?
         try {
             var filename = this["javax.script.filename"] as? String
@@ -112,6 +116,7 @@ object RhinoScriptEngine : AbstractScriptEngine(), Invocable, Compilable {
             throw ScriptException(var14)
         } finally {
             cx.coroutineContext = previousCoroutineContext
+            cx.allowScriptRun = false
             Context.exit()
         }
         return unwrapReturnValue(ret)
@@ -119,9 +124,10 @@ object RhinoScriptEngine : AbstractScriptEngine(), Invocable, Compilable {
 
     @Throws(ContinuationPending::class)
     override suspend fun evalSuspend(reader: Reader, scope: Scriptable): Any? {
-        val cx = Context.enter()
+        val cx = Context.enter() as RhinoContext
         var ret: Any?
         withContext(VMBridgeReflect.contextLocal.asContextElement()) {
+            cx.allowScriptRun = true
             try {
                 var filename = this@RhinoScriptEngine["javax.script.filename"] as? String
                 filename = filename ?: "<Unknown source>"
@@ -159,6 +165,7 @@ object RhinoScriptEngine : AbstractScriptEngine(), Invocable, Compilable {
             } catch (var14: IOException) {
                 throw ScriptException(var14)
             } finally {
+                cx.allowScriptRun = false
                 Context.exit()
             }
         }
@@ -249,6 +256,16 @@ object RhinoScriptEngine : AbstractScriptEngine(), Invocable, Compilable {
         return newScope
     }
 
+    override fun getRuntimeScope(bindings: ScriptBindings): Scriptable {
+        val cx = Context.enter()
+        try {
+            bindings.prototype = cx.initStandardObjects()
+        } finally {
+            Context.exit()
+        }
+        return bindings
+    }
+
     @Throws(ScriptException::class)
     override fun compile(script: String): CompiledScript {
         return this.compile(StringReader(script) as Reader)
@@ -290,6 +307,9 @@ object RhinoScriptEngine : AbstractScriptEngine(), Invocable, Compilable {
         if (result1 is Wrapper) {
             result1 = result1.unwrap()
         }
+        if (result1 is ConsString) {
+            result1 = result1.toString()
+        }
         return if (result1 is Undefined) null else result1
     }
 
@@ -298,8 +318,8 @@ object RhinoScriptEngine : AbstractScriptEngine(), Invocable, Compilable {
 
             override fun makeContext(): Context {
                 val cx = RhinoContext(this)
-                cx.languageVersion = 200
-                cx.optimizationLevel = -1
+                cx.languageVersion = Context.VERSION_ES6
+                cx.setInterpretedMode(true)
                 cx.setClassShutter(RhinoClassShutter)
                 cx.wrapFactory = RhinoWrapFactory
                 cx.instructionObserverThreshold = 10000
@@ -355,7 +375,12 @@ object RhinoScriptEngine : AbstractScriptEngine(), Invocable, Compilable {
                 args: Array<Any>
             ): Any? {
                 try {
-                    (cx as RhinoContext).ensureActive()
+                    if (cx is RhinoContext) {
+                        if (!cx.allowScriptRun) {
+                            error("Not allow run script in unauthorized way.")
+                        }
+                        cx.ensureActive()
+                    }
                     return super.doTopCall(callable, cx, scope, thisObj, args)
                 } catch (e: RhinoInterruptError) {
                     throw e.cause

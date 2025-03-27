@@ -2,6 +2,7 @@ package io.legado.app.ui.book.read.page.entities
 
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.os.Build
 import android.text.Layout
 import android.text.StaticLayout
 import androidx.annotation.Keep
@@ -19,6 +20,8 @@ import io.legado.app.utils.canvasrecorder.recordIfNeeded
 import io.legado.app.utils.dpToPx
 import splitties.init.appCtx
 import java.text.DecimalFormat
+import kotlin.math.ceil
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -34,7 +37,8 @@ data class TextPage(
     var chapterSize: Int = 0,
     var chapterIndex: Int = 0,
     var height: Float = 0f,
-    var leftLineSize: Int = 0
+    var leftLineSize: Int = 0,
+    var renderHeight: Int = 0
 ) {
 
     companion object {
@@ -142,10 +146,12 @@ data class TextPage(
         if (isMsgPage && ChapterProvider.viewWidth > 0) {
             textLines.clear()
             val visibleWidth = ChapterProvider.visibleRight - ChapterProvider.paddingLeft
+            val paint = ChapterProvider.contentPaint
             val layout = StaticLayout(
-                text, ChapterProvider.contentPaint, visibleWidth,
+                text, paint, visibleWidth,
                 Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false
             )
+            val letterSpacing = paint.letterSpacing * paint.textSize
             var y = (ChapterProvider.visibleHeight - layout.height) / 2f
             if (y < 0) y = 0f
             for (lineIndex in 0 until layout.lineCount) {
@@ -161,7 +167,10 @@ data class TextPage(
                     text.substring(layout.getLineStart(lineIndex), layout.getLineEnd(lineIndex))
                 for (i in textLine.text.indices) {
                     val char = textLine.text[i].toString()
-                    val cw = StaticLayout.getDesiredWidth(char, ChapterProvider.contentPaint)
+                    var cw = StaticLayout.getDesiredWidth(char, paint)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                        cw += letterSpacing
+                    }
                     val x1 = x + cw
                     textLine.addColumn(
                         TextColumn(start = x, end = x1, char)
@@ -171,6 +180,7 @@ data class TextPage(
                 addLine(textLine)
             }
             height = ChapterProvider.visibleHeight.toFloat()
+            upRenderHeight()
             invalidate()
             isCompleted = true
         }
@@ -250,7 +260,7 @@ data class TextPage(
      */
     fun getPosByLineColumn(lineIndex: Int, columnIndex: Int): Int {
         var length = 0
-        val maxIndex = min(lineIndex, lineSize)
+        val maxIndex = min(lineIndex, lineSize - 1)
         for (index in 0 until maxIndex) {
             length += textLines[index].charSize
             if (textLines[index].isParagraphEnd) {
@@ -290,11 +300,11 @@ data class TextPage(
     fun draw(view: ContentTextView, canvas: Canvas, relativeOffset: Float) {
         if (AppConfig.optimizeRender) {
             render(view)
-            canvas.withTranslation(0f, relativeOffset + paddingTop) {
+            canvas.withTranslation(0f, relativeOffset) {
                 canvasRecorder.draw(this)
             }
         } else {
-            canvas.withTranslation(0f, relativeOffset + paddingTop) {
+            canvas.withTranslation(0f, relativeOffset) {
                 drawPage(view, this)
             }
         }
@@ -318,7 +328,7 @@ data class TextPage(
     private fun drawPage(view: ContentTextView, canvas: Canvas) {
         for (i in lines.indices) {
             val line = lines[i]
-            canvas.withTranslation(0f, line.lineTop - paddingTop) {
+            canvas.withTranslation(0f, line.lineTop) {
                 line.draw(view, this)
             }
         }
@@ -326,7 +336,7 @@ data class TextPage(
 
     fun render(view: ContentTextView): Boolean {
         if (!isCompleted) return false
-        return canvasRecorder.recordIfNeeded(view.width, height.toInt()) {
+        return canvasRecorder.recordIfNeeded(view.width, renderHeight) {
             drawPage(view, this)
         }
     }
@@ -351,5 +361,13 @@ data class TextPage(
 
     fun hasImageOrEmpty(): Boolean {
         return textLines.any { it.isImage } || textLines.isEmpty()
+    }
+
+    fun upRenderHeight() {
+        renderHeight = ceil(lines.last().lineBottom).toInt()
+        if (leftLineSize > 0 && leftLineSize != lines.size) {
+            val leftHeight = ceil(lines[leftLineSize - 1].lineBottom).toInt()
+            renderHeight = max(renderHeight, leftHeight)
+        }
     }
 }

@@ -16,6 +16,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.utils.runOnUI
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
@@ -37,6 +38,7 @@ class BackstageWebView(
     private val sourceRegex: String? = null,
     private val overrideUrlRegex: String? = null,
     private val javaScript: String? = null,
+    private val delayTime: Long = 0,
 ) {
 
     private val mHandler = Handler(Looper.getMainLooper())
@@ -52,8 +54,9 @@ class BackstageWebView(
             }
             callback = object : Callback() {
                 override fun onResult(response: StrResponse) {
-                    if (!block.isCompleted)
+                    if (!block.isCompleted) {
                         block.resume(response)
+                    }
                 }
 
                 override fun onError(error: Throwable) {
@@ -131,8 +134,10 @@ class BackstageWebView(
 
     private fun setCookie(url: String) {
         tag?.let {
-            val cookie = CookieManager.getInstance().getCookie(url)
-            CookieStore.setCookie(it, cookie)
+            Coroutine.async(executeContext = IO) {
+                val cookie = CookieManager.getInstance().getCookie(url)
+                CookieStore.setCookie(it, cookie)
+            }
         }
     }
 
@@ -146,7 +151,7 @@ class BackstageWebView(
                 runnable = EvalJsRunnable(view, url, getJs())
             }
             mHandler.removeCallbacks(runnable!!)
-            mHandler.postDelayed(runnable!!, 1000)
+            mHandler.postDelayed(runnable!!, 1000 + delayTime)
         }
 
         @SuppressLint("WebViewClientOnReceivedSslError")
@@ -254,7 +259,7 @@ class BackstageWebView(
             setCookie(url)
             if (!javaScript.isNullOrEmpty()) {
                 val runnable = LoadJsRunnable(webView, javaScript)
-                mHandler.postDelayed(runnable, 1000L)
+                mHandler.postDelayed(runnable, 1000L + delayTime)
             }
         }
 

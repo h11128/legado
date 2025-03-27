@@ -8,7 +8,7 @@ import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
-import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.newCallResponseBody
@@ -27,11 +27,6 @@ import kotlinx.coroutines.isActive
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
-import kotlin.collections.List
-import kotlin.collections.Map
-import kotlin.collections.forEach
-import kotlin.collections.hashMapOf
-import kotlin.collections.set
 
 class BookshelfViewModel(application: Application) : BaseViewModel(application) {
     val addBookProgressLiveData = MutableLiveData(-1)
@@ -40,7 +35,7 @@ class BookshelfViewModel(application: Application) : BaseViewModel(application) 
     fun addBookByUrl(bookUrls: String) {
         var successCount = 0
         addBookJob = execute {
-            val hasBookUrlPattern: List<BookSource> by lazy {
+            val hasBookUrlPattern: List<BookSourcePart> by lazy {
                 appDb.bookSourceDao.hasBookUrlPattern
             }
             val urls = bookUrls.split("\n")
@@ -56,8 +51,9 @@ class BookshelfViewModel(application: Application) : BaseViewModel(application) 
                 if (source == null) {
                     for (bookSource in hasBookUrlPattern) {
                         try {
-                            if (bookUrl.matches(bookSource.bookUrlPattern!!.toRegex())) {
-                                source = bookSource
+                            val bs = bookSource.getBookSource()!!
+                            if (bookUrl.matches(bs.bookUrlPattern!!.toRegex())) {
+                                source = bs
                                 break
                             }
                         } catch (_: Exception) {
@@ -73,8 +69,16 @@ class BookshelfViewModel(application: Application) : BaseViewModel(application) 
                 kotlin.runCatching {
                     WebBook.getBookInfoAwait(bookSource, book)
                 }.onSuccess {
-                    it.order = appDb.bookDao.minOrder - 1
-                    it.save()
+                    val dbBook = appDb.bookDao.getBook(it.name, it.author)
+                    if (dbBook != null) {
+                        val toc = WebBook.getChapterListAwait(bookSource, it).getOrThrow()
+                        dbBook.migrateTo(it, toc)
+                        appDb.bookDao.insert(it)
+                        appDb.bookChapterDao.insert(*toc.toTypedArray())
+                    } else {
+                        it.order = appDb.bookDao.minOrder - 1
+                        it.save()
+                    }
                     successCount++
                     addBookProgressLiveData.postValue(successCount)
                 }
@@ -148,13 +152,13 @@ class BookshelfViewModel(application: Application) : BaseViewModel(application) 
 
     private fun importBookshelfByJson(json: String, groupId: Long) {
         execute {
-            val bookSources = appDb.bookSourceDao.allEnabled
+            val bookSourceParts = appDb.bookSourceDao.allEnabledPart
             GSON.fromJsonArray<Map<String, String?>>(json).getOrThrow().forEach { bookInfo ->
                 if (!isActive) return@execute
                 val name = bookInfo["name"] ?: ""
                 val author = bookInfo["author"] ?: ""
                 if (name.isNotEmpty() && appDb.bookDao.getBook(name, author) == null) {
-                    WebBook.preciseSearch(this, bookSources, name, author)
+                    WebBook.preciseSearch(this, bookSourceParts, name, author)
                         .onSuccess {
                             val book = it.first
                             if (groupId > 0) {

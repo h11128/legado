@@ -1,9 +1,10 @@
 package io.legado.app.model.webBook
 
 import android.text.TextUtils
-import com.script.SimpleBindings
+import com.script.ScriptBindings
 import com.script.rhino.RhinoScriptEngine
 import io.legado.app.R
+import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
@@ -20,6 +21,7 @@ import io.legado.app.utils.isTrue
 import io.legado.app.utils.mapAsync
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.flow
+import org.mozilla.javascript.Context
 import splitties.init.appCtx
 import kotlin.coroutines.coroutineContext
 
@@ -68,7 +70,6 @@ object BookChapterList {
                         mUrl = nextUrl,
                         source = bookSource,
                         ruleData = book,
-                        headerMapF = bookSource.getHeaderMap(),
                         coroutineContext = coroutineContext
                     )
                     val res = analyzeUrl.getStrResponseAwait() //控制并发访问
@@ -98,7 +99,6 @@ object BookChapterList {
                         mUrl = urlStr,
                         source = bookSource,
                         ruleData = book,
-                        headerMapF = bookSource.getHeaderMap(),
                         coroutineContext = coroutineContext
                     )
                     val res = analyzeUrl.getStrResponseAwait() //控制并发访问
@@ -126,25 +126,29 @@ object BookChapterList {
         }
         Debug.log(book.origin, "◇目录总数:${list.size}")
         coroutineContext.ensureActive()
-        val formatJs = tocRule.formatJs
-        val bindings = SimpleBindings()
-        bindings["gInt"] = 0
         list.forEachIndexed { index, bookChapter ->
             bookChapter.index = index
-            if (!formatJs.isNullOrBlank()) {
-                bindings["index"] = index + 1
-                bindings["chapter"] = bookChapter
-                bindings["title"] = bookChapter.title
-                RhinoScriptEngine.runCatching {
-                    eval(formatJs, bindings)?.toString()?.let {
-                        bookChapter.title = it
+        }
+        val formatJs = tocRule.formatJs
+        if (!formatJs.isNullOrBlank()) {
+            Context.enter().use {
+                val bindings = ScriptBindings()
+                bindings["gInt"] = 0
+                list.forEachIndexed { index, bookChapter ->
+                    bindings["index"] = index + 1
+                    bindings["chapter"] = bookChapter
+                    bindings["title"] = bookChapter.title
+                    RhinoScriptEngine.runCatching {
+                        eval(formatJs, bindings)?.toString()?.let {
+                            bookChapter.title = it
+                        }
+                    }.onFailure {
+                        Debug.log(book.origin, "格式化标题出错, ${it.localizedMessage}")
                     }
-                }.onFailure {
-                    Debug.log(book.origin, "格式化标题出错, ${it.localizedMessage}")
                 }
             }
         }
-        val replaceRules = ContentProcessor.get(book.name, book.origin).getTitleReplaceRules()
+        val replaceRules = ContentProcessor.get(book).getTitleReplaceRules()
         book.durChapterTitle = list.getOrElse(book.durChapterIndex) { list.last() }
             .getDisplayTitle(replaceRules, book.getUseReplaceRule())
         if (book.totalChapterNum < list.size) {
@@ -157,6 +161,7 @@ object BookChapterList {
             list.getOrElse(book.simulatedTotalChapterNum() - 1) { list.last() }
                 .getDisplayTitle(replaceRules, book.getUseReplaceRule())
         coroutineContext.ensureActive()
+        getWordCount(list, book)
         return list
     }
 
@@ -260,6 +265,22 @@ object BookChapterList {
             }
         }
         return Pair(chapterList, nextUrlList)
+    }
+
+    private fun getWordCount(list: ArrayList<BookChapter>, book: Book) {
+        if (!AppConfig.tocCountWords) {
+            return
+        }
+        val chapterList = appDb.bookChapterDao.getChapterList(book.bookUrl)
+        if (chapterList.isNotEmpty()) {
+            val map = chapterList.associateBy({ it.getFileName() }, { it.wordCount })
+            for (bookChapter in list) {
+                val wordCount = map[bookChapter.getFileName()]
+                if (wordCount != null) {
+                    bookChapter.wordCount = wordCount
+                }
+            }
+        }
     }
 
 }

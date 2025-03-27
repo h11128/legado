@@ -7,6 +7,7 @@ import android.view.MenuItem
 import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.textfield.TextInputLayout
@@ -37,14 +38,16 @@ import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileDoc
+import io.legado.app.utils.applyNavigationBarPadding
+import io.legado.app.utils.applyOpenTint
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.enableCustomExport
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
+import io.legado.app.utils.iconItemOnLongClick
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.observeEvent
-import io.legado.app.utils.parseToUri
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startService
 import io.legado.app.utils.toastOnUi
@@ -58,12 +61,14 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import splitties.init.appCtx
 import kotlin.math.max
 
 /**
  * cache/download 缓存界面
  */
 class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>(),
+    PopupMenu.OnMenuItemClickListener,
     CacheAdapter.CallBack {
 
     override val binding by viewBinding(ActivityCacheBookBinding::inflate)
@@ -119,6 +124,13 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.book_cache, menu)
+        menu.iconItemOnLongClick(R.id.menu_download) {
+            PopupMenu(this, it).apply {
+                inflate(R.menu.book_cache_download)
+                this.menu.applyOpenTint(this@CacheActivity)
+                setOnMenuItemClickListener(this@CacheActivity)
+            }.show()
+        }
         return super.onCompatCreateOptionsMenu(menu)
     }
 
@@ -157,13 +169,29 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
      */
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.menu_download -> {
+            R.id.menu_download,
+            R.id.menu_download_after -> {
                 if (!CacheBook.isRun) {
                     adapter.getItems().forEach { book ->
                         CacheBook.start(
                             this@CacheActivity,
                             book,
                             book.durChapterIndex,
+                            book.lastChapterIndex
+                        )
+                    }
+                } else {
+                    CacheBook.stop(this@CacheActivity)
+                }
+            }
+
+            R.id.menu_download_all -> {
+                if (!CacheBook.isRun) {
+                    adapter.getItems().forEach { book ->
+                        CacheBook.start(
+                            this@CacheActivity,
+                            book,
+                            0,
                             book.lastChapterIndex
                         )
                     }
@@ -197,9 +225,14 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         return super.onCompatOptionsItemSelected(item)
     }
 
+    override fun onMenuItemClick(item: MenuItem): Boolean {
+        return onCompatOptionsItemSelected(item)
+    }
+
     private fun initRecyclerView() {
         binding.recyclerView.layoutManager = layoutManager
         binding.recyclerView.adapter = adapter
+        binding.recyclerView.applyNavigationBarPadding()
     }
 
     private fun initBookData() {
@@ -289,9 +322,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
 
     override fun export(position: Int) {
         val path = ACache.get().getAsString(exportBookPathKey)
-        if (path.isNullOrEmpty()) {
-            selectExportFolder(position)
-        } else if (FileDoc.fromUri(path.parseToUri(), true).checkWrite() != true) {
+        if (path.isNullOrEmpty() || !FileDoc.fromDir(path).checkWrite()) {
             selectExportFolder(position)
         } else if (enableCustomExport()) {// 启用自定义导出 and 导出类型为Epub
             configExportSection(path, position)
@@ -410,22 +441,21 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                     alertDialog.hide()
                     return@apply
                 }
-                val text = etInputScope.text
-                if (!verificationField(text.toString())) {
-                    etInputScope.error =
-                        applicationContext.getString(R.string.error_scope_input)//"请输入正确的范围"
+                val epubScope = etInputScope.text.toString()
+                if (!verificationField(epubScope)) {
+                    etInputScope.error = appCtx.getString(R.string.error_scope_input)//"请输入正确的范围"
                     return@apply
                 }
                 etInputScope.error = null
-                val toInt = etEpubSize.text.toString().toInt()
+                val epubSize = etEpubSize.text.toString().toIntOrNull() ?: 1
                 adapter.getItem(position)?.let { book ->
                     startService<ExportBookService> {
                         action = IntentAction.start
                         putExtra("bookUrl", book.bookUrl)
                         putExtra("exportType", "epub")
                         putExtra("exportPath", path)
-                        putExtra("epubSize", toInt)
-                        putExtra("epubScope", text.toString())
+                        putExtra("epubSize", epubSize)
+                        putExtra("epubScope", epubScope)
                     }
                 }
                 alertDialog.hide()

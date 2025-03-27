@@ -16,10 +16,12 @@ import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.CacheBookService
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.startService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Semaphore
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.CoroutineContext
 
@@ -87,8 +89,10 @@ object CacheBook {
     }
 
     fun stop(context: Context) {
-        context.startService<CacheBookService> {
-            action = IntentAction.stop
+        if (CacheBookService.isRun) {
+            context.startService<CacheBookService> {
+                action = IntentAction.stop
+            }
         }
     }
 
@@ -266,9 +270,9 @@ object CacheBook {
             waitDownloadSet.remove(chapterIndex)
             onDownloadSet.add(chapterIndex)
             if (BookHelp.hasContent(book, chapter)) {
-                Coroutine.async(executeContext = context) {
+                Coroutine.async(scope, context, executeContext = context) {
                     BookHelp.getContent(book, chapter)?.let {
-                        BookHelp.saveImages(bookSource, book, chapter, it)
+                        BookHelp.saveImages(bookSource, book, chapter, it, 1)
                     }
                 }.onSuccess {
                     onSuccess(chapter)
@@ -308,10 +312,36 @@ object CacheBook {
             }.start()
         }
 
+        suspend fun downloadAwait(chapter: BookChapter): String {
+            postEvent(EventBus.UP_DOWNLOAD, book.bookUrl)
+            synchronized(this) {
+                onDownloadSet.add(chapter.index)
+                waitDownloadSet.remove(chapter.index)
+            }
+            try {
+                val content = WebBook.getContentAwait(bookSource, book, chapter)
+                onSuccess(chapter)
+                ReadBook.downloadedChapters.add(chapter.index)
+                ReadBook.downloadFailChapters.remove(chapter.index)
+                return content
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    onCancel(chapter.index)
+                }
+                onError(chapter, e)
+                ReadBook.downloadFailChapters[chapter.index] =
+                    (ReadBook.downloadFailChapters[chapter.index] ?: 0) + 1
+                return "获取正文失败\n${e.localizedMessage}"
+            } finally {
+                postEvent(EventBus.UP_DOWNLOAD, book.bookUrl)
+            }
+        }
+
         @Synchronized
         fun download(
             scope: CoroutineScope,
             chapter: BookChapter,
+            semaphore: Semaphore?,
             resetPageOffset: Boolean = false
         ) {
             if (onDownloadSet.contains(chapter.index)) {
@@ -326,7 +356,8 @@ object CacheBook {
                 book,
                 chapter,
                 start = CoroutineStart.LAZY,
-                executeContext = IO
+                executeContext = IO,
+                semaphore = semaphore
             ).onSuccess { content ->
                 onSuccess(chapter)
                 ReadBook.downloadedChapters.add(chapter.index)
@@ -339,6 +370,7 @@ object CacheBook {
                 downloadFinish(chapter, "获取正文失败\n${it.localizedMessage}", resetPageOffset)
             }.onCancel {
                 onCancel(chapter.index)
+                downloadFinish(chapter, "download canceled", resetPageOffset, true)
             }.onFinally {
                 postEvent(EventBus.UP_DOWNLOAD, book.bookUrl)
             }.start()
@@ -347,12 +379,14 @@ object CacheBook {
         private fun downloadFinish(
             chapter: BookChapter,
             content: String,
-            resetPageOffset: Boolean = false
+            resetPageOffset: Boolean = false,
+            canceled: Boolean = false
         ) {
             if (ReadBook.book?.bookUrl == book.bookUrl) {
                 ReadBook.contentLoadFinish(
                     book, chapter, content,
                     resetPageOffset = resetPageOffset,
+                    canceled = canceled
                 )
             }
         }

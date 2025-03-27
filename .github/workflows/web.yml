@@ -25,13 +25,13 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 16
+          node-version: 22
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         id: pnpm-install
         with:
-          version: 8
+          version: 9
           run_install: false
 
       - name: Get pnpm store directory
@@ -58,7 +58,7 @@ jobs:
 
       - name: push changes
         if: ${{ github.event_name != 'pull_request' && github.repository == env.UPSTREAM_REPOSITORY }}
-        uses: stefanzweifel/git-auto-commit-action@v5.0.1
+        uses: stefanzweifel/git-auto-commit-action@v5.1.0
         with:
           commit_message: Bump web ${{ env.APP_VER}}
           file_pattern: app/src/main/assets/web/vue/

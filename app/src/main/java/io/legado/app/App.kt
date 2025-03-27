@@ -6,11 +6,13 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.os.Build
 import com.github.liuyueyi.quick.transfer.constants.TransType
 import com.jeremyliao.liveeventbus.LiveEventBus
 import com.jeremyliao.liveeventbus.logger.DefaultLogger
+import com.script.rhino.RhinoScriptEngine
 import io.legado.app.base.AppContextWrapper
 import io.legado.app.constant.AppConst.channelIdDownload
 import io.legado.app.constant.AppConst.channelIdReadAloud
@@ -52,13 +54,14 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashHandler(this)
+        LogUtils.init(this)
         LogUtils.d("App", "onCreate")
         LogUtils.logDeviceInfo()
         if (isDebuggable) {
             ThreadUtils.setThreadAssertsDisabledForTesting(true)
         }
         oldConfig = Configuration(resources.configuration)
-        CrashHandler(this)
         //预下载Cronet so
         Cronet.preDownload()
         createNotificationChannels()
@@ -75,6 +78,7 @@ class App : Application() {
         Coroutine.async {
             URL.setURLStreamHandlerFactory(ObsoleteUrlFactory(okHttpClient))
             launch { installGmsTlsProvider(appCtx) }
+            RhinoScriptEngine
             //初始化封面
             BookCover.toString()
             //清除过期数据
@@ -83,14 +87,14 @@ class App : Application() {
                 val clearTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)
                 appDb.searchBookDao.clearExpired(clearTime)
             }
-            appDb.bookDao.deleteNotShelfBook()
             RuleBigDataHelp.clearInvalid()
             BookHelp.clearInvalidCache()
             Backup.clearCache()
             //初始化简繁转换引擎
             when (AppConfig.chineseConverterType) {
-                1 -> launch {
+                1 -> {
                     ChineseUtils.fixT2sDict()
+                    ChineseUtils.preLoad(true, TransType.TRADITIONAL_TO_SIMPLE)
                 }
 
                 2 -> ChineseUtils.preLoad(true, TransType.SIMPLE_TO_TRADITIONAL)
@@ -129,8 +133,13 @@ class App : Application() {
      */
     private fun installGmsTlsProvider(context: Context) {
         try {
+            val gmsPackageName = "com.google.android.gms"
+            val appInfo = packageManager.getApplicationInfo(gmsPackageName, 0)
+            if ((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) == 0) {
+                return
+            }
             val gms = context.createPackageContext(
-                "com.google.android.gms",
+                gmsPackageName,
                 CONTEXT_INCLUDE_CODE or CONTEXT_IGNORE_SECURITY
             )
             gms.classLoader

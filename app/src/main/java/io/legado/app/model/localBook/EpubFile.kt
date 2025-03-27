@@ -20,7 +20,9 @@ import me.ag2s.epublib.epub.EpubReader
 import me.ag2s.epublib.util.zip.AndroidZipFile
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
+import org.jsoup.parser.Parser
 import org.jsoup.select.Elements
+import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -93,6 +95,10 @@ class EpubFile(var book: Book) {
             }
             return field
         }
+
+    init {
+        upBookCover(true)
+    }
 
     /**
      * 重写epub文件解析代码，直接读出压缩包文件生成Resources给epublib，这样的好处是可以逐一修改某些文件的格式错误
@@ -229,8 +235,12 @@ class EpubFile(var book: Book) {
                 //getElementsMatchingOwnText(chapter.title)?.remove()
             }
         }
+        bodyElement.select("image").forEach {
+            it.tagName("img", Parser.NamespaceHtml)
+            it.attr("src", it.attr("xlink:href"))
+        }
         bodyElement.select("img").forEach {
-            val src = it.attr("src").encodeURI()
+            val src = it.attr("src").trim().encodeURI()
             val href = res.href.encodeURI()
             val resolvedHref = URLDecoder.decode(URI(href).resolve(src).toString(), "UTF-8")
             it.attr("src", resolvedHref)
@@ -244,11 +254,14 @@ class EpubFile(var book: Book) {
         return epubBook?.resources?.getByHref(abHref)?.inputStream
     }
 
-    private fun upBookCover() {
+    private fun upBookCover(fastCheck: Boolean = false) {
         try {
             epubBook?.let {
                 if (book.coverUrl.isNullOrEmpty()) {
                     book.coverUrl = LocalBook.getCoverPath(book)
+                }
+                if (fastCheck && File(book.coverUrl!!).exists()) {
+                    return
                 }
                 /*部分书籍DRM处理后，封面获取异常，待优化*/
                 it.coverImage?.inputStream?.use { input ->
@@ -277,12 +290,12 @@ class EpubFile(var book: Book) {
                 book.name = book.originName.replace(".epub", "")
             }
 
-            if (metadata.authors.size > 0) {
+            if (metadata.authors.isNotEmpty()) {
                 val author =
                     metadata.authors[0].toString().replace("^, |, $".toRegex(), "")
                 book.author = author
             }
-            if (metadata.descriptions.size > 0) {
+            if (metadata.descriptions.isNotEmpty()) {
                 val desc = metadata.descriptions[0]
                 book.intro = if (desc.isXml()) {
                     Jsoup.parse(metadata.descriptions[0]).text()
@@ -310,7 +323,7 @@ class EpubFile(var book: Book) {
                             val doc =
                                 Jsoup.parse(String(resource.data, mCharset))
                             val elements = doc.getElementsByTag("title")
-                            if (elements.size > 0) {
+                            if (elements.isNotEmpty()) {
                                 title = elements[0].text()
                             }
                         } catch (e: IOException) {
@@ -372,7 +385,7 @@ class EpubFile(var book: Book) {
                     String(epubBook!!.resources.getByHref(content.href).data, mCharset)
                 ).getElementsByTag("title")
                 title =
-                    if (elements.size > 0 && elements[0].text().isNotBlank())
+                    if (elements.isNotEmpty() && elements[0].text().isNotBlank())
                         elements[0].text()
                     else
                         "--卷首--"

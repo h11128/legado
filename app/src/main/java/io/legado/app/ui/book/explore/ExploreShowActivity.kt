@@ -13,6 +13,7 @@ import io.legado.app.databinding.ViewLoadMoreBinding
 import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.widget.recycler.LoadMoreView
 import io.legado.app.ui.widget.recycler.VerticalDivider
+import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
@@ -43,14 +44,14 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
     private fun initRecyclerView() {
         binding.recyclerView.addItemDecoration(VerticalDivider(this))
         binding.recyclerView.adapter = adapter
+        binding.recyclerView.applyNavigationBarPadding()
         adapter.addFooterView {
             ViewLoadMoreBinding.bind(loadMoreView)
         }
         loadMoreView.startLoad()
         loadMoreView.setOnClickListener {
             if (!loadMoreView.isLoading) {
-                loadMoreView.hasMore()
-                scrollToBottom()
+                scrollToBottom(true)
             }
         }
         binding.recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
@@ -63,9 +64,9 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
         })
     }
 
-    private fun scrollToBottom() {
-        if (loadMoreView.hasMore && !loadMoreView.isLoading) {
-            loadMoreView.startLoad()
+    private fun scrollToBottom(forceLoad: Boolean = false) {
+        if ((loadMoreView.hasMore && !loadMoreView.isLoading) || forceLoad) {
+            loadMoreView.hasMore()
             viewModel.explore()
         }
     }
@@ -74,7 +75,7 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
         loadMoreView.stopLoad()
         if (books.isEmpty() && adapter.isEmpty()) {
             loadMoreView.noMore(getString(R.string.empty))
-        } else if (adapter.itemCount == books.size) {
+        } else if (adapter.getActualItemCount() == books.size) {
             loadMoreView.noMore()
         } else {
             adapter.setItems(books)

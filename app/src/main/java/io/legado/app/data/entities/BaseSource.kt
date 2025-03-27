@@ -1,7 +1,8 @@
 package io.legado.app.data.entities
 
 import cn.hutool.crypto.symmetric.AES
-import com.script.SimpleBindings
+import com.script.ScriptBindings
+import com.script.buildScriptBindings
 import com.script.rhino.RhinoScriptEngine
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
@@ -12,7 +13,11 @@ import io.legado.app.help.SymmetricCryptoAndroid
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.CookieStore
 import io.legado.app.model.SharedJsScope
-import io.legado.app.utils.*
+import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonArray
+import io.legado.app.utils.fromJsonObject
+import io.legado.app.utils.has
+import io.legado.app.utils.printOnDebug
 import org.intellij.lang.annotations.Language
 import org.mozilla.javascript.Scriptable
 
@@ -98,10 +103,8 @@ interface BaseSource : JsExtensions {
      */
     fun getHeaderMap(hasLoginHeader: Boolean = false) = HashMap<String, String>().apply {
         header?.let {
-            val savedHeader = it
-            header = null
-            val json = try {
-                when {
+            try {
+                val json = when {
                     it.startsWith("@js:", true) -> evalJS(it.substring(4)).toString()
                     it.startsWith("<js>", true) -> evalJS(
                         it.substring(4, it.lastIndexOf("<"))
@@ -109,11 +112,11 @@ interface BaseSource : JsExtensions {
 
                     else -> it
                 }
-            } finally {
-                header = savedHeader
-            }
-            GSON.fromJsonObject<Map<String, String>>(json).getOrNull()?.let { map ->
-                putAll(map)
+                GSON.fromJsonObject<Map<String, String>>(json).getOrNull()?.let { map ->
+                    putAll(map)
+                }
+            } catch (e: Exception) {
+                AppLog.put("执行请求头规则出错\n$e", e)
             }
         }
         if (!has(AppConst.UA_NAME, true)) {
@@ -231,16 +234,16 @@ interface BaseSource : JsExtensions {
      * 执行JS
      */
     @Throws(Exception::class)
-    fun evalJS(jsStr: String, bindingsConfig: SimpleBindings.() -> Unit = {}): Any? {
-        val bindings = SimpleBindings()
-        bindings.apply(bindingsConfig)
-        bindings["java"] = this
-        bindings["source"] = this
-        bindings["baseUrl"] = getKey()
-        bindings["cookie"] = CookieStore
-        bindings["cache"] = CacheManager
-        val context = RhinoScriptEngine.getScriptContext(bindings)
-        val scope = RhinoScriptEngine.getRuntimeScope(context)
+    fun evalJS(jsStr: String, bindingsConfig: ScriptBindings.() -> Unit = {}): Any? {
+        val bindings = buildScriptBindings { bindings ->
+            bindings.apply(bindingsConfig)
+            bindings["java"] = this
+            bindings["source"] = this
+            bindings["baseUrl"] = getKey()
+            bindings["cookie"] = CookieStore
+            bindings["cache"] = CacheManager
+        }
+        val scope = RhinoScriptEngine.getRuntimeScope(bindings)
         getShareScope()?.let {
             scope.prototype = it
         }

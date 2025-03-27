@@ -4,6 +4,7 @@ import android.app.Application
 import io.legado.app.base.BaseViewModel
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssSource
+import com.script.rhino.runScriptWithContext
 import io.legado.app.utils.toastOnUi
 
 class RssViewModel(application: Application) : BaseViewModel(application) {
@@ -31,7 +32,12 @@ class RssViewModel(application: Application) : BaseViewModel(application) {
     }
 
     fun del(vararg rssSource: RssSource) {
-        execute { appDb.rssSourceDao.delete(*rssSource) }
+        execute {
+            appDb.rssSourceDao.delete(*rssSource)
+            rssSource.forEach {
+                appDb.rssArticleDao.delete(it.sourceUrl)
+            }
+        }
     }
 
     fun disable(rssSource: RssSource) {
@@ -53,7 +59,9 @@ class RssViewModel(application: Application) : BaseViewModel(application) {
                     } else {
                         sortUrl.substring(4, sortUrl.lastIndexOf("<"))
                     }
-                    val result = rssSource.evalJS(jsStr)?.toString()
+                    val result = runScriptWithContext {
+                        rssSource.evalJS(jsStr)?.toString()
+                    }
                     if (!result.isNullOrBlank()) {
                         sortUrl = result
                     }
