@@ -138,6 +138,7 @@ class CheckSourceService : BaseService() {
                         val source = appDb.bookSourceDao.getBookSource(url)
                         if (source == null) {
                             finishCount.incrementAndGet()
+                            upNotification()
                             return@run
                         }
                         checkSource(source, aimd)

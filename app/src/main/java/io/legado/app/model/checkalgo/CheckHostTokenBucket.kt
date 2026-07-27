@@ -17,14 +17,15 @@ class CheckHostTokenBucket(
     )
 
     private val buckets = ConcurrentHashMap<String, Bucket>()
-    private val lock = Any()
 
-    fun tryAcquire(host: String): Boolean = synchronized(lock) {
+    fun tryAcquire(host: String): Boolean {
         val b = bucket(host)
-        refill(b)
-        if (b.tokens < 1.0) return false
-        b.tokens -= 1.0
-        true
+        return synchronized(b) {
+            refill(b)
+            if (b.tokens < 1.0) return false
+            b.tokens -= 1.0
+            true
+        }
     }
 
     suspend fun acquire(host: String) {

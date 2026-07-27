@@ -49,6 +49,7 @@ object BookSourceCheckRunner {
         emptyTocMessage: String = "目录为空",
         checkMode: CheckMode = CheckMode.Default,
     ): Outcome {
+        val startTime = System.currentTimeMillis()
         return withContext(checkMode) {
             kotlin.runCatching {
                 withTimeout(timeoutMs) {
@@ -73,9 +74,9 @@ object BookSourceCheckRunner {
                     Debug.updateFinalMessage(source.bookSourceUrl, "校验失败:$msg")
                     Outcome(false, "校验失败:$msg")
                 },
-            ).also {
-                source.respondTime = Debug.getRespondTime(source.bookSourceUrl)
-            }
+            )
+        }.also {
+            source.respondTime = System.currentTimeMillis() - startTime
         }
     }
 

@@ -47,7 +47,11 @@ class CheckPerfContractTest {
 
         val okhttp = projectFile("app/src/main/java/io/legado/app/help/http/OkHttpUtils.kt")
         assertTrue(okhttp.contains("maxBytes"))
+        assertTrue(okhttp.contains("use {") || okhttp.contains("use{"))
         assertTrue(okhttp.contains("CheckMode.current()"))
+
+        val writer = projectFile("app/src/main/java/io/legado/app/model/CheckSourceResultWriter.kt")
+        assertTrue(writer.contains("runInTransaction"))
 
         val webView = projectFile("app/src/main/java/io/legado/app/help/http/BackstageWebView.kt")
         assertTrue(webView.contains("!Debug.isChecking"))

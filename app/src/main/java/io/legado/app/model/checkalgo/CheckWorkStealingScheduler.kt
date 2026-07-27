@@ -32,9 +32,10 @@ class CheckWorkStealingScheduler<T> {
     ) = coroutineScope {
         val done = AtomicBoolean(false)
         val stealCursor = AtomicInteger(0)
+        // Host set is fixed before run() in our callers; snapshot once to avoid GC thrash.
+        val keys = queues.keys.toList()
 
         fun steal(): Pair<String, T>? {
-            val keys = queues.keys.toList()
             if (keys.isEmpty()) return null
             val start = stealCursor.getAndIncrement()
             for (i in keys.indices) {

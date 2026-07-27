@@ -79,8 +79,13 @@ suspend fun Call.await(): Response = suspendCancellableCoroutine { block ->
 }
 
 fun ResponseBody.text(encode: String? = null, maxBytes: Int = 0): String {
+    // bytes() closes the body; bounded path must close too or sockets leak under bulk check.
     val responseBytes = Utf8BomUtils.removeUTF8BOM(
-        if (maxBytes > 0) readBoundedBytes(maxBytes) else bytes()
+        if (maxBytes > 0) {
+            use { it.readBoundedBytes(maxBytes) }
+        } else {
+            bytes()
+        }
     )
     var charsetName: String? = encode
 

@@ -37,14 +37,16 @@ object CheckSourceResultWriter {
         if (batch.isEmpty()) {
             return@withLock
         }
-        for (source in batch) {
-            appDb.bookSourceDao.updateCheckResult(
-                bookSourceUrl = source.bookSourceUrl,
-                bookSourceGroup = source.bookSourceGroup,
-                bookSourceComment = source.bookSourceComment,
-                respondTime = source.respondTime,
-                enabled = source.enabled,
-            )
+        appDb.runInTransaction {
+            for (source in batch) {
+                appDb.bookSourceDao.updateCheckResult(
+                    bookSourceUrl = source.bookSourceUrl,
+                    bookSourceGroup = source.bookSourceGroup,
+                    bookSourceComment = source.bookSourceComment,
+                    respondTime = source.respondTime,
+                    enabled = source.enabled,
+                )
+            }
         }
     }
 }
