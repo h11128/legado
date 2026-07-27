@@ -52,45 +52,95 @@ class McpServiceContractTest {
     }
 
     @Test
-    fun `server exposes the expected eight tools on current safe APIs`() {
-        val tools = projectFile("app/src/main/java/io/legado/app/web/mcp/McpToolServer.kt")
-        val registrations = tools.substringAfter("private fun registerTools")
-        val names = Regex("name = \\\"([a-z_]+)\\\"")
-            .findAll(registrations)
-            .map { it.groupValues[1] }
-            .toList()
+    fun `server exposes source debug check and http log tools`() {
+        val toolFiles = listOf(
+            "app/src/main/java/io/legado/app/web/mcp/McpSourceTools.kt",
+            "app/src/main/java/io/legado/app/web/mcp/McpDebugTools.kt",
+            "app/src/main/java/io/legado/app/web/mcp/McpCheckTools.kt",
+            "app/src/main/java/io/legado/app/web/mcp/McpHttpLogTools.kt",
+        ).map { projectFile(it) }
+        val names = toolFiles.flatMap { tools ->
+            Regex("name = \\\"([a-z_]+)\\\"")
+                .findAll(tools)
+                .map { it.groupValues[1] }
+        }.toList()
 
         assertEquals(
             listOf(
                 "save_source",
-                "debug_source",
                 "list_sources",
                 "get_source",
                 "delete_sources",
+                "debug_source",
+                "start_check_sources",
+                "get_check_progress",
+                "stop_check_sources",
                 "get_http_logs",
                 "get_http_log",
                 "set_http_log_recording",
             ),
             names,
         )
-        assertTrue(tools.contains("HttpLogRecord"))
-        assertTrue(tools.contains("JsSourceUpsert.withSaveLock"))
-        assertTrue(tools.contains("catch (error: CancellationException)"))
-        assertTrue(tools.contains("val logs = data[\"logs\"] as List<*>"))
-        assertTrue(tools.contains("val log = item as Map<*, *>"))
-        assertFalse(tools.contains("UNCHECKED_CAST"))
-        assertFalse(tools.contains("HttpRecord"))
-        assertFalse(tools.contains("HttpLogger"))
+        val server = projectFile("app/src/main/java/io/legado/app/web/mcp/McpToolServer.kt")
+        assertTrue(server.contains("registerMcpSourceTools()"))
+        assertTrue(server.contains("registerMcpDebugTools()"))
+        assertTrue(server.contains("registerMcpCheckTools()"))
+        assertTrue(server.contains("registerMcpHttpLogTools()"))
+
+        val sourceTools = projectFile("app/src/main/java/io/legado/app/web/mcp/McpSourceTools.kt")
+        assertTrue(sourceTools.contains("preserveEnabled"))
+        assertTrue(sourceTools.contains("preserveGroup"))
+        assertTrue(sourceTools.contains("pageSummaries"))
+        assertTrue(sourceTools.contains("JsSourceUpsert.withSaveLock"))
+        assertTrue(sourceTools.contains("catch (error: CancellationException)"))
+
+        val checkTools = projectFile("app/src/main/java/io/legado/app/web/mcp/McpCheckTools.kt")
+        assertTrue(checkTools.contains("McpSourceCheckJob.start"))
+        assertTrue(checkTools.contains("McpSourceCheckJob.snapshot"))
+        assertTrue(checkTools.contains("McpSourceCheckJob.stop"))
+
+        val httpTools = projectFile("app/src/main/java/io/legado/app/web/mcp/McpHttpLogTools.kt")
+        assertTrue(httpTools.contains("HttpLogRecord"))
+        assertTrue(httpTools.contains("val logs = data[\"logs\"] as List<*>"))
+        assertTrue(httpTools.contains("val log = item as Map<*, *>"))
+        assertFalse(httpTools.contains("UNCHECKED_CAST"))
+        assertFalse(httpTools.contains("HttpRecord"))
+        assertFalse(httpTools.contains("HttpLogger"))
 
         val sourceStore = projectFile("app/src/main/java/io/legado/app/web/mcp/McpSourceStore.kt")
         assertTrue(sourceStore.contains("JsSourceUpsert.prepareForSave"))
         assertTrue(sourceStore.contains("JsSourceUpsert.withSaveLock"))
+        assertTrue(sourceStore.contains("SaveOptions"))
         assertTrue(sourceStore.contains("mainJs"))
         assertTrue(sourceStore.contains("MAX_SOURCE_BYTES"))
         val upsert = projectFile(
             "app/src/main/java/io/legado/app/model/jsSource/JsSourceUpsert.kt"
         )
         assertTrue(upsert.contains("internal suspend fun <T> withSaveLock"))
+        assertTrue(upsert.contains("PreserveOptions"))
+        assertTrue(upsert.contains("preserveGroupWhenBlank"))
+
+        val runner = projectFile(
+            "app/src/main/java/io/legado/app/model/BookSourceCheckRunner.kt"
+        )
+        assertTrue(runner.contains("object BookSourceCheckRunner"))
+        assertTrue(runner.contains("CheckMode"))
+        assertTrue(runner.contains("firstOrNull()?.toBook()"))
+        assertTrue(runner.contains("getChapterListAwait"))
+        val job = projectFile(
+            "app/src/main/java/io/legado/app/web/mcp/McpSourceCheckJob.kt"
+        )
+        assertTrue(job.contains("allUrls()") || job.contains("allEnabledUrls()"))
+        assertTrue(job.contains("MAX_STORED_RESULTS"))
+        assertTrue(job.contains("CheckAimdLimiter") || job.contains("CheckWorkStealingScheduler"))
+        assertFalse(Regex("""bookSourceDao\.all(?![A-Za-z])""").containsMatchIn(job))
+        val service = projectFile(
+            "app/src/main/java/io/legado/app/service/CheckSourceService.kt"
+        )
+        assertTrue(service.contains("BookSourceCheckRunner.checkSource"))
+        assertTrue(service.contains("configureCheckHttpLimits"))
+        assertTrue(service.contains("CheckSourceResultWriter"))
+        assertTrue(service.contains("CheckAimdLimiter") || service.contains("CheckWorkStealingScheduler"))
     }
 
     @Test
@@ -102,8 +152,13 @@ class McpServiceContractTest {
         assertTrue(api.contains("X-Legado-Token"))
         assertTrue(api.contains("Host 和 Origin 校验"))
         assertTrue(api.contains("可信局域网"))
+        assertTrue(api.contains("start_check_sources"))
+        assertTrue(api.contains("get_check_progress"))
+        assertTrue(api.contains("preserveEnabled"))
+        assertTrue(api.contains("11 个工具"))
         assertTrue(updateLog.contains("**2026/07/22**"))
         assertTrue(updateLog.contains("原生 MCP 书源开发服务"))
+        assertTrue(updateLog.contains("MCP 新增多线程批量校验"))
         assertFalse(proguard.contains("-keep class io.ktor.**"))
         assertFalse(proguard.contains("-keep class kotlinx.coroutines.**"))
     }

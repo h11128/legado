@@ -18,6 +18,7 @@ import io.legado.app.utils.stackTraceStr
 import kotlinx.coroutines.CoroutineScope
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 
 object Debug {
     @get:Synchronized
@@ -26,9 +27,9 @@ object Debug {
     private var debugSource: String? = null
     private val tasks: CompositeCoroutine = CompositeCoroutine()
     private var debugSessionId = 0L
-    val debugMessageMap = HashMap<String, String>()
-    private val debugTimeMap = HashMap<String, Long>()
-    @get:Synchronized
+    val debugMessageMap = ConcurrentHashMap<String, String>()
+    private val debugTimeMap = ConcurrentHashMap<String, Long>()
+    @Volatile
     var isChecking: Boolean = false
         private set
 
@@ -61,7 +62,8 @@ object Debug {
             }
             it.printLog(state, printMsg)
         }
-        if (isChecking && sourceUrl != null && (msg).length < 30) {
+        // Checking path: ConcurrentHashMap, no need to hold the callback lock further.
+        if (isChecking && sourceUrl != null && msg.length < 30) {
             var printMsg = msg
             if (isHtml) {
                 printMsg = HtmlFormatter.format(msg)
@@ -146,7 +148,6 @@ object Debug {
         return true
     }
 
-    @Synchronized
     fun startChecking(source: BookSource) {
         if (!isChecking || callback != null) return
         debugTimeMap[source.bookSourceUrl] = System.currentTimeMillis()
@@ -156,6 +157,13 @@ object Debug {
     @Synchronized
     fun finishChecking() {
         isChecking = false
+        debugTimeMap.clear()
+        debugMessageMap.clear()
+    }
+
+    fun clearSourceCheckState(sourceUrl: String) {
+        debugTimeMap.remove(sourceUrl)
+        debugMessageMap.remove(sourceUrl)
     }
 
     fun getRespondTime(sourceUrl: String): Long {
@@ -163,13 +171,13 @@ object Debug {
     }
 
     fun updateFinalMessage(sourceUrl: String, state: String) {
-        if (debugTimeMap[sourceUrl] != null && debugMessageMap[sourceUrl] != null) {
-            val spendingTime = System.currentTimeMillis() - debugTimeMap[sourceUrl]!!
-            debugTimeMap[sourceUrl] =
-                if (state == "校验成功") spendingTime else CheckSource.timeout + spendingTime
-            val printTime = debugTimeFormat.format(Date(spendingTime))
-            debugMessageMap[sourceUrl] = "$printTime $state"
-        }
+        val started = debugTimeMap[sourceUrl] ?: return
+        if (!debugMessageMap.containsKey(sourceUrl)) return
+        val spendingTime = System.currentTimeMillis() - started
+        debugTimeMap[sourceUrl] =
+            if (state == "校验成功") spendingTime else CheckSource.timeout + spendingTime
+        val printTime = debugTimeFormat.format(Date(spendingTime))
+        debugMessageMap[sourceUrl] = "$printTime $state"
     }
 
     suspend fun startDebug(scope: CoroutineScope, rssSource: RssSource) {

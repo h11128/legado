@@ -54,8 +54,9 @@ suspend fun OkHttpClient.newCallStrResponse(
     retry: Int = 0,
     builder: Request.Builder.() -> Unit
 ): StrResponse {
+    val maxBytes = io.legado.app.model.CheckMode.current()?.maxBodyBytes ?: 0
     return newCallResponse(retry, builder).let {
-        StrResponse(it, it.body.text())
+        StrResponse(it, it.body.text(maxBytes = maxBytes))
     }
 }
 
@@ -77,8 +78,10 @@ suspend fun Call.await(): Response = suspendCancellableCoroutine { block ->
 
 }
 
-fun ResponseBody.text(encode: String? = null): String {
-    val responseBytes = Utf8BomUtils.removeUTF8BOM(bytes())
+fun ResponseBody.text(encode: String? = null, maxBytes: Int = 0): String {
+    val responseBytes = Utf8BomUtils.removeUTF8BOM(
+        if (maxBytes > 0) readBoundedBytes(maxBytes) else bytes()
+    )
     var charsetName: String? = encode
 
     charsetName?.let {
@@ -93,6 +96,18 @@ fun ResponseBody.text(encode: String? = null): String {
     //根据内容判断
     charsetName = EncodingDetect.getHtmlEncode(responseBytes)
     return String(responseBytes, Charset.forName(charsetName))
+}
+
+private fun ResponseBody.readBoundedBytes(maxBytes: Int): ByteArray {
+    val source = source()
+    val buffer = okio.Buffer()
+    var remaining = maxBytes.toLong()
+    while (remaining > 0 && !source.exhausted()) {
+        val read = source.read(buffer, minOf(8192L, remaining))
+        if (read == -1L) break
+        remaining -= read
+    }
+    return buffer.readByteArray()
 }
 
 fun ResponseBody.decompressed(): ResponseBody {

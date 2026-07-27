@@ -22,7 +22,7 @@ object AppConst {
 
     const val UA_NAME = "User-Agent"
 
-    const val MAX_THREAD = 9
+    const val MAX_THREAD = 999
 
     const val DEFAULT_WEBDAV_ID = -1L
 

@@ -3,6 +3,10 @@
 ## cronet版本: 151.0.7922.29
 
 **2026/07/26**
+- MCP 新增多线程批量校验工具：`start_check_sources` / `get_check_progress` / `stop_check_sources`
+- MCP `list_sources` 支持分页，避免大书源库被截断
+- MCP `save_source` 支持 `preserveEnabled` / `preserveGroup`，可覆盖启用状态或清空分组
+- 抽取 `BookSourceCheckRunner`，App 校验与 MCP 批量校验共用同一套逻辑
 - 修复书源分组删除或改名后管理页保留失效筛选的问题
 - 移除正则帮助中重复且不可跳转的旧目录
 - 修复书籍详情刷新后目录失败时覆盖原有信息的问题

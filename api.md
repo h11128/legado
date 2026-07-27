@@ -123,10 +123,19 @@ X-Legado-Token = 设置中配置的令牌
 }
 ```
 
-服务提供 8 个工具：`save_source`、`debug_source`、`list_sources`、`get_source`、`delete_sources`、
-`get_http_logs`、`get_http_log`、`set_http_log_recording`。书源写入、删除、调试和日志开关均属于修改操作；
+服务提供 11 个工具：`save_source`、`list_sources`、`get_source`、`delete_sources`、
+`debug_source`、`start_check_sources`、`get_check_progress`、`stop_check_sources`、
+`get_http_logs`、`get_http_log`、`set_http_log_recording`。
+书源写入、删除、调试、批量校验和日志开关均属于修改操作；
 书源全文与已脱敏 HTTP 日志仍可能包含敏感业务数据，请只向可信客户端开放令牌。
-`debug_source` 返回的调试输出不会脱敏，也可能包含请求参数、书源正文或其他敏感内容。
+`debug_source` 为单通道逐步调试，输出不会脱敏；批量校验请用 `start_check_sources`
+（多线程，与 App「校验书源」同逻辑），再用 `get_check_progress` 分页取结果。
+大批量时建议电脑侧先 DNS 预检，再按 50–100 URL 分批调用，避免一次加载全库压垮手机堆。
+设备侧校验已启用目录采样、搜索成功跳过发现深检、按 host 分片、批量写库与 HTTP body 上限。
+`list_sources` 支持 `offset`/`limit` 分页（默认 100，最大 500），避免大库被截断。
+`save_source` 默认保留已有 `enabled` 与空分组回填；传入 `preserveEnabled=false` /
+`preserveGroup=false` 可覆盖启用状态或清空分组。
+MCP 开关在进程崩溃后会按用户偏好自启；仅用户关闭服务时才会持久为关闭。
 
 #### 获取替换规则
 

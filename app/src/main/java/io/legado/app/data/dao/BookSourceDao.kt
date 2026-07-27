@@ -250,6 +250,12 @@ interface BookSourceDao {
     @Query("select count(*) from book_sources")
     fun allCount(): Int
 
+    @Query("select bookSourceUrl from book_sources order by customOrder asc")
+    fun allUrls(): List<String>
+
+    @Query("select bookSourceUrl from book_sources where enabled = 1 order by customOrder asc")
+    fun allEnabledUrls(): List<String>
+
     @Query("SELECT EXISTS(select 1 from book_sources where bookSourceUrl = :key)")
     fun has(key: String): Boolean
 
@@ -262,6 +268,19 @@ interface BookSourceDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(vararg bookSource: BookSource)
+
+    @Query(
+        """update book_sources set bookSourceGroup = :bookSourceGroup,
+        bookSourceComment = :bookSourceComment, respondTime = :respondTime,
+        enabled = :enabled where bookSourceUrl = :bookSourceUrl"""
+    )
+    fun updateCheckResult(
+        bookSourceUrl: String,
+        bookSourceGroup: String?,
+        bookSourceComment: String?,
+        respondTime: Long,
+        enabled: Boolean,
+    )
 
     @Update
     fun update(vararg bookSource: BookSource)

@@ -12,11 +12,23 @@ import io.legado.app.utils.fromJsonObject
 
 internal object McpSourceStore {
 
-    suspend fun saveDeclarative(text: String): BookSource {
+    data class SaveOptions(
+        val preserveEnabled: Boolean = true,
+        val preserveGroupWhenBlank: Boolean = true,
+    )
+
+    suspend fun saveDeclarative(
+        text: String,
+        options: SaveOptions = SaveOptions(),
+    ): BookSource {
         return JsSourceUpsert.withSaveLock {
             val source = parseDeclarative(text)
             val old = appDb.bookSourceDao.getBookSource(source.bookSourceUrl)
-            if (!JsSourceUpsert.prepareForSave(source, old) && old != null) {
+            val preserve = JsSourceUpsert.PreserveOptions(
+                preserveEnabled = options.preserveEnabled,
+                preserveGroupWhenBlank = options.preserveGroupWhenBlank,
+            )
+            if (!JsSourceUpsert.prepareForSave(source, old, preserve = preserve) && old != null) {
                 return@withSaveLock old
             }
 

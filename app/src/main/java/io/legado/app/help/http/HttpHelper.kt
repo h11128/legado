@@ -145,6 +145,25 @@ val okHttpClientManga by lazy {
     }
 }
 
+private const val DEFAULT_MAX_REQUESTS = 64
+private const val DEFAULT_MAX_REQUESTS_PER_HOST = 5
+
+/**
+ * Raise OkHttp dispatcher caps for bulk book-source checks.
+ * Shared client: call [restoreDefaultHttpLimits] when the check finishes.
+ */
+fun configureCheckHttpLimits(maxRequests: Int, maxRequestsPerHost: Int = 8) {
+    val dispatcher = okHttpClient.dispatcher
+    dispatcher.maxRequests = maxRequests.coerceIn(DEFAULT_MAX_REQUESTS, 256)
+    dispatcher.maxRequestsPerHost = maxRequestsPerHost.coerceIn(1, 16)
+}
+
+fun restoreDefaultHttpLimits() {
+    val dispatcher = okHttpClient.dispatcher
+    dispatcher.maxRequests = DEFAULT_MAX_REQUESTS
+    dispatcher.maxRequestsPerHost = DEFAULT_MAX_REQUESTS_PER_HOST
+}
+
 /**
  * 缓存代理okHttp
  */

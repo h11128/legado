@@ -102,12 +102,19 @@ object JsSourceUpsert {
         }
     }
 
+    data class PreserveOptions(
+        val preserveEnabled: Boolean = true,
+        val preserveGroupWhenBlank: Boolean = true,
+        val preserveOrderWeight: Boolean = true,
+    )
+
     internal fun prepareForSave(
         source: BookSource,
         old: BookSource?,
         stamp: Long = System.currentTimeMillis(),
+        preserve: PreserveOptions = PreserveOptions(),
     ): Boolean {
-        preserveUserState(source, old)
+        preserveUserState(source, old, preserve)
         val changed = old == null || !equalIgnoringManagedUpdateTime(source, old)
         if (changed) {
             source.lastUpdateTime = stamp
@@ -149,14 +156,22 @@ object JsSourceUpsert {
             targetSource != null
     }
 
-    internal fun preserveUserState(source: BookSource, old: BookSource?) {
+    internal fun preserveUserState(
+        source: BookSource,
+        old: BookSource?,
+        preserve: PreserveOptions = PreserveOptions(),
+    ) {
         old ?: return
-        source.enabled = old.enabled
-        source.enabledExplore = old.enabledExplore
-        source.customOrder = old.customOrder
-        source.weight = old.weight
-        source.respondTime = old.respondTime
-        if (source.bookSourceGroup.isNullOrBlank()) {
+        if (preserve.preserveEnabled) {
+            source.enabled = old.enabled
+            source.enabledExplore = old.enabledExplore
+        }
+        if (preserve.preserveOrderWeight) {
+            source.customOrder = old.customOrder
+            source.weight = old.weight
+            source.respondTime = old.respondTime
+        }
+        if (preserve.preserveGroupWhenBlank && source.bookSourceGroup.isNullOrBlank()) {
             source.bookSourceGroup = old.bookSourceGroup
         }
     }

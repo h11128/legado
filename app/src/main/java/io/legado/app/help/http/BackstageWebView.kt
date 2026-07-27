@@ -87,7 +87,7 @@ class BackstageWebView(
                         block.resumeWithException(error)
                 }
             }
-            if (javaScript == null && delayTime == 0L) {
+            if (javaScript == null && delayTime == 0L && !Debug.isChecking) {
                 delayTime = 900L
             }
             runOnUI {

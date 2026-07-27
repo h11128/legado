@@ -1,0 +1,27 @@
+---
+description: After implementing work, run a review subagent, fix all findings, then commit. Applies to every project on this machine.
+alwaysApply: true
+---
+
+# Implement → Review → Fix → Commit
+
+做完一轮可交付改动后，**不要直接收工**。按下面顺序关门：
+
+## MUST
+
+1. **Subagent 审查**：用 `Task` 拉起 `code-reviewer`（或项目里的 code-review skill 流程）。**不要**为了「审查更强」另指定模型；不传 `model`，跟当前会话一致。
+2. **修完全部问题**：审查里的 Critical 和 Warning 都要修完（或写清为何不修并得到用户同意）。修完后如改动仍大，可再开一轮短审查。
+3. **再 commit**：审查通过（或用户同意的残留项已记录）后才 `git commit`。用户本轮已要求交付/收尾时，默认应提交；用户明确说「先别 commit」则停下。
+4. **证据**：回复里写清审查结论、修了什么、commit hash/message。
+
+## 何时触发
+
+- 功能/RFC 步骤/bugfix 做完，准备说「好了」之前
+- 一次改动触及约 5+ 文件或公开行为变化
+- 用户说「做完」「收尾」「提交」且尚无独立审查
+
+## 不要
+
+- 只自审、跳过 subagent 就宣称可提交
+- 带着未修 Critical 去 commit
+- 用 `--no-verify` 躲 hook（除非用户明确要求）

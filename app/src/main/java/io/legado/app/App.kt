@@ -52,6 +52,7 @@ import io.legado.app.help.storage.Backup
 import io.legado.app.model.BookCover
 import io.legado.app.model.AutoTask
 import io.legado.app.service.AutoTaskScheduler
+import io.legado.app.service.McpService
 import io.legado.app.utils.ChineseUtils
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.defaultSharedPreferences
@@ -128,6 +129,10 @@ class App : Application() {
             //同步阅读记录
             if (AppConfig.syncBookProgress) {
                 AppWebDav.downloadAllBookProgress()
+            }
+            // Restore MCP after process death if the user left it enabled.
+            if (getPrefBoolean(PreferKey.mcpService, false)) {
+                McpService.start(this@App)
             }
         }
     }

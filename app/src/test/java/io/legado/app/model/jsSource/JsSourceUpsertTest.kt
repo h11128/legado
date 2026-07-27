@@ -149,6 +149,40 @@ class JsSourceUpsertTest {
     }
 
     @Test
+    fun `blank group can clear when preserveGroupWhenBlank is false`() {
+        val old = BookSource(
+            bookSourceGroup = "local",
+            enabled = false,
+            enabledExplore = false,
+            customOrder = 3,
+            weight = 9,
+        )
+        val source = BookSource(
+            bookSourceGroup = "",
+            enabled = true,
+            enabledExplore = true,
+            customOrder = 1,
+            weight = 1,
+        )
+
+        JsSourceUpsert.preserveUserState(
+            source,
+            old,
+            JsSourceUpsert.PreserveOptions(
+                preserveEnabled = false,
+                preserveGroupWhenBlank = false,
+                preserveOrderWeight = true,
+            ),
+        )
+
+        assertEquals("", source.bookSourceGroup)
+        assertEquals(true, source.enabled)
+        assertEquals(true, source.enabledExplore)
+        assertEquals(3, source.customOrder)
+        assertEquals(9, source.weight)
+    }
+
+    @Test
     fun `renaming does not overwrite an existing target source`() {
         val opened = BookSource(bookSourceUrl = "https://old.example")
         val target = BookSource(bookSourceUrl = "https://new.example")

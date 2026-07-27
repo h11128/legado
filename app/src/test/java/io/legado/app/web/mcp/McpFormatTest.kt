@@ -2,6 +2,7 @@ package io.legado.app.web.mcp
 
 import io.legado.app.data.entities.BookSource
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -40,5 +41,23 @@ class McpFormatTest {
         val cut = McpFormat.truncate("abcdef", 5)
         assertTrue(cut.startsWith("abcde"))
         assertTrue(cut.contains("已截断,原文 6 字符"))
+    }
+
+    @Test
+    fun pageSummariesAndEnabledFilter() {
+        val a = BookSource(bookSourceName = "A", bookSourceUrl = "https://a.com", enabled = true)
+        val b = BookSource(bookSourceName = "B", bookSourceUrl = "https://b.com", enabled = false)
+        val enabled = McpFormat.summarizeSources(listOf(a, b), null, enabledOnly = true)
+        assertEquals(1, enabled.size)
+        assertEquals("https://a.com", enabled[0]["bookSourceUrl"])
+
+        val all = McpFormat.summarizeSources(listOf(a, b), null)
+        val page = McpFormat.pageSummaries(all, offset = 1, limit = 1)
+        assertEquals(2, page["total"])
+        assertEquals(1, page["offset"])
+        assertEquals(1, page["count"])
+        val json = McpFormat.toPrettyJson(page)
+        assertTrue(json.contains("https://b.com"))
+        assertFalse(json.contains("\"bookSourceUrl\": \"https://a.com\""))
     }
 }

@@ -1,6 +1,5 @@
 package io.legado.app.model.webBook
 
-import android.text.TextUtils
 import com.script.ScriptBindings
 import com.script.rhino.RhinoScriptEngine
 import io.legado.app.R
@@ -8,25 +7,20 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
-import io.legado.app.data.entities.rule.TocRule
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
+import io.legado.app.model.CheckMode
 import io.legado.app.model.Debug
-import io.legado.app.model.analyzeRule.AnalyzeRule
-import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
-import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.utils.isTrue
 import io.legado.app.utils.mapAsync
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.flow
 import org.htmlunit.corejs.javascript.Context
 import splitties.init.appCtx
-import io.legado.app.constant.AppPattern
-import kotlinx.coroutines.currentCoroutineContext
 
 /**
  * 获取目录
@@ -39,11 +33,12 @@ object BookChapterList {
         baseUrl: String,
         redirectUrl: String,
         body: String?,
-        isFromBookInfo: Boolean = false
+        isFromBookInfo: Boolean = false,
     ): List<BookChapter> {
         body ?: throw NoStackTraceException(
             appCtx.getString(R.string.error_get_web_content, baseUrl)
         )
+        val checkMode = CheckMode.current()
         val chapterList = ArrayList<BookChapter>()
         Debug.log(bookSource.bookSourceUrl, "≡获取成功:${baseUrl}")
         Debug.log(bookSource.bookSourceUrl, body, state = 30)
@@ -58,31 +53,71 @@ object BookChapterList {
         if (listRule.startsWith("+")) {
             listRule = listRule.substring(1)
         }
-        var chapterData =
-            analyzeChapterList(
-                book, baseUrl, redirectUrl, body,
-                tocRule, listRule, bookSource, log = true,
-                isFromBookInfo = isFromBookInfo
-            )
+        var chapterData = BookChapterListPage.parse(
+            book, baseUrl, redirectUrl, body, tocRule, listRule, bookSource,
+            log = true, isFromBookInfo = isFromBookInfo,
+        )
         chapterList.addAll(chapterData.first)
-        when (chapterData.second.size) {
+        if (checkMode == null || !hasEnoughSample(chapterList, checkMode.tocSampleChapters)) {
+            fetchMorePages(
+                bookSource, book, tocRule, listRule, chapterData, nextUrlList, chapterList,
+                isFromBookInfo, checkMode,
+            )
+        } else {
+            Debug.log(bookSource.bookSourceUrl, "◇校验采样：首页已够 ${checkMode.tocSampleChapters} 章")
+        }
+        if (chapterList.isEmpty()) {
+            throw TocEmptyException(appCtx.getString(R.string.chapter_list_empty))
+        }
+        if (!reverse) chapterList.reverse()
+        currentCoroutineContext().ensureActive()
+        val list = ArrayList(LinkedHashSet(chapterList))
+        if (!book.getReverseToc()) list.reverse()
+        Debug.log(book.origin, "◇目录总数:${list.size}")
+        list.forEachIndexed { index, bookChapter -> bookChapter.index = index }
+        if (checkMode == null) {
+            applyFormatJs(tocRule.formatJs, list, book.origin)
+            updateBookTocInfo(book, list)
+        }
+        return list
+    }
+
+    private suspend fun fetchMorePages(
+        bookSource: BookSource,
+        book: Book,
+        tocRule: io.legado.app.data.entities.rule.TocRule,
+        listRule: String,
+        firstData: Pair<List<BookChapter>, List<String>>,
+        nextUrlList: ArrayList<String>,
+        chapterList: ArrayList<BookChapter>,
+        isFromBookInfo: Boolean,
+        checkMode: CheckMode?,
+    ) {
+        val maxPages = checkMode?.tocMaxPages ?: Int.MAX_VALUE
+        when (firstData.second.size) {
             0 -> Unit
             1 -> {
-                var nextUrl = chapterData.second[0]
-                while (nextUrl.isNotEmpty() && !nextUrlList.contains(nextUrl)) {
+                var nextUrl = firstData.second[0]
+                var pages = 1
+                while (
+                    nextUrl.isNotEmpty() &&
+                    !nextUrlList.contains(nextUrl) &&
+                    pages < maxPages &&
+                    (checkMode == null || !hasEnoughSample(chapterList, checkMode.tocSampleChapters))
+                ) {
                     nextUrlList.add(nextUrl)
+                    pages++
                     val analyzeUrl = AnalyzeUrl(
                         mUrl = nextUrl,
                         source = bookSource,
                         ruleData = book,
-                        coroutineContext = currentCoroutineContext()
+                        coroutineContext = currentCoroutineContext(),
                     )
-                    val res = analyzeUrl.getStrResponseAwait() //控制并发访问
+                    val res = analyzeUrl.getStrResponseAwait()
                     res.body?.let { nextBody ->
-                        chapterData = analyzeChapterList(
-                            book, nextUrl, nextUrl,
-                            nextBody, tocRule, listRule, bookSource,
-                            isFromBookInfo = isFromBookInfo
+                        val chapterData = BookChapterListPage.parse(
+                            book, nextUrl, nextUrl, nextBody, tocRule, listRule, bookSource,
+                            isFromBookInfo = isFromBookInfo,
                         )
                         nextUrl = chapterData.second.firstOrNull() ?: ""
                         chapterList.addAll(chapterData.first)
@@ -90,84 +125,65 @@ object BookChapterList {
                 }
                 Debug.log(bookSource.bookSourceUrl, "◇目录总页数:${nextUrlList.size}")
             }
-
             else -> {
-                Debug.log(
-                    bookSource.bookSourceUrl,
-                    "◇并发解析目录,总页数:${chapterData.second.size}"
-                )
-                flow {
-                    for (urlStr in chapterData.second) {
-                        emit(urlStr)
-                    }
-                }.mapAsync(AppConfig.threadCount) { urlStr ->
+                val urls = if (checkMode != null) {
+                    firstData.second.take((maxPages - 1).coerceAtLeast(0))
+                } else {
+                    firstData.second
+                }
+                if (urls.isEmpty()) return
+                val concurrency = CheckMode.nestedConcurrency(AppConfig.threadCount)
+                Debug.log(bookSource.bookSourceUrl, "◇并发解析目录,总页数:${urls.size},并发:$concurrency")
+                flow { urls.forEach { emit(it) } }.mapAsync(concurrency) { urlStr ->
                     val analyzeUrl = AnalyzeUrl(
                         mUrl = urlStr,
                         source = bookSource,
                         ruleData = book,
-                        coroutineContext = currentCoroutineContext()
+                        coroutineContext = currentCoroutineContext(),
                     )
-                    val res = analyzeUrl.getStrResponseAwait() //控制并发访问
-                    analyzeChapterList(
-                        book, urlStr, res.url,
-                        res.body!!, tocRule, listRule, bookSource, false,
-                        isFromBookInfo = isFromBookInfo
+                    val res = analyzeUrl.getStrResponseAwait()
+                    BookChapterListPage.parse(
+                        book, urlStr, res.url, res.body!!, tocRule, listRule, bookSource,
+                        getNextUrl = false, isFromBookInfo = isFromBookInfo,
                     ).first
-                }.collect {
-                    chapterList.addAll(it)
+                }.collect { chapterList.addAll(it) }
+            }
+        }
+    }
+
+    private fun hasEnoughSample(chapters: List<BookChapter>, need: Int): Boolean {
+        var n = 0
+        for (c in chapters) {
+            if (!(c.isVolume && c.url.startsWith(c.title))) {
+                if (++n >= need) return true
+            }
+        }
+        return false
+    }
+
+    private fun applyFormatJs(formatJs: String?, list: ArrayList<BookChapter>, origin: String) {
+        if (formatJs.isNullOrBlank()) return
+        Context.enter().use {
+            val bindings = ScriptBindings()
+            bindings["gInt"] = 0
+            list.forEachIndexed { index, bookChapter ->
+                bindings["index"] = index + 1
+                bindings["chapter"] = bookChapter
+                bindings["title"] = bookChapter.title
+                RhinoScriptEngine.runCatching {
+                    eval(formatJs, bindings)?.toString()?.let { bookChapter.title = it }
+                }.onFailure {
+                    Debug.log(origin, "格式化标题出错, ${it.localizedMessage}")
                 }
             }
         }
-        if (chapterList.isEmpty()) {
-            throw TocEmptyException(appCtx.getString(R.string.chapter_list_empty))
-        }
-        if (!reverse) {
-            chapterList.reverse()
-        }
-        currentCoroutineContext().ensureActive()
-        //去重
-        val lh = LinkedHashSet(chapterList)
-        val list = ArrayList(lh)
-        if (!book.getReverseToc()) {
-            list.reverse()
-        }
-        Debug.log(book.origin, "◇目录总数:${list.size}")
-        currentCoroutineContext().ensureActive()
-        list.forEachIndexed { index, bookChapter ->
-            bookChapter.index = index
-        }
-        val formatJs = tocRule.formatJs
-        if (!formatJs.isNullOrBlank()) {
-            Context.enter().use {
-                val bindings = ScriptBindings()
-                bindings["gInt"] = 0
-                list.forEachIndexed { index, bookChapter ->
-                    bindings["index"] = index + 1
-                    bindings["chapter"] = bookChapter
-                    bindings["title"] = bookChapter.title
-                    RhinoScriptEngine.runCatching {
-                        eval(formatJs, bindings)?.toString()?.let {
-                            bookChapter.title = it
-                        }
-                    }.onFailure {
-                        Debug.log(book.origin, "格式化标题出错, ${it.localizedMessage}")
-                    }
-                }
-            }
-        }
-        updateBookTocInfo(book, list)
-        return list
     }
 
     suspend fun updateBookTocInfo(book: Book, list: ArrayList<BookChapter>) {
         val replaceRules = ContentProcessor.get(book).getTitleReplaceRules()
         val replaceBook = book.toReplaceBook()
         book.durChapterTitle = list.getOrElse(book.durChapterIndex) { list.last() }
-            .getDisplayTitle(
-                replaceRules,
-                book.getUseReplaceRule(),
-                replaceBook = replaceBook
-            )
+            .getDisplayTitle(replaceRules, book.getUseReplaceRule(), replaceBook = replaceBook)
         if (book.totalChapterNum < list.size) {
             book.lastCheckCount = list.size - book.totalChapterNum
             book.latestChapterTime = System.currentTimeMillis()
@@ -176,156 +192,22 @@ object BookChapterList {
         book.totalChapterNum = list.size
         book.latestChapterTitle =
             list.getOrElse(book.simulatedTotalChapterNum() - 1) { list.last() }
-                .getDisplayTitle(
-                    replaceRules,
-                    book.getUseReplaceRule(),
-                    replaceBook = replaceBook
-                )
+                .getDisplayTitle(replaceRules, book.getUseReplaceRule(), replaceBook = replaceBook)
         currentCoroutineContext().ensureActive()
-        upChapterInfo(list, book)
-    }
-
-    private suspend fun analyzeChapterList(
-        book: Book,
-        baseUrl: String,
-        redirectUrl: String,
-        body: String,
-        tocRule: TocRule,
-        listRule: String,
-        bookSource: BookSource,
-        getNextUrl: Boolean = true,
-        log: Boolean = false,
-        isFromBookInfo:Boolean
-    ): Pair<List<BookChapter>, List<String>> {
-        val analyzeRule = AnalyzeRule(book, bookSource, false, isFromBookInfo)
-        analyzeRule.setContent(body).setBaseUrl(baseUrl)
-        analyzeRule.setRedirectUrl(redirectUrl)
-        analyzeRule.setCoroutineContext(currentCoroutineContext())
-        //获取目录列表
-        val chapterList = arrayListOf<BookChapter>()
-        Debug.log(bookSource.bookSourceUrl, "┌获取目录列表", log)
-        val elements = analyzeRule.getElements(listRule)
-        Debug.log(bookSource.bookSourceUrl, "└列表大小:${elements.size}", log)
-        //获取下一页链接
-        val nextUrlList = arrayListOf<String>()
-        val nextTocRule = tocRule.nextTocUrl
-        if (getNextUrl && !nextTocRule.isNullOrEmpty()) {
-            Debug.log(bookSource.bookSourceUrl, "┌获取目录下一页列表", log)
-            analyzeRule.getStringList(nextTocRule, isUrl = true)?.let {
-                for (item in it) {
-                    if (item != redirectUrl) {
-                        nextUrlList.add(item)
-                    }
-                }
-            }
-            Debug.log(
-                bookSource.bookSourceUrl,
-                "└" + TextUtils.join("，\n", nextUrlList),
-                log
-            )
+        if (!AppConfig.tocCountWords) return
+        val saved = appDb.bookChapterDao.getChapterList(book.bookUrl)
+        if (saved.isEmpty()) return
+        val map = HashMap<String, Triple<String?, String?, String?>>(saved.size)
+        for (chapter in saved) {
+            map["${chapter.index}_${chapter.title}"] =
+                Triple(chapter.wordCount, chapter.variable, chapter.imgUrl)
         }
-        currentCoroutineContext().ensureActive()
-        if (elements.isNotEmpty()) {
-            Debug.log(bookSource.bookSourceUrl, "┌解析目录列表", log)
-            val nameRule = analyzeRule.splitSourceRule(tocRule.chapterName)
-            val urlRule = analyzeRule.splitSourceRule(tocRule.chapterUrl)
-            val vipRule = analyzeRule.splitSourceRule(tocRule.isVip)
-            val payRule = analyzeRule.splitSourceRule(tocRule.isPay)
-            val upTimeRule = analyzeRule.splitSourceRule(tocRule.updateTime)
-            val isVolumeRule = analyzeRule.splitSourceRule(tocRule.isVolume)
-            val tocCountWords = AppConfig.tocCountWords
-            elements.forEachIndexed { index, item ->
-                currentCoroutineContext().ensureActive()
-                analyzeRule.setContent(item)
-                val bookChapter = BookChapter(bookUrl = book.bookUrl, baseUrl = redirectUrl)
-                analyzeRule.setChapter(bookChapter)
-                bookChapter.title = analyzeRule.getString(nameRule)
-                bookChapter.url = analyzeRule.getString(urlRule)
-                val info = analyzeRule.getString(upTimeRule)
-                val isVolume = analyzeRule.getString(isVolumeRule)
-                bookChapter.isVolume = false
-                if (isVolume.isTrue()) {
-                    bookChapter.isVolume = true
-                    bookChapter.tag = info
-                } else {
-                    if (tocCountWords) {
-                        AppPattern.wordCountRegex.find(info)?.let { match ->
-                            bookChapter.apply {
-                                wordCount = match.groupValues[1].trim()
-                                tag = info.replaceFirst(match.value, "")
-                            }
-                        } ?: run { bookChapter.tag = info }
-                    } else {
-                        bookChapter.tag = info
-                    }
-                }
-                if (bookChapter.url.isEmpty()) {
-                    if (bookChapter.isVolume) {
-                        bookChapter.url = bookChapter.title + index
-                        Debug.log(
-                            bookSource.bookSourceUrl,
-                            "⇒一级目录${index}未获取到url,使用标题替代"
-                        )
-                    } else {
-                        bookChapter.url = baseUrl
-                        Debug.log(
-                            bookSource.bookSourceUrl,
-                            "⇒目录${index}未获取到url,使用baseUrl替代"
-                        )
-                    }
-                }
-                if (bookChapter.title.isNotEmpty()) {
-                    val isVip = analyzeRule.getString(vipRule)
-                    val isPay = analyzeRule.getString(payRule)
-                    if (isVip.isTrue()) {
-                        bookChapter.isVip = true
-                    }
-                    if (isPay.isTrue()) {
-                        bookChapter.isPay = true
-                    }
-                    chapterList.add(bookChapter)
-                }
-            }
-            Debug.log(bookSource.bookSourceUrl, "└目录列表解析完成", log)
-            if (chapterList.isEmpty()) {
-                Debug.log(bookSource.bookSourceUrl, "◇章节列表为空", log)
-            } else {
-                Debug.log(bookSource.bookSourceUrl, "≡首章信息", log)
-                Debug.log(bookSource.bookSourceUrl, "◇章节名称:${chapterList[0].title}", log)
-                Debug.log(bookSource.bookSourceUrl, "◇章节链接:${chapterList[0].url}", log)
-                chapterList[0].wordCount?.run{
-                    Debug.log(bookSource.bookSourceUrl, "◇章节信息:${chapterList[0].tag} $this", log)
-                    Debug.log(bookSource.bookSourceUrl, "⇒已识别到章节信息中的字数",log)
-                } ?: run {
-                    Debug.log(bookSource.bookSourceUrl, "◇章节信息:${chapterList[0].tag}", log)
-                }
-                Debug.log(bookSource.bookSourceUrl, "◇是否VIP:${chapterList[0].isVip}", log)
-                Debug.log(bookSource.bookSourceUrl, "◇是否购买:${chapterList[0].isPay}", log)
-            }
-        }
-        return Pair(chapterList, nextUrlList)
-    }
-
-    private fun upChapterInfo(list: ArrayList<BookChapter>, book: Book) {
-        if (!AppConfig.tocCountWords) {
-            return
-        }
-        val chapterList = appDb.bookChapterDao.getChapterList(book.bookUrl)
-        if (chapterList.isNotEmpty()) {
-            val map = HashMap<String, Triple<String?, String?, String?>>(chapterList.size)
-            for (chapter in chapterList) {
-                map["${chapter.index}_${chapter.title}"] = Triple(chapter.wordCount, chapter.variable, chapter.imgUrl)
-            }
-            for (chapter in list) {
-                map["${chapter.index}_${chapter.title}"]?.let { (w, v, i) ->
-                    chapter.run {
-                        w?.let { wordCount = it }
-                        v?.let { variable = it }
-                        i?.let { imgUrl = it }
-                    }
-                }
+        for (chapter in list) {
+            map["${chapter.index}_${chapter.title}"]?.let { (w, v, i) ->
+                w?.let { chapter.wordCount = it }
+                v?.let { chapter.variable = it }
+                i?.let { chapter.imgUrl = it }
             }
         }
     }
-
 }

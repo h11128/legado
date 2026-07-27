@@ -49,6 +49,8 @@ class McpService : BaseService() {
         }
 
         fun stop(context: Context) {
+            // User-initiated stop: persist off so App does not auto-restart.
+            appCtx.putPrefBoolean(PreferKey.mcpService, false)
             context.stopService<McpService>()
         }
     }
@@ -85,7 +87,10 @@ class McpService : BaseService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            IntentAction.stop -> stopSelf()
+            IntentAction.stop -> {
+                appCtx.putPrefBoolean(PreferKey.mcpService, false)
+                stopSelf()
+            }
             "copyHostAddress" -> sendToClip(hostAddress)
             ACTION_RESTART -> upMcpServer()
             else -> upMcpServer()
@@ -135,6 +140,8 @@ class McpService : BaseService() {
             nextEngine.start(wait = false)
             engine = nextEngine
             isRun = true
+            // Keep user intent: crash/restart must not clear this.
+            appCtx.putPrefBoolean(PreferKey.mcpService, true)
             activeAddressKeys = addresses.mapNotNull { it.hostAddress }.sorted()
             updateAddresses(addresses, port)
         } catch (error: Exception) {
@@ -150,7 +157,7 @@ class McpService : BaseService() {
 
     private fun stopWithError(message: String) {
         isRun = false
-        appCtx.putPrefBoolean(PreferKey.mcpService, false)
+        // Do not persist mcpService=false — only user stop clears the preference.
         toastOnUi(message)
         stopSelf()
     }
