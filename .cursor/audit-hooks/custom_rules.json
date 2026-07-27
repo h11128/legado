@@ -1,0 +1,50 @@
+[
+  {
+    "id": "edit_target_too_long",
+    "disabled": true,
+    "source": "legado-no-300-exception",
+    "check": { "type": "always" }
+  },
+  {
+    "id": "write_too_large",
+    "disabled": true,
+    "source": "legado-no-300-exception",
+    "check": { "type": "always" }
+  },
+  {
+    "id": "file_too_long",
+    "disabled": true,
+    "source": "legado-no-300-exception",
+    "check": { "type": "always" }
+  },
+  {
+    "id": "auto_file_too_long",
+    "disabled": true,
+    "source": "legado-no-300-exception",
+    "check": { "type": "always" }
+  },
+  {
+    "id": "file_too_long_exp_control",
+    "disabled": true,
+    "source": "legado-no-300-exception",
+    "check": { "type": "always" }
+  },
+  {
+    "id": "file_too_long_exp_treatment",
+    "disabled": true,
+    "source": "legado-no-300-exception",
+    "check": { "type": "always" }
+  },
+  {
+    "id": "auto_file_too_long_exp_control",
+    "disabled": true,
+    "source": "legado-no-300-exception",
+    "check": { "type": "always" }
+  },
+  {
+    "id": "auto_file_too_long_exp_treatment",
+    "disabled": true,
+    "source": "legado-no-300-exception",
+    "check": { "type": "always" }
+  }
+]

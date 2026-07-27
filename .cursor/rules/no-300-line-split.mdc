@@ -1,0 +1,22 @@
+---
+description: File size / 300-line policy for this repo only.
+alwaysApply: true
+---
+
+# Legado File Size Policy
+
+**Only this repository (`legado`) opts out of the global 300-line code-file split rule.**
+
+- Prefer editing existing files in place even when they exceed 300 lines.
+- Do not refactor/split solely to satisfy a line-count limit.
+- Split only when it clearly improves ownership, reuse, or the user asks for it.
+
+## How the exception works
+
+Real exemption is the repo-local hook override:
+
+- `.cursor/audit-hooks/custom_rules.json` — disables `edit_target_too_long` / `write_too_large` / `file_too_long*` for this workspace only.
+
+This `.mdc` is agent guidance only; it does **not** replace the hook override.
+
+Repos without both the hook override and this marker still enforce the global 300-line limit. Other repos are unaffected.
