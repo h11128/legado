@@ -1062,6 +1062,8 @@
     <string name="less_than">Less than</string>
     <string name="check_source_config_summary">Check timeout: %1$ss\nCheck item:%2$s</string>
     <string name="check_source_repair_preset">Repair check preset</string>
+    <string name="check_webview_settle_max">WebView DOM settle max wait during check (seconds)</string>
+    <string name="check_webview_settle_max_invalid">Enter WebView settle wait between 1 and 15 seconds</string>
     <string name="record_debug_log">Record debug log</string>
     <string name="sub_dir">Sub dir</string>
     <string name="general">General</string>

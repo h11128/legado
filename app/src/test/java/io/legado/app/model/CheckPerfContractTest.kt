@@ -58,10 +58,24 @@ class CheckPerfContractTest {
 
         val webView = projectFile("app/src/main/java/io/legado/app/help/http/BackstageWebView.kt")
         assertTrue(webView.contains("DEFAULT_DELAY_MS = 900L"))
-        assertTrue(webView.contains("CHECK_DELAY_MS = 1500L"))
+        assertTrue(webView.contains("CHECK_DELAY_MS = 800L"))
+        assertTrue(webView.contains("CHECK_SETTLE_MAX_MS = 5000L"))
         assertTrue(webView.contains("checkSettleDelayMs()"))
+        assertTrue(webView.contains("checkSettleMaxMs()"))
+        assertTrue(webView.contains("DomSettleRunnable"))
+        assertTrue(webView.contains("HTML_LENGTH_JS"))
+        assertTrue(webView.contains("useDomSettle()"))
+        assertTrue(webView.contains("settleGeneration"))
+        assertTrue(webView.contains("startedAt == 0L"))
+        assertTrue(webView.contains("removeCallbacksAndMessages"))
+        assertTrue(webView.contains("MIN_STABLE_HTML_LEN"))
         assertTrue(webView.contains("if (Debug.isChecking) checkSettleDelayMs() else DEFAULT_DELAY_MS"))
         assertTrue(webView.contains("checkWebViewDelay"))
+        assertTrue(webView.contains("checkWebViewMaxWait"))
+
+        val checkConfig = projectFile("app/src/main/java/io/legado/app/ui/config/CheckSourceConfig.kt")
+        assertTrue(checkConfig.contains("checkWebviewSettleMax"))
+        assertTrue(checkConfig.contains("webViewSettleMaxMs"))
     }
 
     private fun projectFile(path: String): String {

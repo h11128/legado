@@ -6,6 +6,7 @@ import io.legado.app.constant.IntentAction
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.CacheManager
 import io.legado.app.help.IntentData
+import io.legado.app.help.http.BackstageWebView
 import io.legado.app.service.CheckSourceService
 import io.legado.app.utils.startService
 import splitties.init.appCtx
@@ -64,6 +65,12 @@ object CheckSource {
     var checkInfo = CacheManager.get("checkInfo")?.toBoolean() ?: true
     var checkCategory = CacheManager.get("checkCategory")?.toBoolean() ?: true
     var checkContent = CacheManager.get("checkContent")?.toBoolean() ?: true
+    /** Max WebView DOM-settle wait during check (ms). */
+    var webViewSettleMaxMs: Long
+        get() = BackstageWebView.checkSettleMaxMs()
+        set(value) {
+            BackstageWebView.setCheckSettleConfig(maxWaitMs = value)
+        }
     val summary get() = upSummary()
 
     fun start(context: Context, sources: List<BookSourcePart>) {
@@ -97,6 +104,7 @@ object CheckSource {
         CacheManager.put("checkInfo", checkInfo)
         CacheManager.put("checkCategory", checkCategory)
         CacheManager.put("checkContent", checkContent)
+        // webViewSettleMaxMs writes via BackstageWebView.setCheckSettleConfig
     }
 
     private fun upSummary(): String {

@@ -42,6 +42,7 @@ import okhttp3.Response
 import org.apache.commons.text.StringEscapeUtils
 import splitties.init.appCtx
 import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -67,6 +68,7 @@ class BackstageWebView(
     private val mHandler = Handler(Looper.getMainLooper())
     private var callback: Callback? = null
     private var pooledWebView: PooledWebView? = null
+    private val settleGeneration = AtomicInteger(0)
 
     suspend fun getStrResponse(): StrResponse = withTimeout(timeout ?: 60000L) {
         suspendCancellableCoroutine { block ->
@@ -149,10 +151,22 @@ class BackstageWebView(
         val settings = webView.settings
         settings.blockNetworkImage = true
         settings.userAgentString = requestConfig.userAgent
-        settings.cacheMode = if(cacheFirst) WebSettings.LOAD_CACHE_ELSE_NETWORK else WebSettings.LOAD_DEFAULT
-        tag?.takeIf { it.isNotBlank() }?.let { sourceTag ->
+        settings.cacheMode = if (cacheFirst) WebSettings.LOAD_CACHE_ELSE_NETWORK else WebSettings.LOAD_DEFAULT
+        val htmlClient = if (sourceRegex.isNullOrBlank() && overrideUrlRegex.isNullOrBlank()) {
+            HtmlWebViewClient().also { webView.webViewClient = it }
+        } else {
+            webView.webViewClient = SnifferWebClient()
+            null
+        }
+        val sourceTag = tag?.takeIf { it.isNotBlank() }
+        if (htmlClient != null || sourceTag != null) {
             webView.webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    htmlClient?.onLoadProgress(newProgress)
+                }
+
                 override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+                    if (sourceTag == null) return super.onConsoleMessage(consoleMessage)
                     val messageLevel = consoleMessage.messageLevel().name
                     val message = consoleMessage.message()
                     Debug.log(sourceTag, "$messageLevel: $message", true)
@@ -160,15 +174,12 @@ class BackstageWebView(
                 }
             }
         }
-        if (sourceRegex.isNullOrBlank() && overrideUrlRegex.isNullOrBlank()) {
-            webView.webViewClient = HtmlWebViewClient()
-        } else {
-            webView.webViewClient = SnifferWebClient()
-        }
         return webView
     }
 
     private fun destroy() {
+        mHandler.removeCallbacksAndMessages(null)
+        settleGeneration.incrementAndGet()
         pooledWebView?.let { WebViewPool.release(it) }
         pooledWebView = null
     }
@@ -193,8 +204,20 @@ class BackstageWebView(
 
     private inner class HtmlWebViewClient : WebViewClient() {
 
-        private var runnable: EvalJsRunnable? = null
+        private var evalRunnable: EvalJsRunnable? = null
+        private var settleRunnable: DomSettleRunnable? = null
         private var isRedirect = false
+        @Volatile
+        private var pageProgress = 0
+
+        fun onLoadProgress(progress: Int) {
+            pageProgress = progress
+        }
+
+        override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+            pageProgress = 0
+            super.onPageStarted(view, url, favicon)
+        }
 
         override fun shouldOverrideUrlLoading(
             view: WebView,
@@ -213,11 +236,21 @@ class BackstageWebView(
             result?.let {
                 view.evaluateJavascript("window.result = $nameCache.getFromMemory('webview_result')", null)
             }
-            val runnable = runnable ?: EvalJsRunnable(view, url, getJs()).also {
-                runnable = it
+            val eval = evalRunnable ?: EvalJsRunnable(view, url, getJs()).also {
+                evalRunnable = it
             }
-            mHandler.removeCallbacks(runnable)
-            mHandler.postDelayed(runnable, 100L + delayTime)
+            mHandler.removeCallbacks(eval)
+            val settle = settleRunnable ?: DomSettleRunnable(view, eval).also {
+                settleRunnable = it
+            }
+            mHandler.removeCallbacks(settle)
+            if (useDomSettle()) {
+                settle.reset(view)
+                mHandler.postDelayed(settle, 100L + delayTime)
+            } else {
+                settleGeneration.incrementAndGet()
+                mHandler.postDelayed(eval, 100L + delayTime)
+            }
         }
 
         @SuppressLint("WebViewClientOnReceivedSslError")
@@ -227,6 +260,72 @@ class BackstageWebView(
             error: SslError?
         ) {
             handler?.proceed()
+        }
+
+        private fun useDomSettle(): Boolean = Debug.isChecking
+
+        /**
+         * During bulk check: poll HTML length until stable (or max wait), then snapshot.
+         * Fixed delay alone returns skeleton HTML for JS-rendered TOC sites.
+         * Max wait starts when the first poll runs (after min delay), not when scheduled.
+         */
+        private inner class DomSettleRunnable(
+            webView: WebView,
+            private val eval: EvalJsRunnable,
+        ) : Runnable {
+            private var mWebView: WeakReference<WebView> = WeakReference(webView)
+            private var startedAt = 0L
+            private var lastLen = -1
+            private var stableHits = 0
+            private var generation = 0
+
+            fun reset(webView: WebView) {
+                mWebView = WeakReference(webView)
+                startedAt = 0L
+                lastLen = -1
+                stableHits = 0
+                pageProgress = 0
+                generation = settleGeneration.incrementAndGet()
+            }
+
+            override fun run() {
+                if (pooledWebView == null || generation != settleGeneration.get()) return
+                val view = mWebView.get() ?: return
+                if (startedAt == 0L) {
+                    startedAt = System.currentTimeMillis()
+                }
+                val maxWait = checkSettleMaxMs()
+                val elapsed = System.currentTimeMillis() - startedAt
+                if (elapsed >= maxWait) {
+                    if (generation == settleGeneration.get()) {
+                        mHandler.post(eval)
+                    }
+                    return
+                }
+                val genAtStart = generation
+                view.evaluateJavascript(HTML_LENGTH_JS) { raw ->
+                    if (pooledWebView == null) return@evaluateJavascript
+                    if (genAtStart != settleGeneration.get()) return@evaluateJavascript
+                    val nowElapsed = System.currentTimeMillis() - startedAt
+                    if (nowElapsed >= checkSettleMaxMs()) {
+                        mHandler.post(eval)
+                        return@evaluateJavascript
+                    }
+                    val len = raw?.trim()?.removeSurrounding("\"")?.toIntOrNull() ?: -1
+                    val ready = pageProgress >= 100 && len >= MIN_STABLE_HTML_LEN && len == lastLen
+                    if (ready) {
+                        stableHits++
+                    } else {
+                        stableHits = 0
+                        lastLen = len
+                    }
+                    if (stableHits >= STABLE_HITS_REQUIRED) {
+                        mHandler.post(eval)
+                    } else {
+                        mHandler.postDelayed(this, SETTLE_POLL_MS)
+                    }
+                }
+            }
         }
 
         private inner class EvalJsRunnable(
@@ -241,6 +340,7 @@ class BackstageWebView(
                 "$getInjectionString\n$mJavaScript"
             } else mJavaScript
             override fun run() {
+                if (pooledWebView == null) return
                 mWebView.get()?.evaluateJavascript(jsStr) {
                     if (pooledWebView != null) {
                         handleResult(it)
@@ -387,11 +487,22 @@ class BackstageWebView(
         /** Default settle before evaluating page HTML when no custom JS/delay. */
         const val DEFAULT_DELAY_MS = 900L
         /**
-         * Default settle during bulk source check (`Debug.isChecking`).
+         * Min wait after onPageFinished during bulk check before DOM-stability polls.
          * Override with CacheManager key `checkWebViewDelay` (200–8000ms).
          */
-        const val CHECK_DELAY_MS = 1500L
+        const val CHECK_DELAY_MS = 800L
+        /**
+         * Max wait for HTML length to stabilize during check (DOM settled).
+         * Override with CacheManager key `checkWebViewMaxWait` (1000–15000ms).
+         */
+        const val CHECK_SETTLE_MAX_MS = 5000L
         private const val CHECK_WEBVIEW_DELAY_KEY = "checkWebViewDelay"
+        private const val CHECK_WEBVIEW_MAX_WAIT_KEY = "checkWebViewMaxWait"
+        private const val HTML_LENGTH_JS =
+            "(function(){try{return (document.documentElement&&document.documentElement.innerHTML||'').length;}catch(e){return -1;}})()"
+        private const val SETTLE_POLL_MS = 300L
+        private const val STABLE_HITS_REQUIRED = 2
+        private const val MIN_STABLE_HTML_LEN = 200
         private val quoteRegex = "^\"|\"$".toRegex()
 
         fun checkSettleDelayMs(): Long {
@@ -402,8 +513,34 @@ class BackstageWebView(
             return value
         }
 
+        fun checkSettleMaxMs(): Long {
+            cachedCheckSettleMaxMs?.let { return it }
+            val value = (CacheManager.getLong(CHECK_WEBVIEW_MAX_WAIT_KEY) ?: CHECK_SETTLE_MAX_MS)
+                .coerceIn(1000L, 15_000L)
+            cachedCheckSettleMaxMs = value
+            return value
+        }
+
+        fun setCheckSettleConfig(minDelayMs: Long? = null, maxWaitMs: Long? = null) {
+            if (minDelayMs != null) {
+                CacheManager.put(CHECK_WEBVIEW_DELAY_KEY, minDelayMs.coerceIn(200L, 8000L))
+            }
+            if (maxWaitMs != null) {
+                CacheManager.put(CHECK_WEBVIEW_MAX_WAIT_KEY, maxWaitMs.coerceIn(1000L, 15_000L))
+            }
+            clearSettleCache()
+        }
+
+        fun clearSettleCache() {
+            cachedCheckSettleMs = null
+            cachedCheckSettleMaxMs = null
+        }
+
         @Volatile
         private var cachedCheckSettleMs: Long? = null
+
+        @Volatile
+        private var cachedCheckSettleMaxMs: Long? = null
     }
 
     abstract class Callback {

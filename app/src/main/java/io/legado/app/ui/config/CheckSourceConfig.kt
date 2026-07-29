@@ -83,6 +83,7 @@ class CheckSourceConfig : BaseDialogFragment(R.layout.dialog_check_source_config
             }
             fun applyRepairPreset() {
                 checkSourceTimeout.setText("30")
+                checkWebviewSettleMax.setText("5")
                 checkDomain.isChecked = false
                 checkSearch.isChecked = true
                 checkDiscovery.isChecked = false
@@ -97,6 +98,7 @@ class CheckSourceConfig : BaseDialogFragment(R.layout.dialog_check_source_config
         }
         CheckSource.run {
             binding.checkSourceTimeout.setText((timeout / 1000).toString())
+            binding.checkWebviewSettleMax.setText((webViewSettleMaxMs / 1000).toString())
             binding.wSourceComment.isChecked  = wSourceComment
             binding.checkDomain.isChecked = checkDomain
             binding.checkSearch.isChecked = checkSearch
@@ -127,6 +129,21 @@ class CheckSourceConfig : BaseDialogFragment(R.layout.dialog_check_source_config
                         return@onClick
                     }
                     else -> timeout = text.toLong() * 1000
+                }
+                val settleText = binding.checkWebviewSettleMax.text.toString()
+                when {
+                    settleText.isBlank() -> {
+                        toastOnUi(getString(R.string.check_webview_settle_max_invalid))
+                        return@onClick
+                    }
+                    else -> {
+                        val settleSec = settleText.toLongOrNull()
+                        if (settleSec == null || settleSec < 1L || settleSec > 15L) {
+                            toastOnUi(getString(R.string.check_webview_settle_max_invalid))
+                            return@onClick
+                        }
+                        webViewSettleMaxMs = settleSec * 1000L
+                    }
                 }
                 wSourceComment = binding.wSourceComment.isChecked
                 checkDomain = binding.checkDomain.isChecked

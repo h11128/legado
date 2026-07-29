@@ -1057,6 +1057,8 @@
     <string name="less_than">小于</string>
     <string name="check_source_config_summary">校验超时：%1$s秒\n校验项目：%2$s</string>
     <string name="check_source_repair_preset">修复校验预设</string>
+    <string name="check_webview_settle_max">校验时 WebView DOM 稳定最长等待（秒）</string>
+    <string name="check_webview_settle_max_invalid">请输入 1–15 秒的 WebView 稳定等待</string>
     <string name="record_debug_log">记录调试日志</string>
     <string name="sub_dir">子文件夹</string>
     <string name="general">全局</string>
