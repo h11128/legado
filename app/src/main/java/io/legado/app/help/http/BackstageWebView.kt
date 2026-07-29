@@ -209,6 +209,9 @@ class BackstageWebView(
         private var isRedirect = false
         @Volatile
         private var pageProgress = 0
+        /** Wall-clock settle deadline for the current main-document navigation. */
+        @Volatile
+        private var settleDeadlineAt = 0L
 
         fun onLoadProgress(progress: Int) {
             pageProgress = progress
@@ -216,6 +219,8 @@ class BackstageWebView(
 
         override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
             pageProgress = 0
+            settleDeadlineAt = System.currentTimeMillis() + checkSettleMaxMs()
+            settleRunnable?.onNavigationStarted()
             super.onPageStarted(view, url, favicon)
         }
 
@@ -233,6 +238,8 @@ class BackstageWebView(
 
         override fun onPageFinished(view: WebView, url: String) {
             setCookie(url)
+            // Progress callbacks often stop before finished; treat finished as load complete.
+            pageProgress = 100
             result?.let {
                 view.evaluateJavascript("window.result = $nameCache.getFromMemory('webview_result')", null)
             }
@@ -245,6 +252,9 @@ class BackstageWebView(
             }
             mHandler.removeCallbacks(settle)
             if (useDomSettle()) {
+                if (settleDeadlineAt == 0L) {
+                    settleDeadlineAt = System.currentTimeMillis() + checkSettleMaxMs()
+                }
                 settle.reset(view)
                 mHandler.postDelayed(settle, 100L + delayTime)
             } else {
@@ -265,38 +275,44 @@ class BackstageWebView(
         private fun useDomSettle(): Boolean = Debug.isChecking
 
         /**
-         * During bulk check: poll HTML length until stable (or max wait), then snapshot.
+         * During bulk check: poll HTML length until stable (or deadline), then snapshot.
          * Fixed delay alone returns skeleton HTML for JS-rendered TOC sites.
-         * Max wait starts when the first poll runs (after min delay), not when scheduled.
+         * Deadline is set on onPageStarted (wall clock for this navigation).
          */
         private inner class DomSettleRunnable(
             webView: WebView,
             private val eval: EvalJsRunnable,
         ) : Runnable {
             private var mWebView: WeakReference<WebView> = WeakReference(webView)
-            private var startedAt = 0L
             private var lastLen = -1
+            private var peakLen = 0
             private var stableHits = 0
             private var generation = 0
 
             fun reset(webView: WebView) {
                 mWebView = WeakReference(webView)
-                startedAt = 0L
                 lastLen = -1
                 stableHits = 0
-                pageProgress = 0
+                // Keep peakLen across repeated onPageFinished in the same navigation;
+                // onPageStarted refreshes settleDeadlineAt and we clear peak there.
                 generation = settleGeneration.incrementAndGet()
+            }
+
+            fun onNavigationStarted() {
+                lastLen = -1
+                peakLen = 0
+                stableHits = 0
+            }
+
+            private fun pastDeadline(): Boolean {
+                val deadline = settleDeadlineAt
+                return deadline > 0L && System.currentTimeMillis() >= deadline
             }
 
             override fun run() {
                 if (pooledWebView == null || generation != settleGeneration.get()) return
                 val view = mWebView.get() ?: return
-                if (startedAt == 0L) {
-                    startedAt = System.currentTimeMillis()
-                }
-                val maxWait = checkSettleMaxMs()
-                val elapsed = System.currentTimeMillis() - startedAt
-                if (elapsed >= maxWait) {
+                if (pastDeadline()) {
                     if (generation == settleGeneration.get()) {
                         mHandler.post(eval)
                     }
@@ -306,13 +322,18 @@ class BackstageWebView(
                 view.evaluateJavascript(HTML_LENGTH_JS) { raw ->
                     if (pooledWebView == null) return@evaluateJavascript
                     if (genAtStart != settleGeneration.get()) return@evaluateJavascript
-                    val nowElapsed = System.currentTimeMillis() - startedAt
-                    if (nowElapsed >= checkSettleMaxMs()) {
+                    if (pastDeadline()) {
                         mHandler.post(eval)
                         return@evaluateJavascript
                     }
                     val len = raw?.trim()?.removeSurrounding("\"")?.toIntOrNull() ?: -1
-                    val ready = pageProgress >= 100 && len >= MIN_STABLE_HTML_LEN && len == lastLen
+                    if (len > peakLen) peakLen = len
+                    // Skip tiny static skeletons: need a reasonably large DOM or prior growth.
+                    val substantial = peakLen >= MIN_STABLE_HTML_LEN * 2
+                    val ready = pageProgress >= 100 &&
+                        len >= MIN_STABLE_HTML_LEN &&
+                        len == lastLen &&
+                        substantial
                     if (ready) {
                         stableHits++
                     } else {
@@ -490,10 +511,11 @@ class BackstageWebView(
          * Min wait after onPageFinished during bulk check before DOM-stability polls.
          * Override with CacheManager key `checkWebViewDelay` (200–8000ms).
          */
-        const val CHECK_DELAY_MS = 800L
+        const val CHECK_DELAY_MS = 1000L
         /**
          * Max wait for HTML length to stabilize during check (DOM settled).
          * Override with CacheManager key `checkWebViewMaxWait` (1000–15000ms).
+         * Wall-clock deadline starts at onPageStarted for the current navigation.
          */
         const val CHECK_SETTLE_MAX_MS = 5000L
         private const val CHECK_WEBVIEW_DELAY_KEY = "checkWebViewDelay"
@@ -501,7 +523,7 @@ class BackstageWebView(
         private const val HTML_LENGTH_JS =
             "(function(){try{return (document.documentElement&&document.documentElement.innerHTML||'').length;}catch(e){return -1;}})()"
         private const val SETTLE_POLL_MS = 300L
-        private const val STABLE_HITS_REQUIRED = 2
+        private const val STABLE_HITS_REQUIRED = 3
         private const val MIN_STABLE_HTML_LEN = 200
         private val quoteRegex = "^\"|\"$".toRegex()
 
