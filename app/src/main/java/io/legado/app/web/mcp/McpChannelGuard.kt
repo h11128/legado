@@ -146,6 +146,7 @@ object McpChannelGuard {
             val stale = (debugBusy && (debugHeldMs ?: 0L) >= STALE_DEBUG_MS) ||
                 (checkRunning && (checkStallMs ?: 0L) >= STALE_CHECK_MS)
             val busy = isBusy()
+            val (hostThrottled, hostEwmaLow) = McpSourceCheckJob.antiBlockSnapshot()
             buildJsonObject {
                 put("ok", serviceRun && !stale)
                 put("serviceRun", serviceRun)
@@ -160,6 +161,26 @@ object McpChannelGuard {
                 if (checkStallMs != null) put("checkStallMs", checkStallMs) else put("checkStallMs", JsonNull)
                 put("pendingNetworkRestart", pendingNetworkRestart)
                 put("stale", stale)
+                if (hostThrottled != null) {
+                    put(
+                        "hostThrottled",
+                        buildJsonObject {
+                            hostThrottled.forEach { (host, tokens) -> put(host, tokens) }
+                        },
+                    )
+                } else {
+                    put("hostThrottled", JsonNull)
+                }
+                if (hostEwmaLow != null) {
+                    put(
+                        "hostEwmaLow",
+                        buildJsonObject {
+                            hostEwmaLow.forEach { (host, rate) -> put(host, rate) }
+                        },
+                    )
+                } else {
+                    put("hostEwmaLow", JsonNull)
+                }
             }.toString()
         } catch (t: Throwable) {
             buildJsonObject {

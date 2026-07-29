@@ -48,4 +48,14 @@ class CheckHostTokenBucket(
         b.tokens = min(maxTokensPerHost.toDouble(), b.tokens + elapsed * refillPerSecond)
         b.lastNanos = now
     }
+
+    /** Hosts with available tokens below [threshold] (for MCP progress snapshot). */
+    fun hostsWithLowTokens(threshold: Double = 1.0): Map<String, Double> {
+        return buckets.mapValues { (_, b) ->
+            synchronized(b) {
+                refill(b)
+                b.tokens
+            }
+        }.filterValues { it < threshold }
+    }
 }

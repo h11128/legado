@@ -75,6 +75,7 @@ class McpServiceContractTest {
                 "start_check_sources",
                 "get_check_progress",
                 "stop_check_sources",
+                "reset_mcp_channel",
                 "get_http_logs",
                 "get_http_log",
                 "set_http_log_recording",
@@ -125,7 +126,7 @@ class McpServiceContractTest {
         )
         assertTrue(runner.contains("object BookSourceCheckRunner"))
         assertTrue(runner.contains("CheckMode"))
-        assertTrue(runner.contains("firstOrNull()?.toBook()"))
+        assertTrue(runner.contains("take(MAX_SEARCH_DEEP_TRIES)"))
         assertTrue(runner.contains("getChapterListAwait"))
         val job = projectFile(
             "app/src/main/java/io/legado/app/web/mcp/McpSourceCheckJob.kt"
@@ -133,6 +134,8 @@ class McpServiceContractTest {
         assertTrue(job.contains("allUrls()") || job.contains("allEnabledUrls()"))
         assertTrue(job.contains("MAX_STORED_RESULTS"))
         assertTrue(job.contains("CheckAimdLimiter") || job.contains("CheckWorkStealingScheduler"))
+        assertTrue(job.contains("activeSettings"))
+        assertFalse(job.contains("applyOverrides"))
         assertFalse(Regex("""bookSourceDao\.all(?![A-Za-z])""").containsMatchIn(job))
         val service = projectFile(
             "app/src/main/java/io/legado/app/service/CheckSourceService.kt"
@@ -155,7 +158,7 @@ class McpServiceContractTest {
         assertTrue(api.contains("start_check_sources"))
         assertTrue(api.contains("get_check_progress"))
         assertTrue(api.contains("preserveEnabled"))
-        assertTrue(api.contains("11 个工具"))
+        assertTrue(api.contains("11 个工具") || api.contains("12 个工具"))
         assertTrue(updateLog.contains("**2026/07/22**"))
         assertTrue(updateLog.contains("原生 MCP 书源开发服务"))
         assertTrue(updateLog.contains("MCP 新增多线程批量校验"))

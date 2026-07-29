@@ -21,7 +21,7 @@ internal fun Server.registerMcpCheckTools() {
         description = "启动多线程批量书源校验（与 App「校验书源」同逻辑）。" +
             "后台执行；用 get_check_progress 查进度，stop_check_sources 取消。" +
             "与 debug_source / App 校验互斥。" +
-            "可选布尔覆盖 CheckSource 开关（缺省=App 当前配置；任务结束后恢复）。",
+            "可选布尔覆盖 CheckSource 开关（缺省=App 当前配置；仅作用于本次 MCP 批量校验，不改 App 全局设置）。",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 putJsonObject("urls") {

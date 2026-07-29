@@ -13,6 +13,48 @@ import splitties.init.appCtx
 object CheckSource {
     var keyword = "我的"
 
+    /** Job-local check toggles; defaults mirror [CheckSource] globals. */
+    data class Settings(
+        val checkDomain: Boolean,
+        val checkSearch: Boolean,
+        val checkDiscovery: Boolean,
+        val checkInfo: Boolean,
+        val checkCategory: Boolean,
+        val checkContent: Boolean,
+        val wSourceComment: Boolean,
+    ) {
+        companion object {
+            fun fromGlobals(): Settings = Settings(
+                checkDomain = CheckSource.checkDomain,
+                checkSearch = CheckSource.checkSearch,
+                checkDiscovery = CheckSource.checkDiscovery,
+                checkInfo = CheckSource.checkInfo,
+                checkCategory = CheckSource.checkCategory,
+                checkContent = CheckSource.checkContent,
+                wSourceComment = CheckSource.wSourceComment,
+            )
+
+            fun merge(
+                base: Settings = fromGlobals(),
+                checkDomain: Boolean? = null,
+                checkSearch: Boolean? = null,
+                checkDiscovery: Boolean? = null,
+                checkInfo: Boolean? = null,
+                checkCategory: Boolean? = null,
+                checkContent: Boolean? = null,
+                wSourceComment: Boolean? = null,
+            ): Settings = Settings(
+                checkDomain = checkDomain ?: base.checkDomain,
+                checkSearch = checkSearch ?: base.checkSearch,
+                checkDiscovery = checkDiscovery ?: base.checkDiscovery,
+                checkInfo = checkInfo ?: base.checkInfo,
+                checkCategory = checkCategory ?: base.checkCategory,
+                checkContent = checkContent ?: base.checkContent,
+                wSourceComment = wSourceComment ?: base.wSourceComment,
+            )
+        }
+    }
+
     //校验设置
     var timeout = CacheManager.getLong("checkSourceTimeout") ?: 180000L
     var wSourceComment = CacheManager.get("wSourceComment")?.toBoolean() ?: true

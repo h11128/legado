@@ -87,8 +87,8 @@ class BackstageWebView(
                         block.resumeWithException(error)
                 }
             }
-            if (javaScript == null && delayTime == 0L && !Debug.isChecking) {
-                delayTime = 900L
+            if (javaScript == null && delayTime == 0L) {
+                delayTime = if (Debug.isChecking) CHECK_DELAY_MS else DEFAULT_DELAY_MS
             }
             runOnUI {
                 try {
@@ -384,6 +384,10 @@ class BackstageWebView(
 
     companion object {
         const val JS = "document.documentElement.outerHTML"
+        /** Default settle before evaluating page HTML when no custom JS/delay. */
+        const val DEFAULT_DELAY_MS = 900L
+        /** Shorter settle during bulk source check (Debug.isChecking). */
+        const val CHECK_DELAY_MS = 500L
         private val quoteRegex = "^\"|\"$".toRegex()
     }
 

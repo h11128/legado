@@ -81,6 +81,19 @@ class CheckSourceConfig : BaseDialogFragment(R.layout.dialog_check_source_config
                     checkContent.isEnabled = true
                 }
             }
+            fun applyRepairPreset() {
+                checkSourceTimeout.setText("30")
+                checkDomain.isChecked = false
+                checkSearch.isChecked = true
+                checkDiscovery.isChecked = false
+                checkInfo.isChecked = true
+                checkInfo.isEnabled = true
+                checkCategory.isChecked = true
+                checkCategory.isEnabled = true
+                checkContent.isChecked = true
+                checkContent.isEnabled = true
+            }
+            tvRepairPreset.onClick { applyRepairPreset() }
         }
         CheckSource.run {
             binding.checkSourceTimeout.setText((timeout / 1000).toString())

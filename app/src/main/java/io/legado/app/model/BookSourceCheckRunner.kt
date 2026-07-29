@@ -29,6 +29,9 @@ import java.net.URI
  */
 object BookSourceCheckRunner {
 
+    private const val MAX_SEARCH_DEEP_TRIES = 3
+    private const val MAX_DISCOVERY_DEEP_TRIES = 2
+
     data class Outcome(
         val success: Boolean,
         val message: String,
@@ -48,12 +51,13 @@ object BookSourceCheckRunner {
         keyword: String = CheckSource.keyword,
         emptyTocMessage: String = "目录为空",
         checkMode: CheckMode = CheckMode.Default,
+        settings: CheckSource.Settings = CheckSource.Settings.fromGlobals(),
     ): Outcome {
         val startTime = System.currentTimeMillis()
         return withContext(checkMode) {
             kotlin.runCatching {
                 withTimeout(timeoutMs) {
-                    doCheckSource(source, keyword, emptyTocMessage, checkMode)
+                    doCheckSource(source, keyword, emptyTocMessage, checkMode, settings)
                 }
             }.fold(
                 onSuccess = {
@@ -67,10 +71,13 @@ object BookSourceCheckRunner {
                         is ScriptException, is WrappedException -> source.addGroup("js失效")
                         !is NoStackTraceException -> source.addGroup("网站失效")
                     }
-                    if (CheckSource.wSourceComment) {
+                    if (settings.wSourceComment) {
                         source.addErrorComment(error)
                     }
-                    val msg = error.localizedMessage ?: error.toString()
+                    val msg = when (error) {
+                        is TimeoutCancellationException -> "校验超时"
+                        else -> error.localizedMessage ?: error.toString()
+                    }
                     Debug.updateFinalMessage(source.bookSourceUrl, "校验失败:$msg")
                     Outcome(false, "校验失败:$msg")
                 },
@@ -85,19 +92,20 @@ object BookSourceCheckRunner {
         keyword: String,
         emptyTocMessage: String,
         checkMode: CheckMode,
+        settings: CheckSource.Settings,
     ) {
         Debug.startChecking(source)
         source.removeInvalidGroups()
-        if (CheckSource.wSourceComment) source.removeErrorComment()
-        ensureDomain(source)
+        if (settings.wSourceComment) source.removeErrorComment()
+        ensureDomain(source, settings)
         var searchDeepOk = false
-        if (CheckSource.checkSearch) {
-            searchDeepOk = runSearch(source, keyword, emptyTocMessage)
+        if (settings.checkSearch) {
+            searchDeepOk = runSearch(source, keyword, emptyTocMessage, settings)
         }
         val skipDiscovery =
-            checkMode.skipDiscoveryIfSearchOk && searchDeepOk && CheckSource.checkSearch
-        if (CheckSource.checkDiscovery && !source.exploreUrl.isNullOrBlank() && !skipDiscovery) {
-            runDiscovery(source, emptyTocMessage)
+            checkMode.skipDiscoveryIfSearchOk && searchDeepOk && settings.checkSearch
+        if (settings.checkDiscovery && !source.exploreUrl.isNullOrBlank() && !skipDiscovery) {
+            runDiscovery(source, emptyTocMessage, settings)
         } else if (skipDiscovery) {
             source.removeGroup("发现规则为空")
             source.removeGroup("发现失效")
@@ -108,8 +116,8 @@ object BookSourceCheckRunner {
         }
     }
 
-    private suspend fun ensureDomain(source: BookSource) {
-        if (!CheckSource.checkDomain) return
+    private suspend fun ensureDomain(source: BookSource, settings: CheckSource.Settings) {
+        if (!settings.checkDomain) return
         val endpoint = parseEndpoint(source.bookSourceUrl)
             ?: throw NoStackTraceException("源地址不是http链接")
         val (host, port) = endpoint
@@ -120,7 +128,6 @@ object BookSourceCheckRunner {
         val reachable = CheckHedgedProbe.hedged(
             primaryDelayMs = 350,
             primary = {
-                // Prefer cached/warm DNS then connect.
                 val cached = CheckDnsGuard.lookupCached(host)
                 if (cached != null) {
                     Socket().use { socket ->
@@ -147,6 +154,7 @@ object BookSourceCheckRunner {
         source: BookSource,
         keyword: String,
         emptyTocMessage: String,
+        settings: CheckSource.Settings,
     ): Boolean {
         val searchWord = source.getCheckKeyword(keyword)
         if (!(source.isJsSource() || !source.searchUrl.isNullOrBlank())) {
@@ -159,35 +167,64 @@ object BookSourceCheckRunner {
             source.addGroup("EWMA跳过")
             return false
         }
-        val firstBook = run {
-            val searchBooks = WebBook.searchBookAwait(source, searchWord)
-            searchBooks.firstOrNull()?.toBook()
-        }
-        if (firstBook == null) {
+        val searchBooks = WebBook.searchBookAwait(source, searchWord)
+        if (searchBooks.isEmpty()) {
             source.addGroup("搜索失效")
             return false
         }
         source.removeGroup("搜索失效")
-        return checkBook(firstBook, source, emptyTocMessage, true)
+        for (book in searchBooks.take(MAX_SEARCH_DEEP_TRIES).map { it.toBook() }) {
+            try {
+                if (checkBook(book, source, emptyTocMessage, true, settings)) {
+                    return true
+                }
+            } catch (e: Throwable) {
+                throw e
+            }
+            clearSearchDeepGroups(source)
+        }
+        return false
     }
 
-    private suspend fun runDiscovery(source: BookSource, emptyTocMessage: String) {
+    private suspend fun runDiscovery(
+        source: BookSource,
+        emptyTocMessage: String,
+        settings: CheckSource.Settings,
+    ) {
         val url = source.exploreKinds().firstOrNull { !it.url.isNullOrBlank() }?.url
         if (url.isNullOrBlank()) {
             source.addGroup("发现规则为空")
             return
         }
         source.removeGroup("发现规则为空")
-        val firstBook = run {
-            val exploreBooks = WebBook.exploreBookAwait(source, url)
-            exploreBooks.firstOrNull()?.toBook()
-        }
-        if (firstBook == null) {
+        val exploreBooks = WebBook.exploreBookAwait(source, url)
+        if (exploreBooks.isEmpty()) {
             source.addGroup("发现失效")
             return
         }
         source.removeGroup("发现失效")
-        checkBook(firstBook, source, emptyTocMessage, false)
+        for (book in exploreBooks.take(MAX_DISCOVERY_DEEP_TRIES).map { it.toBook() }) {
+            try {
+                if (checkBook(book, source, emptyTocMessage, false, settings)) {
+                    return
+                }
+            } catch (e: Throwable) {
+                throw e
+            }
+            clearDiscoveryDeepGroups(source)
+        }
+    }
+
+    private fun clearSearchDeepGroups(source: BookSource) {
+        source.removeGroup("搜索目录失效")
+        source.removeGroup("搜索正文失效")
+        source.removeGroup("搜索详情失效")
+    }
+
+    private fun clearDiscoveryDeepGroups(source: BookSource) {
+        source.removeGroup("发现目录失效")
+        source.removeGroup("发现正文失效")
+        source.removeGroup("发现详情失效")
     }
 
     /** @return true when deep path (info/toc/content as configured) succeeded */
@@ -196,21 +233,22 @@ object BookSourceCheckRunner {
         source: BookSource,
         emptyTocMessage: String,
         isSearchBook: Boolean,
+        settings: CheckSource.Settings,
     ): Boolean {
         var deepOk = true
         kotlin.runCatching {
-            if (!CheckSource.checkInfo) return@runCatching
+            if (!settings.checkInfo) return@runCatching
             if (book.tocUrl.isBlank()) {
                 WebBook.getBookInfoAwait(source, book)
             }
-            if (!CheckSource.checkCategory || source.bookSourceType == BookSourceType.file) {
+            if (!settings.checkCategory || source.bookSourceType == BookSourceType.file) {
                 return@runCatching
             }
             val chapterSelection = run {
                 val chapters = WebBook.getChapterListAwait(source, book).getOrThrow()
                 selectCheckSourceChapter(chapters = chapters, emptyMessage = emptyTocMessage)
             }
-            if (!CheckSource.checkContent) return@runCatching
+            if (!settings.checkContent) return@runCatching
             WebBook.getContentAwait(
                 bookSource = source,
                 book = book,
@@ -224,12 +262,21 @@ object BookSourceCheckRunner {
             when (it) {
                 is ContentEmptyException -> source.addGroup("${bookType}正文失效")
                 is TocEmptyException -> source.addGroup("${bookType}目录失效")
+                is NoStackTraceException -> {
+                    val detail = it.localizedMessage.orEmpty()
+                    if (detail.contains("下载链接为空")) {
+                        source.addGroup("${bookType}详情失效")
+                    } else {
+                        throw it
+                    }
+                }
                 else -> throw it
             }
         }.onSuccess {
             val bookType = if (isSearchBook) "搜索" else "发现"
             source.removeGroup("${bookType}目录失效")
             source.removeGroup("${bookType}正文失效")
+            source.removeGroup("${bookType}详情失效")
         }
         return deepOk
     }

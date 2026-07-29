@@ -1,6 +1,7 @@
 package io.legado.app.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -44,6 +45,8 @@ class CheckPerfContractTest {
         assertTrue(job.contains("CheckWorkStealingScheduler") || job.contains("AIMD"))
         assertTrue(job.contains("CheckAimdLimiter"))
         assertTrue(job.contains("MAX_STORED_RESULTS"))
+        assertTrue(job.contains("activeSettings"))
+        assertFalse(job.contains("applyOverrides"))
 
         val okhttp = projectFile("app/src/main/java/io/legado/app/help/http/OkHttpUtils.kt")
         assertTrue(okhttp.contains("maxBytes"))
@@ -54,7 +57,9 @@ class CheckPerfContractTest {
         assertTrue(writer.contains("runInTransaction"))
 
         val webView = projectFile("app/src/main/java/io/legado/app/help/http/BackstageWebView.kt")
-        assertTrue(webView.contains("!Debug.isChecking"))
+        assertTrue(webView.contains("DEFAULT_DELAY_MS = 900L"))
+        assertTrue(webView.contains("CHECK_DELAY_MS = 500L"))
+        assertTrue(webView.contains("if (Debug.isChecking) CHECK_DELAY_MS else DEFAULT_DELAY_MS"))
     }
 
     private fun projectFile(path: String): String {

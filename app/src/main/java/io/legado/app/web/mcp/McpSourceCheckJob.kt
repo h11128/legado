@@ -78,6 +78,8 @@ object McpSourceCheckJob {
         val resultTotal: Int,
         val aimdConcurrency: Int = 0,
         val checkFlags: CheckFlags? = null,
+        val hostThrottled: Map<String, Double>? = null,
+        val hostEwmaLow: Map<String, Double>? = null,
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -95,6 +97,8 @@ object McpSourceCheckJob {
     @Volatile private var error: String? = null
     @Volatile private var aimdConcurrency: Int = 0
     @Volatile private var activeFlags: CheckFlags? = null
+    @Volatile private var activeSettings: CheckSource.Settings? = null
+    @Volatile private var activeTokens: CheckHostTokenBucket? = null
 
     private val finished = AtomicInteger(0)
     private val success = AtomicInteger(0)
@@ -159,17 +163,17 @@ object McpSourceCheckJob {
         threadCount = (threadCountOverride ?: AppConfig.threadCount)
             .coerceIn(1, min(AppConst.MAX_THREAD, MAX_CHECK_POOL_THREADS))
         val timeoutMs = (timeoutMsOverride ?: CheckSource.timeout).coerceIn(5_000L, 600_000L)
-        val previousFlags = captureFlags()
-        applyOverrides(
-            checkDomainOverride = checkDomainOverride,
-            checkSearchOverride = checkSearchOverride,
-            checkDiscoveryOverride = checkDiscoveryOverride,
-            checkInfoOverride = checkInfoOverride,
-            checkCategoryOverride = checkCategoryOverride,
-            checkContentOverride = checkContentOverride,
-            wSourceCommentOverride = wSourceCommentOverride,
+        val jobSettings = CheckSource.Settings.merge(
+            checkDomain = checkDomainOverride,
+            checkSearch = checkSearchOverride,
+            checkDiscovery = checkDiscoveryOverride,
+            checkInfo = checkInfoOverride,
+            checkCategory = checkCategoryOverride,
+            checkContent = checkContentOverride,
+            wSourceComment = wSourceCommentOverride,
         )
-        activeFlags = captureFlags()
+        activeSettings = jobSettings
+        activeFlags = jobSettings.toCheckFlags()
         try {
             resetCounters(sourceUrls.size)
             CheckDnsGuard.clear()
@@ -180,6 +184,7 @@ object McpSourceCheckJob {
                 initial = (threadCount / 2).coerceAtLeast(1),
             )
             val tokens = CheckHostTokenBucket(maxTokensPerHost = 4, refillPerSecond = 4.0)
+            activeTokens = tokens
             val inFlight = AtomicInteger(0)
             aimdConcurrency = aimd.current()
             runCatching { dispatcher.close() }
@@ -225,8 +230,9 @@ object McpSourceCheckJob {
                 } catch (t: Throwable) {
                     error = t.localizedMessage ?: t.toString()
                 } finally {
-                    restoreFlags(previousFlags)
+                    activeSettings = null
                     activeFlags = null
+                    activeTokens = null
                     CheckSourceResultWriter.flush()
                     running = false
                     finishedAt = System.currentTimeMillis()
@@ -238,8 +244,9 @@ object McpSourceCheckJob {
                 }
             }
         } catch (t: Throwable) {
-            restoreFlags(previousFlags)
+            activeSettings = null
             activeFlags = null
+            activeTokens = null
             Debug.finishChecking()
             throw t
         }
@@ -298,46 +305,37 @@ object McpSourceCheckJob {
             resultTotal = resultTotal,
             aimdConcurrency = aimdConcurrency,
             checkFlags = activeFlags,
+            hostThrottled = if (running) {
+                activeTokens?.hostsWithLowTokens()?.takeIf { it.isNotEmpty() }
+            } else {
+                null
+            },
+            hostEwmaLow = if (running) {
+                CheckAlgoRuntime.ewma.hostsBelowRate().takeIf { it.isNotEmpty() }
+            } else {
+                null
+            },
         )
     }
 
-    private fun captureFlags(): CheckFlags = CheckFlags(
-        checkDomain = CheckSource.checkDomain,
-        checkSearch = CheckSource.checkSearch,
-        checkDiscovery = CheckSource.checkDiscovery,
-        checkInfo = CheckSource.checkInfo,
-        checkCategory = CheckSource.checkCategory,
-        checkContent = CheckSource.checkContent,
-        wSourceComment = CheckSource.wSourceComment,
+    fun antiBlockSnapshot(): Pair<Map<String, Double>?, Map<String, Double>?> {
+        if (!running) return null to null
+        val throttled = activeTokens?.hostsWithLowTokens()?.takeIf { it.isNotEmpty() }
+        val ewmaLow = CheckAlgoRuntime.ewma.hostsBelowRate().takeIf { it.isNotEmpty() }
+        return throttled to ewmaLow
+    }
+
+    private fun CheckSource.Settings.toCheckFlags() = CheckFlags(
+        checkDomain = checkDomain,
+        checkSearch = checkSearch,
+        checkDiscovery = checkDiscovery,
+        checkInfo = checkInfo,
+        checkCategory = checkCategory,
+        checkContent = checkContent,
+        wSourceComment = wSourceComment,
     )
 
-    private fun restoreFlags(flags: CheckFlags) {
-        CheckSource.checkDomain = flags.checkDomain
-        CheckSource.checkSearch = flags.checkSearch
-        CheckSource.checkDiscovery = flags.checkDiscovery
-        CheckSource.checkInfo = flags.checkInfo
-        CheckSource.checkCategory = flags.checkCategory
-        CheckSource.checkContent = flags.checkContent
-        CheckSource.wSourceComment = flags.wSourceComment
-    }
-
-    private fun applyOverrides(
-        checkDomainOverride: Boolean?,
-        checkSearchOverride: Boolean?,
-        checkDiscoveryOverride: Boolean?,
-        checkInfoOverride: Boolean?,
-        checkCategoryOverride: Boolean?,
-        checkContentOverride: Boolean?,
-        wSourceCommentOverride: Boolean?,
-    ) {
-        if (checkDomainOverride != null) CheckSource.checkDomain = checkDomainOverride
-        if (checkSearchOverride != null) CheckSource.checkSearch = checkSearchOverride
-        if (checkDiscoveryOverride != null) CheckSource.checkDiscovery = checkDiscoveryOverride
-        if (checkInfoOverride != null) CheckSource.checkInfo = checkInfoOverride
-        if (checkCategoryOverride != null) CheckSource.checkCategory = checkCategoryOverride
-        if (checkContentOverride != null) CheckSource.checkContent = checkContentOverride
-        if (wSourceCommentOverride != null) CheckSource.wSourceComment = wSourceCommentOverride
-    }
+    private fun captureFlags(): CheckFlags = CheckSource.Settings.fromGlobals().toCheckFlags()
 
     private fun markSkipped(url: String, name: String) {
         addResult(
@@ -363,11 +361,13 @@ object McpSourceCheckJob {
         aimd: CheckAimdLimiter,
     ): BookSourceCheckRunner.Outcome {
         val begin = System.currentTimeMillis()
+        val settings = activeSettings ?: CheckSource.Settings.fromGlobals()
         val outcome = BookSourceCheckRunner.checkSource(
             source = source,
             timeoutMs = timeoutMs,
             keyword = keyword,
             emptyTocMessage = appCtx.getString(R.string.chapter_list_empty),
+            settings = settings,
         )
         val duration = System.currentTimeMillis() - begin
         when {

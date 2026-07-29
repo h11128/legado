@@ -24,4 +24,9 @@ class CheckHostEwma(
     fun shouldDeepCheck(host: String, minRate: Double = 0.35): Boolean {
         return successRate(host) >= minRate
     }
+
+    /** Hosts with EWMA success below [maxRate] (for MCP anti-block snapshot). */
+    fun hostsBelowRate(maxRate: Double = 0.35): Map<String, Double> {
+        return rates.filterValues { it < maxRate }
+    }
 }
