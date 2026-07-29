@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
+import io.ktor.server.engine.connector
 import io.ktor.server.engine.embeddedServer
 import io.legado.app.R
 import io.legado.app.base.BaseService
@@ -16,15 +17,18 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.receiver.NetworkChangedListener
 import io.legado.app.utils.NetworkUtils
+import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.servicePendingIntent
-import io.legado.app.utils.startService
+import io.legado.app.utils.startForegroundServiceCompat
 import io.legado.app.utils.stopService
 import io.legado.app.utils.toastOnUi
 import io.legado.app.web.mcp.McpAccess
+import io.legado.app.web.mcp.McpChannelGuard
+import io.legado.app.web.mcp.McpNsdPublisher
 import io.legado.app.web.mcp.McpToolServer
 import io.legado.app.web.mcp.configureMcp
 import splitties.init.appCtx
@@ -39,18 +43,32 @@ class McpService : BaseService() {
         var hostAddress = ""
 
         private const val ACTION_RESTART = "restartMcpService"
+        private const val CONNECTION_IDLE_TIMEOUT_SEC = 180
 
+        /** Start as FGS so package-replaced / background restore is allowed on Oreo+. */
         fun start(context: Context) {
-            context.startService<McpService>()
+            val intent = Intent(context, McpService::class.java)
+            context.startForegroundServiceCompat(intent)
         }
 
         fun restart(context: Context) {
-            context.startService<McpService> { action = ACTION_RESTART }
+            val intent = Intent(context, McpService::class.java).apply {
+                action = ACTION_RESTART
+            }
+            context.startForegroundServiceCompat(intent)
+        }
+
+        /** Resume after process death / APK update when the user left MCP enabled. */
+        fun restoreIfEnabled(context: Context) {
+            if (isRun) return
+            if (!context.getPrefBoolean(PreferKey.mcpService, false)) return
+            start(context)
         }
 
         fun stop(context: Context) {
             // User-initiated stop: persist off so App does not auto-restart.
             appCtx.putPrefBoolean(PreferKey.mcpService, false)
+            McpWatchdog.cancel(context)
             context.stopService<McpService>()
         }
     }
@@ -60,6 +78,7 @@ class McpService : BaseService() {
     @Volatile
     private var destroyed = false
     private var notificationList = mutableListOf(appCtx.getString(R.string.service_starting))
+    private val nsdPublisher by lazy { McpNsdPublisher(this) }
     private val networkChangedListener by lazy {
         NetworkChangedListener(this, includeDetailedChanges = true)
     }
@@ -67,6 +86,14 @@ class McpService : BaseService() {
     override fun onCreate() {
         super.onCreate()
         destroyed = false
+        McpChannelGuard.onBecameIdle = {
+            synchronized(this) {
+                if (!destroyed && McpChannelGuard.pendingNetworkRestart && !McpChannelGuard.isBusy()) {
+                    McpChannelGuard.pendingNetworkRestart = false
+                    upMcpServer()
+                }
+            }
+        }
         networkChangedListener.onNetworkChanged = {
             synchronized(this) {
                 if (!destroyed) {
@@ -74,7 +101,14 @@ class McpService : BaseService() {
                     if (isRun) {
                         val addressKeys = addresses.mapNotNull { it.hostAddress }.sorted()
                         if (addressKeys != activeAddressKeys) {
-                            upMcpServer()
+                            // Do not stop CIO while debug/check holds the channel — that is a
+                            // primary hang mode from thread 59f4efb9 (mid-tool engine restart).
+                            if (McpChannelGuard.isBusy()) {
+                                McpChannelGuard.pendingNetworkRestart = true
+                                updateAddresses(addresses)
+                            } else {
+                                requestUpMcpServer()
+                            }
                         }
                     } else {
                         updateAddresses(addresses)
@@ -89,20 +123,35 @@ class McpService : BaseService() {
         when (intent?.action) {
             IntentAction.stop -> {
                 appCtx.putPrefBoolean(PreferKey.mcpService, false)
+                McpWatchdog.cancel(this)
                 stopSelf()
             }
             "copyHostAddress" -> sendToClip(hostAddress)
-            ACTION_RESTART -> upMcpServer()
-            else -> upMcpServer()
+            ACTION_RESTART -> requestUpMcpServer()
+            else -> requestUpMcpServer()
         }
         return super.onStartCommand(intent, flags, startId)
+    }
+
+    /**
+     * BaseService stops all services when the task is swiped away.
+     * Keep MCP alive while the user left PreferKey.mcpService enabled.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (getPrefBoolean(PreferKey.mcpService, false)) {
+            return
+        }
+        super.onTaskRemoved(rootIntent)
     }
 
     @Synchronized
     override fun onDestroy() {
         destroyed = true
         isRun = false
+        McpChannelGuard.onBecameIdle = null
+        McpChannelGuard.pendingNetworkRestart = false
         networkChangedListener.unRegister()
+        nsdPublisher.unpublish()
         stopEngine()
         hostAddress = ""
         activeAddressKeys = emptyList()
@@ -110,9 +159,25 @@ class McpService : BaseService() {
         super.onDestroy()
     }
 
+    /** Defer engine restart while debug/check holds the channel (thread 59f4efb9). */
+    @Synchronized
+    private fun requestUpMcpServer() {
+        if (destroyed) return
+        if (McpChannelGuard.isBusy()) {
+            McpChannelGuard.pendingNetworkRestart = true
+            return
+        }
+        upMcpServer()
+    }
+
     @Synchronized
     private fun upMcpServer() {
         if (destroyed) return
+        // Re-check under the same lock: a tool may have started since idle notify.
+        if (McpChannelGuard.isBusy()) {
+            McpChannelGuard.pendingNetworkRestart = true
+            return
+        }
         val token = AppConfig.jsSourceApiToken
         if (token.isNullOrBlank()) {
             stopWithError(getString(R.string.mcp_service_token_required))
@@ -120,12 +185,19 @@ class McpService : BaseService() {
         }
 
         stopEngine()
+        nsdPublisher.unpublish()
         val addresses = NetworkUtils.getLocalIPAddress()
         val port = getPort()
         val allowedHosts = McpAccess.allowedHosts(addresses)
         val allowedOrigins = McpAccess.allowedOrigins(allowedHosts)
         try {
-            val nextEngine = embeddedServer(CIO, port = port, host = "0.0.0.0") {
+            val nextEngine = embeddedServer(CIO, configure = {
+                connector {
+                    this.port = port
+                    this.host = "0.0.0.0"
+                }
+                connectionIdleTimeoutSeconds = CONNECTION_IDLE_TIMEOUT_SEC
+            }) {
                 configureMcp(
                     tokenProvider = { AppConfig.jsSourceApiToken },
                     unauthorizedMessage = {
@@ -133,6 +205,7 @@ class McpService : BaseService() {
                     },
                     allowedHosts = allowedHosts,
                     allowedOrigins = allowedOrigins,
+                    serviceRunProvider = { isRun },
                 ) {
                     McpToolServer.create()
                 }
@@ -144,6 +217,9 @@ class McpService : BaseService() {
             appCtx.putPrefBoolean(PreferKey.mcpService, true)
             activeAddressKeys = addresses.mapNotNull { it.hostAddress }.sorted()
             updateAddresses(addresses, port)
+            nsdPublisher.republish(port)
+            McpWatchdog.schedule(this)
+            McpChannelGuard.pendingNetworkRestart = false
         } catch (error: Exception) {
             error.printOnDebug()
             stopWithError(error.localizedMessage ?: getString(R.string.mcp_service_start_failed))
@@ -157,6 +233,7 @@ class McpService : BaseService() {
 
     private fun stopWithError(message: String) {
         isRun = false
+        nsdPublisher.unpublish()
         // Do not persist mcpService=false — only user stop clears the preference.
         toastOnUi(message)
         stopSelf()

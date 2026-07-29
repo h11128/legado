@@ -123,19 +123,59 @@ X-Legado-Token = 设置中配置的令牌
 }
 ```
 
-服务提供 11 个工具：`save_source`、`list_sources`、`get_source`、`delete_sources`、
+服务提供 12 个工具：`save_source`、`list_sources`、`get_source`、`delete_sources`、
 `debug_source`、`start_check_sources`、`get_check_progress`、`stop_check_sources`、
-`get_http_logs`、`get_http_log`、`set_http_log_recording`。
-书源写入、删除、调试、批量校验和日志开关均属于修改操作；
+`reset_mcp_channel`、`get_http_logs`、`get_http_log`、`set_http_log_recording`。
+另提供轻量健康检查：`GET /mcp/health`（同样需要 `X-Legado-Token`），返回
+`ok` / `serviceRun` / `debugBusy` / `checkRunning` / `stale` / `lastTool*` 等字段，
+供 PC 在 oneshot 前探测「进程活着但通道卡住」。
+书源写入、删除、调试、批量校验、通道重置和日志开关均属于修改操作；
 书源全文与已脱敏 HTTP 日志仍可能包含敏感业务数据，请只向可信客户端开放令牌。
-`debug_source` 为单通道逐步调试，输出不会脱敏；批量校验请用 `start_check_sources`
-（多线程，与 App「校验书源」同逻辑），再用 `get_check_progress` 分页取结果。
+`debug_source` 为单通道逐步调试，默认超时 **90s**（与 PC MCP 客户端对齐），输出不会脱敏；
+批量校验请用 `start_check_sources`（多线程，与 App「校验书源」同逻辑），再用
+`get_check_progress` 分页取结果（含 `lastProgressAt` / `checkFlags`）。
+`reset_mcp_channel` 仅用于紧急解锁长期占用的 debug/校验通道。
 大批量时建议电脑侧先 DNS 预检，再按 50–100 URL 分批调用，避免一次加载全库压垮手机堆。
 设备侧校验已启用目录采样、搜索成功跳过发现深检、按 host 分片、批量写库与 HTTP body 上限。
 `list_sources` 支持 `offset`/`limit` 分页（默认 100，最大 500），避免大库被截断。
 `save_source` 默认保留已有 `enabled` 与空分组回填；传入 `preserveEnabled=false` /
 `preserveGroup=false` 可覆盖启用状态或清空分组。
 MCP 开关在进程崩溃后会按用户偏好自启；仅用户关闭服务时才会持久为关闭。
+装包/开机走 `McpLifecycleReceiver`（`BOOT_COMPLETED` / `MY_PACKAGE_REPLACED`）；
+划掉任务在偏好开启时不杀 MCP；`McpWatchdog` 约每 3 分钟恢复服务并清理僵死通道。
+Wi‑Fi 地址变化时若 debug/校验正在进行，**推迟**重启 MCP 引擎，避免中途掐断工具调用
+（见 `docs/postmortem/2026-07-28-mcp-hang-59f4efb9.md`）。
+CIO `connectionIdleTimeoutSeconds=180`。手机 NSD 发布 `_legado-mcp._tcp`（TXT `path=/mcp`）。PC 用：
+
+```bash
+python scripts/mcp_discover.py          # 发现并写回 config/mcp_defaults.json
+```
+
+优先 zeroconf，其次 dns-sd，再回退 adb 读 wlan0。成功后写回 `mcp_defaults.json`，并同步 `~/.cursor/mcp.json` 的 `mcpServers.legado.url`。
+`mcp_client.ensure_session` 在连接失败时会自动 rediscover（repair 脚本无需用户手改 IP）。
+Cursor IDE 内置 MCP 客户端不走 Python：若工具仍超时，discover 写完配置后 **Reload MCP / 重开 agent 一次** 即可，不要手改 DHCP IP。
+勿死记 DHCP IP；SOT 仍是 `config/mcp_defaults.json`。
+
+`start_check_sources` 参数（与 App「校验书源」同逻辑；布尔开关缺省=App 当前配置，任务结束后恢复）：
+
+| 参数 | 类型 | 默认 / 修复波次建议 | 含义 |
+|------|------|---------------------|------|
+| `urls` | string[] | 全部书源 | 要校验的 `bookSourceUrl` |
+| `enabledOnly` | bool | true / **false** | 只校验启用源 |
+| `keyword` | string | App 配置 / **我的** | 搜索关键词 |
+| `threadCount` | int | App 设置 / **~8** | 手机侧并发线程 |
+| `timeoutMs` | int | App 超时 | 单源超时毫秒 |
+| `checkDomain` | bool | App / **false** | 探测域名可达 |
+| `checkSearch` | bool | App / **true** | 校验搜索 |
+| `checkDiscovery` | bool | App / **false** | 校验发现（默认不修发现） |
+| `checkInfo` | bool | App / **true** | 校验详情页 |
+| `checkCategory` | bool | App / **true** | 校验目录 |
+| `checkContent` | bool | App / **true** | 校验正文 |
+| `wSourceComment` | bool | App | 是否写入校验备注（可选） |
+
+`get_check_progress` 的 snapshot 含 `checkFlags`（进行中任务的实际开关快照）与
+`lastProgressAt`（上次有结果推进的时间，用于卡住检测）。
+PC 修复脚本通过 `scripts/repair_check.py` 的 `check_args()` 统一传上述默认值。
 
 #### 获取替换规则
 

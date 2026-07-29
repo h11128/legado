@@ -102,6 +102,15 @@ object Debug {
         return true
     }
 
+    /** Emergency unlock when MCP debug callback was left held after a hung tool call. */
+    @Synchronized
+    fun forceCancelDebug() {
+        debugSessionId++
+        tasks.clear()
+        debugSource = null
+        callback = null
+    }
+
     @Synchronized
     fun log(msg: String?) {
         log(debugSource, msg ?: "", true)

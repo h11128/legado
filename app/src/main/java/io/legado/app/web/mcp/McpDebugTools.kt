@@ -13,13 +13,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 
 private val debugScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-private val debugMutex = Mutex()
 
 internal fun Server.registerMcpDebugTools() {
     addTool(
@@ -32,27 +30,33 @@ internal fun Server.registerMcpDebugTools() {
                 put("key", stringProp("调试关键词或入口 URL"))
                 putJsonObject("timeoutSec") {
                     put("type", "integer")
-                    put("description", "超时秒数，默认 120，范围 10..600")
+                    put("description", "超时秒数，默认 90，范围 10..600")
                 }
             },
             required = listOf("url", "key"),
         ),
     ) { request ->
         try {
+            McpChannelGuard.noteTool("debug_source")
             val url = request.arguments.str("url")
                 ?: return@addTool err("参数 url 不能为空")
             val key = request.arguments.str("key")
                 ?: return@addTool err("参数 key 不能为空")
-            val timeoutSec = (request.arguments.int("timeoutSec") ?: 120).coerceIn(10, 600)
+            // Align with PC MCP client default (90s) so the phone releases the channel
+            // before / at the same time the client gives up.
+            val timeoutSec = (request.arguments.int("timeoutSec") ?: 90).coerceIn(10, 600)
             val source = appDb.bookSourceDao.getBookSource(url)
                 ?: return@addTool err("未找到书源，请检查书源地址")
-            if (!debugMutex.tryLock()) {
+            if (!McpChannelGuard.debugMutex.tryLock()) {
                 return@addTool err("调试通道占用中，请稍后重试")
             }
+            var acquired = false
             try {
                 if (Debug.callback != null || Debug.isChecking) {
                     return@addTool err("调试通道占用中，请稍后重试")
                 }
+                McpChannelGuard.noteDebugAcquired()
+                acquired = true
                 val (log, timedOut) = McpDebugCollector().collect(
                     debugScope,
                     source,
@@ -68,7 +72,12 @@ internal fun Server.registerMcpDebugTools() {
                     },
                 )
             } finally {
-                debugMutex.unlock()
+                if (acquired) {
+                    McpChannelGuard.noteDebugReleased()
+                }
+                if (McpChannelGuard.debugMutex.isLocked) {
+                    McpChannelGuard.debugMutex.unlock()
+                }
             }
         } catch (error: CancellationException) {
             throw error

@@ -51,6 +51,16 @@ object McpSourceCheckJob {
         val durationMs: Long,
     )
 
+    data class CheckFlags(
+        val checkDomain: Boolean,
+        val checkSearch: Boolean,
+        val checkDiscovery: Boolean,
+        val checkInfo: Boolean,
+        val checkCategory: Boolean,
+        val checkContent: Boolean,
+        val wSourceComment: Boolean,
+    )
+
     data class Snapshot(
         val running: Boolean,
         val total: Int,
@@ -61,11 +71,13 @@ object McpSourceCheckJob {
         val threadCount: Int,
         val startedAt: Long?,
         val finishedAt: Long?,
+        val lastProgressAt: Long? = null,
         val error: String?,
         val results: List<ResultItem>,
         val resultOffset: Int,
         val resultTotal: Int,
         val aimdConcurrency: Int = 0,
+        val checkFlags: CheckFlags? = null,
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -79,8 +91,10 @@ object McpSourceCheckJob {
     @Volatile private var threadCount = 1
     @Volatile private var startedAt: Long? = null
     @Volatile private var finishedAt: Long? = null
+    @Volatile private var lastProgressAt: Long? = null
     @Volatile private var error: String? = null
     @Volatile private var aimdConcurrency: Int = 0
+    @Volatile private var activeFlags: CheckFlags? = null
 
     private val finished = AtomicInteger(0)
     private val success = AtomicInteger(0)
@@ -88,12 +102,38 @@ object McpSourceCheckJob {
     private val resultsLock = Any()
     private val results = ArrayList<ResultItem>(256)
 
+    fun isActive(): Boolean = running || job?.isActive == true
+
+    fun lastProgressAtMs(): Long = lastProgressAt ?: startedAt ?: 0L
+
+    /**
+     * Non-suspending cancel for AlarmManager watchdog.
+     * Does NOT clear running / Debug.isChecking / channel-guard mirrors —
+     * those stay busy until the job [finally] block runs, so deferred MCP
+     * restarts cannot race a still-working pool.
+     */
+    fun requestStopFromWatchdog(): String {
+        val active = job
+        if (!running && active?.isActive != true) {
+            return "no check running"
+        }
+        active?.cancel()
+        return "check cancel requested (${finished.get()}/$total)"
+    }
+
     suspend fun start(
         urls: List<String>?,
         enabledOnly: Boolean,
         keywordOverride: String?,
         threadCountOverride: Int?,
         timeoutMsOverride: Long?,
+        checkDomainOverride: Boolean? = null,
+        checkSearchOverride: Boolean? = null,
+        checkDiscoveryOverride: Boolean? = null,
+        checkInfoOverride: Boolean? = null,
+        checkCategoryOverride: Boolean? = null,
+        checkContentOverride: Boolean? = null,
+        wSourceCommentOverride: Boolean? = null,
     ): String = mutex.withLock {
         if (running || job?.isActive == true) {
             return "已有 MCP 批量校验在进行中"
@@ -119,66 +159,96 @@ object McpSourceCheckJob {
         threadCount = (threadCountOverride ?: AppConfig.threadCount)
             .coerceIn(1, min(AppConst.MAX_THREAD, MAX_CHECK_POOL_THREADS))
         val timeoutMs = (timeoutMsOverride ?: CheckSource.timeout).coerceIn(5_000L, 600_000L)
-        resetCounters(sourceUrls.size)
-        CheckDnsGuard.clear()
-        CheckAlgoRuntime.resetEwma()
-        val aimd = CheckAimdLimiter(
-            maxConcurrency = threadCount,
-            minConcurrency = 1,
-            initial = (threadCount / 2).coerceAtLeast(1),
+        val previousFlags = captureFlags()
+        applyOverrides(
+            checkDomainOverride = checkDomainOverride,
+            checkSearchOverride = checkSearchOverride,
+            checkDiscoveryOverride = checkDiscoveryOverride,
+            checkInfoOverride = checkInfoOverride,
+            checkCategoryOverride = checkCategoryOverride,
+            checkContentOverride = checkContentOverride,
+            wSourceCommentOverride = wSourceCommentOverride,
         )
-        val tokens = CheckHostTokenBucket(maxTokensPerHost = 4, refillPerSecond = 4.0)
-        val inFlight = AtomicInteger(0)
-        aimdConcurrency = aimd.current()
-        runCatching { dispatcher.close() }
-        val myDispatcher = Executors.newFixedThreadPool(threadCount).asCoroutineDispatcher()
-        dispatcher = myDispatcher
-        configureCheckHttpLimits(
-            maxRequests = (threadCount * 2).coerceAtMost(256),
-            maxRequestsPerHost = CHECK_MAX_REQUESTS_PER_HOST,
-        )
-        running = true
-        startedAt = System.currentTimeMillis()
-        finishedAt = null
-        error = null
-        job = scope.launch(myDispatcher) {
-            try {
-                val scheduler = CheckWorkStealingScheduler<String>()
-                for (url in sourceUrls) {
-                    scheduler.offer(CheckAlgoRuntime.hostOf(url), url)
-                }
-                scheduler.run(workers = threadCount) { host, url ->
-                    CheckAlgoRuntime.acquireAimdSlot(aimd, inFlight)
-                    aimdConcurrency = aimd.current()
-                    try {
-                        tokens.acquire(host)
-                        val source = appDb.bookSourceDao.getBookSource(url)
-                        if (source == null || (enabledOnly && !source.enabled)) {
-                            markSkipped(url, source?.bookSourceName.orEmpty())
-                            return@run
-                        }
-                        val outcome = checkOne(source, timeoutMs, aimd)
-                        if (outcome.success) {
-                            CheckAlgoRuntime.bloom.put(url)
-                        }
-                        CheckAlgoRuntime.ewma.onResult(host, outcome.success)
-                    } finally {
-                        CheckAlgoRuntime.releaseAimdSlot(inFlight)
-                        aimdConcurrency = aimd.current()
+        activeFlags = captureFlags()
+        try {
+            resetCounters(sourceUrls.size)
+            CheckDnsGuard.clear()
+            CheckAlgoRuntime.resetEwma()
+            val aimd = CheckAimdLimiter(
+                maxConcurrency = threadCount,
+                minConcurrency = 1,
+                initial = (threadCount / 2).coerceAtLeast(1),
+            )
+            val tokens = CheckHostTokenBucket(maxTokensPerHost = 4, refillPerSecond = 4.0)
+            val inFlight = AtomicInteger(0)
+            aimdConcurrency = aimd.current()
+            runCatching { dispatcher.close() }
+            val myDispatcher = Executors.newFixedThreadPool(threadCount).asCoroutineDispatcher()
+            dispatcher = myDispatcher
+            configureCheckHttpLimits(
+                maxRequests = (threadCount * 2).coerceAtMost(256),
+                maxRequestsPerHost = CHECK_MAX_REQUESTS_PER_HOST,
+            )
+            running = true
+            val now = System.currentTimeMillis()
+            startedAt = now
+            lastProgressAt = now
+            finishedAt = null
+            error = null
+            McpChannelGuard.noteCheckStarted(sourceUrls.size)
+            job = scope.launch(myDispatcher) {
+                try {
+                    val scheduler = CheckWorkStealingScheduler<String>()
+                    for (url in sourceUrls) {
+                        scheduler.offer(CheckAlgoRuntime.hostOf(url), url)
                     }
+                    scheduler.run(workers = threadCount) { host, url ->
+                        CheckAlgoRuntime.acquireAimdSlot(aimd, inFlight)
+                        aimdConcurrency = aimd.current()
+                        try {
+                            tokens.acquire(host)
+                            val source = appDb.bookSourceDao.getBookSource(url)
+                            if (source == null || (enabledOnly && !source.enabled)) {
+                                markSkipped(url, source?.bookSourceName.orEmpty())
+                                return@run
+                            }
+                            val outcome = checkOne(source, timeoutMs, aimd)
+                            if (outcome.success) {
+                                CheckAlgoRuntime.bloom.put(url)
+                            }
+                            CheckAlgoRuntime.ewma.onResult(host, outcome.success)
+                        } finally {
+                            CheckAlgoRuntime.releaseAimdSlot(inFlight)
+                            aimdConcurrency = aimd.current()
+                        }
+                    }
+                } catch (t: Throwable) {
+                    error = t.localizedMessage ?: t.toString()
+                } finally {
+                    restoreFlags(previousFlags)
+                    activeFlags = null
+                    CheckSourceResultWriter.flush()
+                    running = false
+                    finishedAt = System.currentTimeMillis()
+                    lastProgressAt = finishedAt
+                    Debug.finishChecking()
+                    restoreDefaultHttpLimits()
+                    runCatching { myDispatcher.close() }
+                    McpChannelGuard.noteCheckFinished(finished.get(), total)
                 }
-            } catch (t: Throwable) {
-                error = t.localizedMessage ?: t.toString()
-            } finally {
-                CheckSourceResultWriter.flush()
-                running = false
-                finishedAt = System.currentTimeMillis()
-                Debug.finishChecking()
-                restoreDefaultHttpLimits()
-                runCatching { myDispatcher.close() }
             }
+        } catch (t: Throwable) {
+            restoreFlags(previousFlags)
+            activeFlags = null
+            Debug.finishChecking()
+            throw t
         }
-        return "已开始校验 ${sourceUrls.size} 个书源（线程=$threadCount, keyword=$keyword, AIMD）"
+        val flags = activeFlags ?: captureFlags()
+        return "已开始校验 ${sourceUrls.size} 个书源（线程=$threadCount, keyword=$keyword, " +
+            "domain=${flags.checkDomain}, search=${flags.checkSearch}, " +
+            "discovery=${flags.checkDiscovery}, info=${flags.checkInfo}, " +
+            "category=${flags.checkCategory}, content=${flags.checkContent}, " +
+            "wComment=${flags.wSourceComment}, AIMD）"
     }
 
     suspend fun stop(): String = mutex.withLock {
@@ -221,12 +291,52 @@ object McpSourceCheckJob {
             threadCount = threadCount,
             startedAt = startedAt,
             finishedAt = finishedAt,
+            lastProgressAt = lastProgressAt,
             error = error,
             results = page,
             resultOffset = offset,
             resultTotal = resultTotal,
             aimdConcurrency = aimdConcurrency,
+            checkFlags = activeFlags,
         )
+    }
+
+    private fun captureFlags(): CheckFlags = CheckFlags(
+        checkDomain = CheckSource.checkDomain,
+        checkSearch = CheckSource.checkSearch,
+        checkDiscovery = CheckSource.checkDiscovery,
+        checkInfo = CheckSource.checkInfo,
+        checkCategory = CheckSource.checkCategory,
+        checkContent = CheckSource.checkContent,
+        wSourceComment = CheckSource.wSourceComment,
+    )
+
+    private fun restoreFlags(flags: CheckFlags) {
+        CheckSource.checkDomain = flags.checkDomain
+        CheckSource.checkSearch = flags.checkSearch
+        CheckSource.checkDiscovery = flags.checkDiscovery
+        CheckSource.checkInfo = flags.checkInfo
+        CheckSource.checkCategory = flags.checkCategory
+        CheckSource.checkContent = flags.checkContent
+        CheckSource.wSourceComment = flags.wSourceComment
+    }
+
+    private fun applyOverrides(
+        checkDomainOverride: Boolean?,
+        checkSearchOverride: Boolean?,
+        checkDiscoveryOverride: Boolean?,
+        checkInfoOverride: Boolean?,
+        checkCategoryOverride: Boolean?,
+        checkContentOverride: Boolean?,
+        wSourceCommentOverride: Boolean?,
+    ) {
+        if (checkDomainOverride != null) CheckSource.checkDomain = checkDomainOverride
+        if (checkSearchOverride != null) CheckSource.checkSearch = checkSearchOverride
+        if (checkDiscoveryOverride != null) CheckSource.checkDiscovery = checkDiscoveryOverride
+        if (checkInfoOverride != null) CheckSource.checkInfo = checkInfoOverride
+        if (checkCategoryOverride != null) CheckSource.checkCategory = checkCategoryOverride
+        if (checkContentOverride != null) CheckSource.checkContent = checkContentOverride
+        if (wSourceCommentOverride != null) CheckSource.wSourceComment = wSourceCommentOverride
     }
 
     private fun markSkipped(url: String, name: String) {
@@ -243,6 +353,8 @@ object McpSourceCheckJob {
         )
         finished.incrementAndGet()
         failed.incrementAndGet()
+        lastProgressAt = System.currentTimeMillis()
+        McpChannelGuard.noteCheckProgress(finished.get(), total)
     }
 
     private suspend fun checkOne(
@@ -281,6 +393,8 @@ object McpSourceCheckJob {
         Debug.clearSourceCheckState(source.bookSourceUrl)
         finished.incrementAndGet()
         if (outcome.success) success.incrementAndGet() else failed.incrementAndGet()
+        lastProgressAt = System.currentTimeMillis()
+        McpChannelGuard.noteCheckProgress(finished.get(), total)
         return outcome
     }
 

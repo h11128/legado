@@ -81,6 +81,10 @@ class App : Application() {
         registerActivityLifecycleCallbacks(LifecycleHelp)
         defaultSharedPreferences.registerOnSharedPreferenceChangeListener(AppConfig)
         initRhino()
+        // Notification channel + MCP restore must run before heavy async work so
+        // MY_PACKAGE_REPLACED / cold start can bring MCP up without opening UI.
+        createNotificationChannels()
+        McpService.restoreIfEnabled(this)
         Coroutine.async {
             LogUtils.init(this@App)
             LogUtils.d("App", "onCreate")
@@ -89,7 +93,6 @@ class App : Application() {
             if (AppConfig.isCronet) {
                 Cronet.preDownload()
             }
-            createNotificationChannels()
             LiveEventBus.config()
                 .lifecycleObserverAlwaysActive(true)
                 .autoClear(false)
@@ -130,10 +133,8 @@ class App : Application() {
             if (AppConfig.syncBookProgress) {
                 AppWebDav.downloadAllBookProgress()
             }
-            // Restore MCP after process death if the user left it enabled.
-            if (getPrefBoolean(PreferKey.mcpService, false)) {
-                McpService.start(this@App)
-            }
+            // Prefer already restored above; retry if early start raced before channel ready.
+            McpService.restoreIfEnabled(this@App)
         }
     }
 

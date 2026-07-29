@@ -5,6 +5,7 @@ import java.net.InetAddress
 object McpAccess {
 
     const val PATH = "/mcp"
+    const val HEALTH_PATH = "/mcp/health"
     const val TOKEN_HEADER = "X-Legado-Token"
 
     fun allowedHosts(addresses: List<InetAddress>): List<String> = buildList {

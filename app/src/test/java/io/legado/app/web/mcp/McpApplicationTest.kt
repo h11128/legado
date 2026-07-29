@@ -3,6 +3,7 @@ package io.legado.app.web.mcp
 import io.ktor.client.request.header
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -14,6 +15,7 @@ import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class McpApplicationTest {
@@ -94,12 +96,37 @@ class McpApplicationTest {
         assertEquals(HttpStatusCode.Forbidden, hostileOrigin.status)
     }
 
-    private fun io.ktor.server.application.Application.testMcpApplication() {
+    @Test
+    fun healthEndpointRequiresTokenAndReturnsJson() = testApplication {
+        application { testMcpApplication(serviceRun = true) }
+
+        val unauthorized = client.request(McpAccess.HEALTH_PATH) {
+            method = HttpMethod.Get
+            header(HttpHeaders.Host, "localhost")
+        }
+        assertEquals(HttpStatusCode.Unauthorized, unauthorized.status)
+
+        val ok = client.request(McpAccess.HEALTH_PATH) {
+            method = HttpMethod.Get
+            header(HttpHeaders.Host, "localhost")
+            header(McpAccess.TOKEN_HEADER, "secret")
+        }
+        assertEquals(HttpStatusCode.OK, ok.status)
+        val body = ok.bodyAsText()
+        assertTrue(body.contains("\"serviceRun\":true"))
+        assertTrue(body.contains("\"stale\":"))
+        assertEquals("no-store", ok.headers[HttpHeaders.CacheControl])
+    }
+
+    private fun io.ktor.server.application.Application.testMcpApplication(
+        serviceRun: Boolean = false,
+    ) {
         configureMcp(
             tokenProvider = { "secret" },
             unauthorizedMessage = { "unauthorized" },
             allowedHosts = listOf("localhost"),
             allowedOrigins = listOf("http://localhost"),
+            serviceRunProvider = { serviceRun },
         ) {
             Server(
                 serverInfo = Implementation(name = "test", version = "1"),

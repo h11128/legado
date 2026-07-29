@@ -46,5 +46,17 @@
     "disabled": true,
     "source": "legado-no-300-exception",
     "check": { "type": "always" }
+  },
+  {
+    "id": "legado_no_adhoc_inspect_scripts",
+    "events": ["afterFileEdit"],
+    "severity": "warn",
+    "source": "book-source-repair-discipline",
+    "check": {
+      "type": "regex",
+      "field": "file_path",
+      "pattern": "\\.local-scripts[/\\\\]inspect_.*\\.py$"
+    },
+    "message": "Prefer legadoSkill/scripts/repair_source.py fetch over new inspect_*.py (book-source-repair-discipline)."
   }
 ]
