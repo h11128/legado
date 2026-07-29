@@ -26,6 +26,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlin.coroutines.CoroutineContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 @Suppress("MemberVisibilityCanBePrivate")
 object WebBook {
@@ -524,13 +525,47 @@ object WebBook {
      * 检测重定向
      */
     private fun checkRedirect(bookSource: BookSource, response: StrResponse) {
-        response.raw.priorResponse?.let {
-            if (it.isRedirect) {
-                Debug.log(bookSource.bookSourceUrl, "≡检测到重定向(${it.code})")
-                Debug.log(bookSource.bookSourceUrl, "┌重定向后地址")
-                Debug.log(bookSource.bookSourceUrl, "└${response.url}")
+        val prior = response.raw.priorResponse ?: return
+        if (!prior.isRedirect) return
+
+        val redirectCode = prior.code
+        val finalUrl = response.url
+        Debug.log(bookSource.bookSourceUrl, "≡检测到重定向($redirectCode) → $finalUrl")
+
+        if (redirectCode == 301 || redirectCode == 302) {
+            val requestHost = prior.request.url.host
+            val finalHost = finalUrl.toHttpUrlOrNull()?.host
+            if (finalHost != null && hostsDifferSignificantly(requestHost, finalHost)) {
+                Debug.log(bookSource.bookSourceUrl, "◇提示: 重定向跨域 $requestHost → $finalHost")
             }
         }
+
+        if (looksLikeDesktopViewerRedirect(finalUrl, response.body)) {
+            Debug.log(
+                bookSource.bookSourceUrl,
+                "◇提示: 重定向到 data:/桌面阅读器类页面，手机规则可能读不到正文",
+            )
+        }
+    }
+
+    private fun hostsDifferSignificantly(requestHost: String, finalHost: String): Boolean {
+        if (requestHost.equals(finalHost, ignoreCase = true)) return false
+        return !normalizeRedirectHost(requestHost)
+            .equals(normalizeRedirectHost(finalHost), ignoreCase = true)
+    }
+
+    private fun normalizeRedirectHost(host: String): String {
+        return host.lowercase()
+            .removePrefix("www.")
+            .removePrefix("m.")
+            .removePrefix("mobile.")
+    }
+
+    private fun looksLikeDesktopViewerRedirect(finalUrl: String, body: String?): Boolean {
+        if (finalUrl.startsWith("data:", ignoreCase = true)) return true
+        val trimmed = body?.trimStart() ?: return false
+        if (trimmed.startsWith("data:", ignoreCase = true)) return true
+        return body.contains("ComicView")
     }
 
 }
