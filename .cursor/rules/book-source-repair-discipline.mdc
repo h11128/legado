@@ -66,6 +66,25 @@ Standing rules for any 书源 fix / validate / bulk-check work in this workspace
     Prefer `source-cli serial …` (default `--url-timeout-s 120`, subprocess kill).
 20. **Stale MCP locks:** `source-cli check channel` clears dead/aged locks (repair ≤15m).
     Hung-but-alive holders: `--force-clear` only after confirming the repair PID is stuck.
+21. **Never end a turn mid-URL.** Deep-diagnose stall modes (banned):
+    - Background a `diagnose`/debug and **stop the turn** without close-out or a written next step.
+    - Keep probing login/AES/JWT/广告劫持 after evidence is enough → **seal ≤2 min**, move on.
+    - Block the whole loop on `source-cli diagnose` MCP `10060` / transport fail — fall back to
+      **PC probe + MCP `debug_source`/`start_check_sources`**, or `skip:mcp_transient` + next URL.
+    - Soft warn still **4 min**; hard stop **5 min** per URL. Prefer finishing N closes over
+      polishing one hard auth source.
+22. **Structural anti-stall (enforced, not prose):**
+    - `diagnose` / `repair oneshot` **claim** `temp/full_fix/deep_active.json`.
+    - `source-cli progress next` / `closeout pending` **DENY** while deep_active is unsealed.
+    - `retro append --status fixed|skip|fail` **seals** deep_active.
+    - Escape: `source-cli closeout release --url … --status skip` (then still write honest ledger/retro).
+    - `ledger append` **rejects** hedged results (`校验成功或见上` / `见上` / ambiguous 成功).
+    - Goal counter ignores hedged 「校验成功*」 rows.
+    - HookRules `legado_hedged_ledger_success` / `legado_l0_only_live_repair` (deny) and
+      `legado_serial_long_await` (ask) live in `.cursor/audit-hooks/custom_rules.json`.
+    - Full matrix + how to verify a rule actually fires: `docs/deep-diagnose-anti-stall.md`.
+23. **Honest verify ledger only:** after migrate/verify, write `校验成功` **iff** `verify_ok:true`;
+    else `fail:…` / `skip:…`. Never copy shell `tee` into a fake success line.
 
 ## Types (do not confuse)
 
