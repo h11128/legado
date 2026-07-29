@@ -293,6 +293,7 @@ class BackstageWebView(
                 mWebView = WeakReference(webView)
                 lastLen = -1
                 stableHits = 0
+                // Do NOT clear pageProgress — onPageFinished already marks load complete.
                 // Keep peakLen across repeated onPageFinished in the same navigation;
                 // onPageStarted refreshes settleDeadlineAt and we clear peak there.
                 generation = settleGeneration.incrementAndGet()
