@@ -1,5 +1,6 @@
 package io.legado.app.model.webBook
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -15,6 +16,9 @@ class WebBookRedirectLogContractTest {
         )
         assertTrue(source.contains("looksLikeDesktopViewerRedirect"))
         assertTrue(source.contains("ComicView"))
+        assertTrue(source.contains("DesktopViewerHint"))
+        assertTrue(source.contains("consumeDesktopViewerRedirectHint"))
+        assertFalse(source.contains("ThreadLocal"))
     }
 
     private fun projectFile(path: String): String {

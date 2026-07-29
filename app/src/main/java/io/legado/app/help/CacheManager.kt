@@ -124,7 +124,11 @@ object CacheManager {
 
     fun getLong(key: String): Long? {
         getFromMemory(key)?.let {
-            if (it is Long) return it
+            when (it) {
+                is Long -> return it
+                is Number -> return it.toLong()
+                is String -> return it.toLongOrNull()
+            }
         }
         return get(key, true)?.toLongOrNull()
     }

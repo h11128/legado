@@ -54,7 +54,7 @@ object BookSourceCheckRunner {
         settings: CheckSource.Settings = CheckSource.Settings.fromGlobals(),
     ): Outcome {
         val startTime = System.currentTimeMillis()
-        return withContext(checkMode) {
+        return withContext(checkMode + DesktopViewerHint()) {
             kotlin.runCatching {
                 withTimeout(timeoutMs) {
                     doCheckSource(source, keyword, emptyTocMessage, checkMode, settings)
@@ -217,12 +217,14 @@ object BookSourceCheckRunner {
         source.removeGroup("搜索目录失效")
         source.removeGroup("搜索正文失效")
         source.removeGroup("搜索详情失效")
+        source.removeGroup("搜索桌面阅读器失效")
     }
 
     private fun clearDiscoveryDeepGroups(source: BookSource) {
         source.removeGroup("发现目录失效")
         source.removeGroup("发现正文失效")
         source.removeGroup("发现详情失效")
+        source.removeGroup("发现桌面阅读器失效")
     }
 
     /** @return true when deep path (info/toc/content as configured) succeeded */
@@ -233,8 +235,9 @@ object BookSourceCheckRunner {
         isSearchBook: Boolean,
         settings: CheckSource.Settings,
     ): Boolean {
-        var deepOk = true
-        kotlin.runCatching {
+        val bookType = if (isSearchBook) "搜索" else "发现"
+        WebBook.clearDesktopViewerRedirectHintAwait()
+        val result = kotlin.runCatching {
             if (!settings.checkInfo) return@runCatching
             if (book.tocUrl.isBlank()) {
                 WebBook.getBookInfoAwait(source, book)
@@ -254,29 +257,42 @@ object BookSourceCheckRunner {
                 nextChapterUrl = chapterSelection.nextChapterUrl,
                 needSave = false,
             )
-        }.onFailure {
-            deepOk = false
-            val bookType = if (isSearchBook) "搜索" else "发现"
-            when (it) {
-                is ContentEmptyException -> source.addGroup("${bookType}正文失效")
-                is TocEmptyException -> source.addGroup("${bookType}目录失效")
-                is NoStackTraceException -> {
-                    val detail = it.localizedMessage.orEmpty()
-                    if (detail.contains("下载链接为空")) {
-                        source.addGroup("${bookType}详情失效")
-                    } else {
-                        throw it
-                    }
-                }
-                else -> throw it
-            }
-        }.onSuccess {
-            val bookType = if (isSearchBook) "搜索" else "发现"
-            source.removeGroup("${bookType}目录失效")
-            source.removeGroup("${bookType}正文失效")
-            source.removeGroup("${bookType}详情失效")
         }
-        return deepOk
+        val viewerHint = WebBook.consumeDesktopViewerRedirectHint()
+        return result.fold(
+            onSuccess = {
+                source.removeGroup("${bookType}目录失效")
+                source.removeGroup("${bookType}正文失效")
+                source.removeGroup("${bookType}详情失效")
+                source.removeGroup("${bookType}桌面阅读器失效")
+                true
+            },
+            onFailure = { error ->
+                when (error) {
+                    is ContentEmptyException -> {
+                        source.addGroup("${bookType}正文失效")
+                        if (viewerHint) source.addGroup("${bookType}桌面阅读器失效")
+                        false
+                    }
+                    is TocEmptyException -> {
+                        source.addGroup("${bookType}目录失效")
+                        if (viewerHint) source.addGroup("${bookType}桌面阅读器失效")
+                        false
+                    }
+                    is NoStackTraceException -> {
+                        val detail = error.localizedMessage.orEmpty()
+                        if (detail.contains("下载链接为空")) {
+                            source.addGroup("${bookType}详情失效")
+                            if (viewerHint) source.addGroup("${bookType}桌面阅读器失效")
+                            false
+                        } else {
+                            throw error
+                        }
+                    }
+                    else -> throw error
+                }
+            },
+        )
     }
 
     private fun warmDns(host: String) {

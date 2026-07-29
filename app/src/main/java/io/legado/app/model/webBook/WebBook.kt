@@ -13,6 +13,7 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.StrResponse
 import io.legado.app.help.source.getBookType
 import io.legado.app.model.Debug
+import io.legado.app.model.DesktopViewerHint
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
@@ -521,10 +522,22 @@ object WebBook {
         }
     }
 
+    suspend fun clearDesktopViewerRedirectHintAwait() {
+        currentCoroutineContext()[DesktopViewerHint]?.hit = false
+    }
+
+    /** Returns and clears the per-check desktop-viewer redirect hint. */
+    suspend fun consumeDesktopViewerRedirectHint(): Boolean {
+        val hint = currentCoroutineContext()[DesktopViewerHint] ?: return false
+        val hit = hint.hit
+        hint.hit = false
+        return hit
+    }
+
     /**
      * 检测重定向
      */
-    private fun checkRedirect(bookSource: BookSource, response: StrResponse) {
+    private suspend fun checkRedirect(bookSource: BookSource, response: StrResponse) {
         val prior = response.raw.priorResponse ?: return
         if (!prior.isRedirect) return
 
@@ -541,6 +554,7 @@ object WebBook {
         }
 
         if (looksLikeDesktopViewerRedirect(finalUrl, response.body)) {
+            currentCoroutineContext()[DesktopViewerHint]?.hit = true
             Debug.log(
                 bookSource.bookSourceUrl,
                 "◇提示: 重定向到 data:/桌面阅读器类页面，手机规则可能读不到正文",

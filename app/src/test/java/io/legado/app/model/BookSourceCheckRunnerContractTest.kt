@@ -24,6 +24,9 @@ class BookSourceCheckRunnerContractTest {
         assertTrue(runner.contains("详情失效"))
         assertTrue(runner.contains("搜索详情失效"))
         assertTrue(runner.contains("发现详情失效"))
+        assertTrue(runner.contains("搜索桌面阅读器失效") || runner.contains("\${bookType}桌面阅读器失效"))
+        assertTrue(runner.contains("DesktopViewerHint"))
+        assertTrue(runner.contains("consumeDesktopViewerRedirectHint"))
     }
 
     @Test

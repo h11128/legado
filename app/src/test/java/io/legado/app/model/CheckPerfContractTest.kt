@@ -58,8 +58,10 @@ class CheckPerfContractTest {
 
         val webView = projectFile("app/src/main/java/io/legado/app/help/http/BackstageWebView.kt")
         assertTrue(webView.contains("DEFAULT_DELAY_MS = 900L"))
-        assertTrue(webView.contains("CHECK_DELAY_MS = 500L"))
-        assertTrue(webView.contains("if (Debug.isChecking) CHECK_DELAY_MS else DEFAULT_DELAY_MS"))
+        assertTrue(webView.contains("CHECK_DELAY_MS = 1500L"))
+        assertTrue(webView.contains("checkSettleDelayMs()"))
+        assertTrue(webView.contains("if (Debug.isChecking) checkSettleDelayMs() else DEFAULT_DELAY_MS"))
+        assertTrue(webView.contains("checkWebViewDelay"))
     }
 
     private fun projectFile(path: String): String {

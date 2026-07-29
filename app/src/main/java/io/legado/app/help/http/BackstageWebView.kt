@@ -88,7 +88,7 @@ class BackstageWebView(
                 }
             }
             if (javaScript == null && delayTime == 0L) {
-                delayTime = if (Debug.isChecking) CHECK_DELAY_MS else DEFAULT_DELAY_MS
+                delayTime = if (Debug.isChecking) checkSettleDelayMs() else DEFAULT_DELAY_MS
             }
             runOnUI {
                 try {
@@ -386,9 +386,24 @@ class BackstageWebView(
         const val JS = "document.documentElement.outerHTML"
         /** Default settle before evaluating page HTML when no custom JS/delay. */
         const val DEFAULT_DELAY_MS = 900L
-        /** Shorter settle during bulk source check (Debug.isChecking). */
-        const val CHECK_DELAY_MS = 500L
+        /**
+         * Default settle during bulk source check (`Debug.isChecking`).
+         * Override with CacheManager key `checkWebViewDelay` (200–8000ms).
+         */
+        const val CHECK_DELAY_MS = 1500L
+        private const val CHECK_WEBVIEW_DELAY_KEY = "checkWebViewDelay"
         private val quoteRegex = "^\"|\"$".toRegex()
+
+        fun checkSettleDelayMs(): Long {
+            cachedCheckSettleMs?.let { return it }
+            val value = (CacheManager.getLong(CHECK_WEBVIEW_DELAY_KEY) ?: CHECK_DELAY_MS)
+                .coerceIn(200L, 8000L)
+            cachedCheckSettleMs = value
+            return value
+        }
+
+        @Volatile
+        private var cachedCheckSettleMs: Long? = null
     }
 
     abstract class Callback {
