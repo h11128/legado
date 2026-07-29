@@ -13,6 +13,7 @@ class BookSourceCheckRunnerContractTest {
         assertTrue(runner.contains("MAX_SEARCH_DEEP_TRIES = 3"))
         assertTrue(runner.contains("take(MAX_SEARCH_DEEP_TRIES)"))
         assertTrue(runner.contains("clearSearchDeepGroups"))
+        assertTrue(runner.contains("index < books.lastIndex"))
         assertTrue(runner.contains("MAX_DISCOVERY_DEEP_TRIES = 2"))
     }
 

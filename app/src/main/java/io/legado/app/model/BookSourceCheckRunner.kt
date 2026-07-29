@@ -173,15 +173,14 @@ object BookSourceCheckRunner {
             return false
         }
         source.removeGroup("搜索失效")
-        for (book in searchBooks.take(MAX_SEARCH_DEEP_TRIES).map { it.toBook() }) {
-            try {
-                if (checkBook(book, source, emptyTocMessage, true, settings)) {
-                    return true
-                }
-            } catch (e: Throwable) {
-                throw e
+        val books = searchBooks.take(MAX_SEARCH_DEEP_TRIES).map { it.toBook() }
+        for ((index, book) in books.withIndex()) {
+            if (checkBook(book, source, emptyTocMessage, true, settings)) {
+                return true
             }
-            clearSearchDeepGroups(source)
+            if (index < books.lastIndex) {
+                clearSearchDeepGroups(source)
+            }
         }
         return false
     }
@@ -203,15 +202,14 @@ object BookSourceCheckRunner {
             return
         }
         source.removeGroup("发现失效")
-        for (book in exploreBooks.take(MAX_DISCOVERY_DEEP_TRIES).map { it.toBook() }) {
-            try {
-                if (checkBook(book, source, emptyTocMessage, false, settings)) {
-                    return
-                }
-            } catch (e: Throwable) {
-                throw e
+        val books = exploreBooks.take(MAX_DISCOVERY_DEEP_TRIES).map { it.toBook() }
+        for ((index, book) in books.withIndex()) {
+            if (checkBook(book, source, emptyTocMessage, false, settings)) {
+                return
             }
-            clearDiscoveryDeepGroups(source)
+            if (index < books.lastIndex) {
+                clearDiscoveryDeepGroups(source)
+            }
         }
     }
 
