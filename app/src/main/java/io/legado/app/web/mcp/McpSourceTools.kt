@@ -26,7 +26,8 @@ internal fun Server.registerMcpSourceTools() {
         name = "save_source",
         description = "保存单个书源。纯 JavaScript 单文件源传脚本原文；声明式源传 BookSource JSON。" +
             "默认保留已有启用状态与排序权重；分组为空时默认保留旧分组。" +
-            "传入 preserveEnabled=false / preserveGroup=false 可覆盖这两项（空分组即清空）。",
+            "传入 preserveEnabled=false / preserveGroup=false / preserveOrderWeight=false 可覆盖。" +
+            "（preserveOrderWeight=false 时写入 JSON 的 customOrder/weight/respondTime。）",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 put("source", stringProp("JS 脚本原文或 BookSource JSON 对象"))
@@ -39,6 +40,10 @@ internal fun Server.registerMcpSourceTools() {
                     put("type", "boolean")
                     put("description", "默认 true；false 时允许用空字符串清空分组")
                 }
+                putJsonObject("preserveOrderWeight") {
+                    put("type", "boolean")
+                    put("description", "默认 true；false 时写入 JSON 的 customOrder/weight/respondTime")
+                }
             },
             required = listOf("source"),
         ),
@@ -49,6 +54,7 @@ internal fun Server.registerMcpSourceTools() {
             val format = request.arguments.str("format") ?: McpFormat.detectFormat(source)
             val preserveEnabled = request.arguments.bool("preserveEnabled") ?: true
             val preserveGroup = request.arguments.bool("preserveGroup") ?: true
+            val preserveOrderWeight = request.arguments.bool("preserveOrderWeight") ?: true
             when (format) {
                 "js" -> {
                     val saved = BookSourceController.saveJsSource(source).dataOrThrow() as BookSource
@@ -60,6 +66,7 @@ internal fun Server.registerMcpSourceTools() {
                         McpSourceStore.SaveOptions(
                             preserveEnabled = preserveEnabled,
                             preserveGroupWhenBlank = preserveGroup,
+                            preserveOrderWeight = preserveOrderWeight,
                         ),
                     )
                     ok(

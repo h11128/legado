@@ -15,6 +15,8 @@ internal object McpSourceStore {
     data class SaveOptions(
         val preserveEnabled: Boolean = true,
         val preserveGroupWhenBlank: Boolean = true,
+        /** When true (default), keep phone customOrder/weight/respondTime on update. */
+        val preserveOrderWeight: Boolean = true,
     )
 
     suspend fun saveDeclarative(
@@ -27,6 +29,7 @@ internal object McpSourceStore {
             val preserve = JsSourceUpsert.PreserveOptions(
                 preserveEnabled = options.preserveEnabled,
                 preserveGroupWhenBlank = options.preserveGroupWhenBlank,
+                preserveOrderWeight = options.preserveOrderWeight,
             )
             if (!JsSourceUpsert.prepareForSave(source, old, preserve = preserve) && old != null) {
                 return@withSaveLock old
