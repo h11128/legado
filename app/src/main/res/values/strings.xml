@@ -263,7 +263,9 @@
     <string name="no_download">No download</string>
     <string name="download_count">Downloaded %1$d/%2$d</string>
     <string name="import_select_book">Import selected book(s)</string>
-    <string name="threads_num_title">Number of concurrent tasks</string>
+    <string name="threads_num_title">Number of concurrent tasks (too high may lag or trigger site bans)</string>
+    <string name="thread_count_ban_warn">Thread count above %1$d often triggers site rate-limits during bulk check, causing mass false search failures</string>
+    <string name="progress_show_throttled">%1$s      Progress %2$d/%3$d · throttling %4$d host(s)</string>
     <string name="change_icon">Change icon</string>
     <string name="remove_from_bookshelf">Remove</string>
     <string name="start_read">Start reading</string>
@@ -1062,7 +1064,7 @@
     <string name="less_than">Less than</string>
     <string name="check_source_config_summary">Check timeout: %1$ss\nCheck item:%2$s</string>
     <string name="check_source_repair_preset">Repair check preset</string>
-    <string name="check_webview_settle_max">WebView DOM settle max wait during check (seconds)</string>
+    <string name="check_webview_settle_max">WebView DOM settle max wait (check and reading, seconds)</string>
     <string name="check_webview_settle_max_invalid">Enter WebView settle wait between 1 and 15 seconds</string>
     <string name="record_debug_log">Record debug log</string>
     <string name="sub_dir">Sub dir</string>

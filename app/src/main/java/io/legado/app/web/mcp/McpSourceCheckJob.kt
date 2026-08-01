@@ -183,7 +183,10 @@ object McpSourceCheckJob {
                 minConcurrency = 1,
                 initial = (threadCount / 2).coerceAtLeast(1),
             )
-            val tokens = CheckHostTokenBucket(maxTokensPerHost = 4, refillPerSecond = 4.0)
+            val tokens = CheckHostTokenBucket(
+                maxTokensPerHost = CheckHostTokenBucket.DEFAULT_MAX_TOKENS,
+                refillPerSecond = CheckHostTokenBucket.DEFAULT_REFILL_PER_SECOND,
+            )
             activeTokens = tokens
             val inFlight = AtomicInteger(0)
             aimdConcurrency = aimd.current()
@@ -211,12 +214,12 @@ object McpSourceCheckJob {
                         CheckAlgoRuntime.acquireAimdSlot(aimd, inFlight)
                         aimdConcurrency = aimd.current()
                         try {
-                            tokens.acquire(host)
                             val source = appDb.bookSourceDao.getBookSource(url)
                             if (source == null || (enabledOnly && !source.enabled)) {
                                 markSkipped(url, source?.bookSourceName.orEmpty())
                                 return@run
                             }
+                            tokens.acquire(host, source.concurrentRate)
                             val outcome = checkOne(source, timeoutMs, aimd)
                             if (outcome.success) {
                                 CheckAlgoRuntime.bloom.put(url)

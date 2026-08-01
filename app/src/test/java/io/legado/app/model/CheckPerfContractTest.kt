@@ -65,6 +65,7 @@ class CheckPerfContractTest {
         assertTrue(webView.contains("DomSettleRunnable"))
         assertTrue(webView.contains("HTML_LENGTH_JS"))
         assertTrue(webView.contains("useDomSettle()"))
+        assertTrue(webView.contains("private fun useDomSettle(): Boolean = true"))
         assertTrue(webView.contains("settleGeneration"))
         assertTrue(webView.contains("settleDeadlineAt"))
         assertTrue(webView.contains("pageProgress = 100"))
@@ -73,15 +74,31 @@ class CheckPerfContractTest {
         assertTrue(webView.contains("MIN_STABLE_HTML_LEN"))
         assertTrue(webView.contains("STABLE_HITS_REQUIRED = 3"))
         assertTrue(webView.contains("if (Debug.isChecking) checkSettleDelayMs() else DEFAULT_DELAY_MS"))
+        assertFalse(webView.contains("useDomSettle(): Boolean = Debug.isChecking"))
         assertTrue(webView.contains("checkWebViewDelay"))
         assertTrue(webView.contains("checkWebViewMaxWait"))
         assertTrue(webView.contains("onNavigationStarted"))
         assertTrue(webView.contains("Keep peakLen across repeated onPageFinished"))
+        assertTrue(webView.contains("Short/static pages never reach"))
+        assertTrue(webView.contains("!substantial"))
         assertFalse(Regex("""fun reset\(webView: WebView\) \{[^}]*peakLen = 0""").containsMatchIn(webView))
 
         val checkConfig = projectFile("app/src/main/java/io/legado/app/ui/config/CheckSourceConfig.kt")
         assertTrue(checkConfig.contains("checkWebviewSettleMax"))
         assertTrue(checkConfig.contains("webViewSettleMaxMs"))
+
+        val bucket = projectFile("app/src/main/java/io/legado/app/model/checkalgo/CheckHostTokenBucket.kt")
+        assertTrue(bucket.contains("limitsForConcurrentRate"))
+        assertTrue(bucket.contains("concurrentRate"))
+        assertTrue(bucket.contains("coerceAtMost(defaultRefill)"))
+
+        val checkService = projectFile("app/src/main/java/io/legado/app/service/CheckSourceService.kt")
+        assertTrue(checkService.contains("tokens.acquire(host, source.concurrentRate)"))
+        assertTrue(checkService.contains("THREAD_COUNT_BAN_WARN"))
+        assertTrue(checkService.contains("progress_show_throttled"))
+        assertTrue(checkService.contains("throttledHosts + ewmaHosts"))
+
+        assertTrue(job.contains("tokens.acquire(host, source.concurrentRate)"))
     }
 
     private fun projectFile(path: String): String {

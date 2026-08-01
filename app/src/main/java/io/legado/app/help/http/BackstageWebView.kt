@@ -272,11 +272,14 @@ class BackstageWebView(
             handler?.proceed()
         }
 
-        private fun useDomSettle(): Boolean = Debug.isChecking
+        /**
+         * Always settle for BackstageWebView HTML snapshots (check **and** normal reading).
+         * Fixed delay alone often returns skeleton HTML for JS-rendered TOC / body pages.
+         */
+        private fun useDomSettle(): Boolean = true
 
         /**
-         * During bulk check: poll HTML length until stable (or deadline), then snapshot.
-         * Fixed delay alone returns skeleton HTML for JS-rendered TOC sites.
+         * Poll HTML length until stable (or deadline), then snapshot.
          * Deadline is set on onPageStarted (wall clock for this navigation).
          */
         private inner class DomSettleRunnable(
@@ -329,12 +332,18 @@ class BackstageWebView(
                     }
                     val len = raw?.trim()?.removeSurrounding("\"")?.toIntOrNull() ?: -1
                     if (len > peakLen) peakLen = len
-                    // Skip tiny static skeletons: need a reasonably large DOM or prior growth.
+                    // Large JS pages: wait until DOM is substantial and length stable.
+                    // Short/static pages never reach the substantial threshold — accept after
+                    // progress=100 + length stability so reading is not stuck until max wait.
+                    val lenStable = lastLen >= 0 && len == lastLen
                     val substantial = peakLen >= MIN_STABLE_HTML_LEN * 2
                     val ready = pageProgress >= 100 &&
-                        len >= MIN_STABLE_HTML_LEN &&
-                        len == lastLen &&
-                        substantial
+                        len >= 0 &&
+                        lenStable &&
+                        (
+                            (substantial && len >= MIN_STABLE_HTML_LEN) ||
+                                !substantial
+                            )
                     if (ready) {
                         stableHits++
                     } else {

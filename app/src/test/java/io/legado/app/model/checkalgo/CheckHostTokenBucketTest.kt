@@ -3,6 +3,7 @@ package io.legado.app.model.checkalgo
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -37,5 +38,46 @@ class CheckHostTokenBucketTest {
         assertTrue(bucket.tryAcquire("two.example"))
         assertFalse(bucket.tryAcquire("one.example"))
         assertFalse(bucket.tryAcquire("two.example"))
+    }
+
+    @Test
+    fun `limitsForConcurrentRate parses n-per-ms and interval forms`() {
+        assertEquals(
+            4 to 4.0,
+            CheckHostTokenBucket.limitsForConcurrentRate(null),
+        )
+        assertEquals(
+            4 to 4.0,
+            CheckHostTokenBucket.limitsForConcurrentRate("0"),
+        )
+        // 1 access / 1000ms → 1 QPS, maxTokens=1
+        assertEquals(
+            1 to 1.0,
+            CheckHostTokenBucket.limitsForConcurrentRate("1/1000"),
+        )
+        // bare interval ms → 1 access per window (1/2000 → 0.5 QPS)
+        assertEquals(
+            1 to 0.5,
+            CheckHostTokenBucket.limitsForConcurrentRate("2000"),
+        )
+        // strict rate must not be floored upward (1/60000 → ~0.0167 QPS)
+        val strict = CheckHostTokenBucket.limitsForConcurrentRate("1/60000")
+        assertEquals(1, strict.first)
+        assertEquals(1.0 / 60.0, strict.second, 1e-9)
+        // never looser than defaults (10/1000 = 10 QPS → clamped to 4)
+        assertEquals(
+            4 to 4.0,
+            CheckHostTokenBucket.limitsForConcurrentRate("10/1000"),
+        )
+    }
+
+    @Test
+    fun `source concurrentRate tightens host bucket`() {
+        val bucket = CheckHostTokenBucket(maxTokensPerHost = 4, refillPerSecond = 4.0)
+        val host = "tight.example"
+        assertTrue(bucket.tryAcquire(host, "1/1000"))
+        // After one acquire at 1 token max, host is exhausted until refill
+        assertFalse(bucket.tryAcquire(host, "1/1000"))
+        assertFalse(bucket.tryAcquire(host))
     }
 }

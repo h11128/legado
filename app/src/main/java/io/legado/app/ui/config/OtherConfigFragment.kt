@@ -30,6 +30,7 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.CheckSource
 import io.legado.app.model.ImageProvider
 import io.legado.app.receiver.SharedReceiverActivity
+import io.legado.app.service.CheckSourceService
 import io.legado.app.service.McpService
 import io.legado.app.service.WebService
 import io.legado.app.ui.file.HandleFileContract
@@ -46,6 +47,7 @@ import io.legado.app.utils.removePref
 import io.legado.app.utils.restart
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.toastOnUi
 import splitties.init.appCtx
 
 /**
@@ -150,6 +152,14 @@ class OtherConfigFragment : PreferenceFragment(),
                 .setValue(AppConfig.threadCount)
                 .show {
                     AppConfig.threadCount = it
+                    if (it > CheckSourceService.THREAD_COUNT_BAN_WARN) {
+                        toastOnUi(
+                            getString(
+                                R.string.thread_count_ban_warn,
+                                CheckSourceService.THREAD_COUNT_BAN_WARN,
+                            )
+                        )
+                    }
                 }
 
             PreferKey.webPort -> NumberPickerDialog(requireContext())

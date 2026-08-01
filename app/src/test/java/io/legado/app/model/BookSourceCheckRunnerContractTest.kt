@@ -84,9 +84,14 @@ class CheckSourceJobLocalContractTest {
 
         val bucket = projectFile("app/src/main/java/io/legado/app/model/checkalgo/CheckHostTokenBucket.kt")
         assertTrue(bucket.contains("hostsWithLowTokens"))
+        assertTrue(bucket.contains("limitsForConcurrentRate"))
 
         val ewma = projectFile("app/src/main/java/io/legado/app/model/checkalgo/CheckHostEwma.kt")
         assertTrue(ewma.contains("hostsBelowRate"))
+
+        val service = projectFile("app/src/main/java/io/legado/app/service/CheckSourceService.kt")
+        assertTrue(service.contains("progress_show_throttled"))
+        assertTrue(service.contains("THREAD_COUNT_BAN_WARN"))
     }
 
     private fun projectFile(path: String): String {

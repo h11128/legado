@@ -53,6 +53,13 @@ class CheckSourceService : BaseService() {
     private var checkJob: Job? = null
     private var originSize = 0
     private val finishCount = AtomicInteger(0)
+    @Volatile
+    private var activeTokens: CheckHostTokenBucket? = null
+
+    companion object {
+        /** Above this, bulk check often trips WAF / mass false 搜索失效. */
+        const val THREAD_COUNT_BAN_WARN = 16
+    }
 
     private val notificationBuilder by lazy {
         NotificationCompat.Builder(this, AppConst.channelIdReadAloud)
@@ -99,6 +106,9 @@ class CheckSourceService : BaseService() {
             toastOnUi("调试/校验通道占用中，请稍后重试")
             return
         }
+        if (threadCount > THREAD_COUNT_BAN_WARN) {
+            toastOnUi(getString(R.string.thread_count_ban_warn, THREAD_COUNT_BAN_WARN))
+        }
         CheckDnsGuard.clear()
         CheckAlgoRuntime.resetEwma()
         val pending = ids.filterNot { CheckAlgoRuntime.bloom.mightContain(it) }.ifEmpty { ids }
@@ -123,7 +133,11 @@ class CheckSourceService : BaseService() {
             minConcurrency = 1,
             initial = (threadCount / 2).coerceAtLeast(1),
         )
-        val tokens = CheckHostTokenBucket(maxTokensPerHost = 4, refillPerSecond = 4.0)
+        val tokens = CheckHostTokenBucket(
+            maxTokensPerHost = CheckHostTokenBucket.DEFAULT_MAX_TOKENS,
+            refillPerSecond = CheckHostTokenBucket.DEFAULT_REFILL_PER_SECOND,
+        )
+        activeTokens = tokens
         val inFlight = AtomicInteger(0)
         checkJob = lifecycleScope.launch(searchCoroutine) {
             try {
@@ -134,13 +148,13 @@ class CheckSourceService : BaseService() {
                 scheduler.run(workers = threadCount) { host, url ->
                     CheckAlgoRuntime.acquireAimdSlot(aimd, inFlight)
                     try {
-                        tokens.acquire(host)
                         val source = appDb.bookSourceDao.getBookSource(url)
                         if (source == null) {
                             finishCount.incrementAndGet()
                             upNotification()
                             return@run
                         }
+                        tokens.acquire(host, source.concurrentRate)
                         checkSource(source, aimd)
                         // Only bloom successful checks so failures remain retriable.
                     } finally {
@@ -148,6 +162,7 @@ class CheckSourceService : BaseService() {
                     }
                 }
             } finally {
+                activeTokens = null
                 CheckSourceResultWriter.flush()
                 restoreDefaultHttpLimits()
                 Debug.finishChecking()
@@ -173,15 +188,21 @@ class CheckSourceService : BaseService() {
         }
         CheckAlgoRuntime.ewma.onResult(CheckAlgoRuntime.hostOf(source.bookSourceUrl), outcome.success)
         val done = finishCount.incrementAndGet()
-        notificationMsg = getString(
-            R.string.progress_show,
-            source.bookSourceName,
-            done,
-            originSize,
-        )
+        notificationMsg = formatProgressMessage(source.bookSourceName, done)
         upNotification()
         CheckSourceResultWriter.enqueueAndMaybeFlush(source)
         Debug.clearSourceCheckState(source.bookSourceUrl)
+    }
+
+    private fun formatProgressMessage(name: String, done: Int): String {
+        val throttledHosts = activeTokens?.hostsWithLowTokens()?.keys.orEmpty()
+        val ewmaHosts = CheckAlgoRuntime.ewma.hostsBelowRate().keys
+        val pressure = (throttledHosts + ewmaHosts).size
+        return if (pressure > 0) {
+            getString(R.string.progress_show_throttled, name, done, originSize, pressure)
+        } else {
+            getString(R.string.progress_show, name, done, originSize)
+        }
     }
 
     private fun upNotification() {
