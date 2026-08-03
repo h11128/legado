@@ -17,7 +17,10 @@ object AskSourcePrefetch {
 
     const val PREFETCH_CHUNK_SIZE = 150
 
-    /** Parse URL host; empty string on failure. Tolerates messy bookSourceUrl. */
+    /**
+     * Parse URL host; empty string on failure / relative / non-http labels.
+     * Callers skip host-bucket acquire when empty (alias bookSourceUrl etc.).
+     */
     fun hostOf(url: String): String {
         return url.toHttpUrlOrNull()?.host.orEmpty()
     }

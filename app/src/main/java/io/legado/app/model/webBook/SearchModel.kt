@@ -22,6 +22,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import splitties.init.appCtx
 import java.util.concurrent.Executors
@@ -56,6 +58,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     /** URLs already noted for the current [mSearchId] (once per source per run). */
     private val notedRespondTimeUrls = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private var hostBucket: CheckHostTokenBucket? = null
+    private var failCooldown = AskFailCooldown()
 
 
     private fun initSearchPool() {
@@ -83,7 +86,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
             mSearchId = searchId
             searchPage = 1
             notedRespondTimeUrls.clear()
-            AskFailCooldown.clear()
+            failCooldown = AskFailCooldown()
             initSearchPool()
         } else {
             searchPage++
@@ -99,6 +102,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
         val page = searchPage
         val progress = SearchProgressReporter(sourceParts.size, callBack::onSearchProgress)
         val tokens = hostBucket ?: CheckHostTokenBucket().also { hostBucket = it }
+        val cooldown = failCooldown
         activeProgress.getAndSet(progress)?.cancel()
         searchJob = scope.launch(searchPool!!) {
             flow {
@@ -113,7 +117,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                                     progress.completeOne()
                                 }
                             }
-                            AskFailCooldown.shouldSkip(source.bookSourceUrl) -> {
+                            cooldown.shouldSkip(source.bookSourceUrl) -> {
                                 if (currentCoroutineContext().isActive) {
                                     progress.completeOne()
                                 }
@@ -141,7 +145,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                                         author.contains(key) ||
                                         kind?.contains(key) == true
                             })
-                        AskFailCooldown.noteSuccess(it.bookSourceUrl)
+                        cooldown.noteSuccess(it.bookSourceUrl)
                         if (items.isNotEmpty() && notedRespondTimeUrls.add(it.bookSourceUrl)) {
                             RespondTimeUpdater.noteSuccess(
                                 it.bookSourceUrl,
@@ -152,11 +156,11 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                         items
                     }
                 } catch (e: TimeoutCancellationException) {
-                    AskFailCooldown.noteFail(it.bookSourceUrl)
+                    cooldown.noteFail(it.bookSourceUrl)
                     throw e
                 } catch (e: Throwable) {
                     if (e !is CancellationException) {
-                        AskFailCooldown.noteFail(it.bookSourceUrl)
+                        cooldown.noteFail(it.bookSourceUrl)
                     }
                     throw e
                 } finally {
@@ -174,7 +178,9 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                 currentCoroutineContext().ensureActive()
                 callBack.onSearchSuccess(searchBooks)
             }.onCompletion { error ->
-                RespondTimeUpdater.flush()
+                withContext(NonCancellable) {
+                    RespondTimeUpdater.flush()
+                }
                 when {
                     error == null -> progress.finish {
                         callBack.onSearchFinish(searchBooks.isEmpty(), hasMore)

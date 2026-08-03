@@ -3,12 +3,14 @@ package io.legado.app.model.checkalgo
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Skip sources that fail [FAIL_THRESHOLD] times within the current ask session.
- * Call [clear] when starting a new 换源 / search / auto-change session.
+ * Per-ask-session fail skip list. Create one instance per 换源 / search / auto-change run
+ * so concurrent ask paths do not clear or share each other's counters.
  */
-object AskFailCooldown {
+class AskFailCooldown {
 
-    const val FAIL_THRESHOLD = 3
+    companion object {
+        const val FAIL_THRESHOLD = 3
+    }
 
     private val fails = ConcurrentHashMap<String, Int>()
 

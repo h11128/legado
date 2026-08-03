@@ -338,9 +338,9 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                 threadCount = AppConfig.threadCount,
             )
             val hostBucket = CheckHostTokenBucket()
-            AskFailCooldown.clear()
+            val cooldown = AskFailCooldown()
             AskSourcePrefetch.emitSources(sources)
-                .filter { !AskFailCooldown.shouldSkip(it.bookSourceUrl) }
+                .filter { !cooldown.shouldSkip(it.bookSourceUrl) }
                 .onStart {
                     ReadBook.upMsg(context.getString(R.string.source_auto_changing))
                 }.mapParallelSafe(AppConfig.threadCount) { source ->
@@ -369,7 +369,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                             bookChapter = chapter,
                             nextChapterUrl = nextChapter.url
                         )
-                        AskFailCooldown.noteSuccess(source.bookSourceUrl)
+                        cooldown.noteSuccess(source.bookSourceUrl)
                         Triple(
                             book,
                             toc,
@@ -377,11 +377,11 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                         )
                     }
                 } catch (e: TimeoutCancellationException) {
-                    AskFailCooldown.noteFail(source.bookSourceUrl)
+                    cooldown.noteFail(source.bookSourceUrl)
                     throw e
                 } catch (e: Throwable) {
                     if (e !is CancellationException) {
-                        AskFailCooldown.noteFail(source.bookSourceUrl)
+                        cooldown.noteFail(source.bookSourceUrl)
                     }
                     throw e
                 }
