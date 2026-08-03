@@ -76,6 +76,14 @@ class OtherConfigFragment : PreferenceFragment(),
         upPreferenceSummary(PreferKey.userAgent, AppConfig.userAgent)
         upPreferenceSummary(PreferKey.preDownloadNum, AppConfig.preDownloadNum.toString())
         upPreferenceSummary(PreferKey.threadCount, AppConfig.threadCount.toString())
+        upPreferenceSummary(
+            PreferKey.changeSourceEarlyStopCount,
+            AppConfig.changeSourceEarlyStopCount.toString()
+        )
+        upPreferenceSummary(
+            PreferKey.changeSourceEarlyStopBudgetMs,
+            (AppConfig.changeSourceEarlyStopBudgetMs / 1000).toString()
+        )
         upPreferenceSummary(PreferKey.webPort, AppConfig.webPort.toString())
         upPreferenceSummary(PreferKey.mcpPort, AppConfig.mcpPort.toString())
         findPreference<EditTextPreference>(PreferKey.jsSourceApiToken)?.let {
@@ -162,6 +170,32 @@ class OtherConfigFragment : PreferenceFragment(),
                     }
                 }
 
+            PreferKey.changeSourceEarlyStopCount -> NumberPickerDialog(requireContext())
+                .setTitle(getString(R.string.change_source_early_stop_count))
+                .setMaxValue(50)
+                .setMinValue(1)
+                .setValue(AppConfig.changeSourceEarlyStopCount)
+                .show {
+                    AppConfig.changeSourceEarlyStopCount = it
+                    upPreferenceSummary(
+                        PreferKey.changeSourceEarlyStopCount,
+                        AppConfig.changeSourceEarlyStopCount.toString()
+                    )
+                }
+
+            PreferKey.changeSourceEarlyStopBudgetMs -> NumberPickerDialog(requireContext())
+                .setTitle(getString(R.string.change_source_early_stop_budget))
+                .setMaxValue(600)
+                .setMinValue(0)
+                .setValue(AppConfig.changeSourceEarlyStopBudgetMs / 1000)
+                .show {
+                    AppConfig.changeSourceEarlyStopBudgetMs = it * 1000
+                    upPreferenceSummary(
+                        PreferKey.changeSourceEarlyStopBudgetMs,
+                        (AppConfig.changeSourceEarlyStopBudgetMs / 1000).toString()
+                    )
+                }
+
             PreferKey.webPort -> NumberPickerDialog(requireContext())
                 .setTitle(getString(R.string.web_port_title))
                 .setMaxValue(60000)
@@ -230,6 +264,17 @@ class OtherConfigFragment : PreferenceFragment(),
             PreferKey.threadCount -> {
                 upPreferenceSummary(key, AppConfig.threadCount.toString())
                 postEvent(PreferKey.threadCount, "")
+            }
+
+            PreferKey.changeSourceEarlyStopCount -> {
+                upPreferenceSummary(key, AppConfig.changeSourceEarlyStopCount.toString())
+            }
+
+            PreferKey.changeSourceEarlyStopBudgetMs -> {
+                upPreferenceSummary(
+                    key,
+                    (AppConfig.changeSourceEarlyStopBudgetMs / 1000).toString()
+                )
             }
 
             PreferKey.webPort -> {
@@ -307,6 +352,10 @@ class OtherConfigFragment : PreferenceFragment(),
                 getString(R.string.pre_download_s, value)
 
             PreferKey.threadCount -> preference.summary = getString(R.string.threads_num, value)
+            PreferKey.changeSourceEarlyStopCount -> preference.summary =
+                getString(R.string.change_source_early_stop_count_s, value)
+            PreferKey.changeSourceEarlyStopBudgetMs -> preference.summary =
+                getString(R.string.change_source_early_stop_budget_s, value)
             PreferKey.webPort -> preference.summary = getString(R.string.web_port_summary, value)
             PreferKey.mcpPort -> preference.summary = getString(R.string.mcp_port_summary, value)
             PreferKey.jsSourceApiToken -> preference.summary = if (value.isNullOrBlank()) {

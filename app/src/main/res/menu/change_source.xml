@@ -51,6 +51,13 @@
         android:title="@string/load_toc"
         android:checkable="true"
         app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_early_stop"
+        android:title="@string/change_source_early_stop"
+        android:checkable="true"
+        app:showAsAction="never" />
+
     <item
         android:id="@+id/menu_group"
         android:title="@string/group">

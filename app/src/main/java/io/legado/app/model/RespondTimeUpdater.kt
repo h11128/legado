@@ -1,6 +1,7 @@
 package io.legado.app.model
 
 import io.legado.app.data.appDb
+import io.legado.app.data.entities.BookSource
 import io.legado.app.model.checkalgo.RespondTimeRank
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -17,14 +18,24 @@ object RespondTimeUpdater {
     private val pending = ConcurrentLinkedQueue<Pair<String, Long>>()
     private val mutex = Mutex()
 
-    fun noteSuccess(sourceUrl: String, elapsedMs: Long) {
+    fun noteSuccess(
+        sourceUrl: String,
+        elapsedMs: Long,
+        previousRespondTime: Long = BookSource.DEFAULT_RESPOND_TIME,
+    ) {
         if (Debug.isChecking) return
         if (sourceUrl.isBlank()) return
-        pending.add(sourceUrl to RespondTimeRank.encodeSuccess(elapsedMs))
+        pending.add(
+            sourceUrl to RespondTimeRank.ewmaSuccess(previousRespondTime, elapsedMs)
+        )
     }
 
-    suspend fun noteSuccessAndMaybeFlush(sourceUrl: String, elapsedMs: Long) {
-        noteSuccess(sourceUrl, elapsedMs)
+    suspend fun noteSuccessAndMaybeFlush(
+        sourceUrl: String,
+        elapsedMs: Long,
+        previousRespondTime: Long = BookSource.DEFAULT_RESPOND_TIME,
+    ) {
+        noteSuccess(sourceUrl, elapsedMs, previousRespondTime)
         if (!Debug.isChecking && pending.size >= FLUSH_EVERY) flush()
     }
 

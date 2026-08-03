@@ -1311,6 +1311,12 @@
     <string name="export_md">导出(MD)</string>
     <string name="change_source_delay">换源间隔</string>
     <string name="change_source_progress">结果 %1$d, 当前进度 %2$d / %3$d: %4$s</string>
+    <string name="change_source_early_stop">换源结果足够后提前结束</string>
+    <string name="change_source_early_stop_summary">有足够匹配且至少跑完一轮并行后提前结束；阈值见下方。</string>
+    <string name="change_source_early_stop_count">提前结束所需结果数</string>
+    <string name="change_source_early_stop_count_s">结果数达到 %s 时结束</string>
+    <string name="change_source_early_stop_budget">提前结束时间预算（秒）</string>
+    <string name="change_source_early_stop_budget_s">%s 秒（0 表示关闭）</string>
     <string name="open_book_info_by_click_title">点击书名打开详情</string>
     <string name="export_wait">等待导出</string>
     <string name="sync_book_progress_success">进度同步成功</string>

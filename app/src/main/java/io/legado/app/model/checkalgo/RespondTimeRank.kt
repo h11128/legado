@@ -16,6 +16,9 @@ object RespondTimeRank {
     const val UNKNOWN = 1
     const val FAILURE = 2
 
+    /** Blending factor for successive success samples on ask-path writes. */
+    const val EWMA_ALPHA = 0.3
+
     fun classify(respondTime: Long): Int = when {
         respondTime < BookSource.DEFAULT_RESPOND_TIME -> SUCCESS
         respondTime == BookSource.DEFAULT_RESPOND_TIME -> UNKNOWN
@@ -25,6 +28,26 @@ object RespondTimeRank {
     fun encodeSuccess(elapsedMs: Long): Long {
         val elapsed = elapsedMs.coerceAtLeast(0L)
         return min(elapsed, BookSource.DEFAULT_RESPOND_TIME - 1)
+    }
+
+    /**
+     * Update respondTime after a successful probe.
+     *
+     * If [previousRespondTime] is already SUCCESS, blend with EWMA then clamp;
+     * otherwise start fresh from [sampleElapsedMs]. Never returns
+     * `>= BookSource.DEFAULT_RESPOND_TIME`.
+     */
+    fun ewmaSuccess(
+        previousRespondTime: Long,
+        sampleElapsedMs: Long,
+        alpha: Double = EWMA_ALPHA,
+    ): Long {
+        return if (classify(previousRespondTime) == SUCCESS) {
+            val blend = alpha * sampleElapsedMs + (1.0 - alpha) * previousRespondTime
+            encodeSuccess(blend.toLong())
+        } else {
+            encodeSuccess(sampleElapsedMs)
+        }
     }
 
     fun encodeFailure(effectiveTimeoutMs: Long, spendingMs: Long): Long {

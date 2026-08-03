@@ -26,7 +26,12 @@ import io.legado.app.help.config.SourceConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.RespondTimeUpdater
+import io.legado.app.model.checkalgo.AskEarlyStop
+import io.legado.app.model.checkalgo.AskFailCooldown
 import io.legado.app.model.checkalgo.AskSourceOrder
+import io.legado.app.model.checkalgo.AskSourcePrefetch
+import io.legado.app.model.checkalgo.AskTimeout
+import io.legado.app.model.checkalgo.CheckHostTokenBucket
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
@@ -38,7 +43,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -236,30 +243,54 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     private fun search() {
+        val parts = bookSourceParts.toList()
+        val totalSources = parts.size
+        val searchStartedAt = System.currentTimeMillis()
+        val hostBucket = CheckHostTokenBucket()
+        AskFailCooldown.clear()
         task = viewModelScope.launch(searchPool!!) {
-            flow {
-                for (bs in bookSourceParts) {
-                    bs.getBookSource()?.let {
-                        emit(it)
-                    }
-                }
-            }.onStart {
+            AskSourcePrefetch.emitSources(parts).onStart {
                 searchStateData.postValue(true)
-            }.mapParallel(threadCount) {
+            }.mapParallel(threadCount) { source ->
+                if (AskFailCooldown.shouldSkip(source.bookSourceUrl)) {
+                    return@mapParallel source
+                }
+                val host = AskSourcePrefetch.hostOf(source.bookSourceUrl)
+                if (host.isNotEmpty()) {
+                    hostBucket.acquire(host, source.concurrentRate)
+                }
                 try {
-                    withTimeout(60000L) {
-                        search(it)
+                    withTimeout(AskTimeout.timeoutMs(source.respondTime)) {
+                        search(source)
                     }
-                } catch (_: Throwable) {
+                } catch (e: TimeoutCancellationException) {
+                    AskFailCooldown.noteFail(source.bookSourceUrl)
+                    currentCoroutineContext().ensureActive()
+                } catch (e: Throwable) {
+                    if (e !is CancellationException) {
+                        AskFailCooldown.noteFail(source.bookSourceUrl)
+                    }
                     currentCoroutineContext().ensureActive()
                 }
-                it
+                source
             }.onEachIndexed { index, value ->
                 _changeSourceProgress.update { _ ->
                     index + 1 to value.bookSourceName
                 }
+                if (AskEarlyStop.shouldStop(
+                        enabled = AppConfig.changeSourceEarlyStop,
+                        resultCount = searchBooks.size,
+                        resultThreshold = AppConfig.changeSourceEarlyStopCount,
+                        completedCount = index + 1,
+                        totalSources = totalSources,
+                        threadCount = threadCount,
+                        elapsedMs = System.currentTimeMillis() - searchStartedAt,
+                        budgetMs = AppConfig.changeSourceEarlyStopBudgetMs,
+                    )
+                ) {
+                    currentCoroutineContext().cancel()
+                }
             }.onCompletion {
-                ensureActive()
                 RespondTimeUpdater.flush()
                 searchStateData.postValue(false)
                 searchFinishCallback?.invoke(searchBooks.isEmpty())
@@ -281,9 +312,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 fName == name && (!checkAuthor || fAuthor.contains(author))
             })
         if (resultBooks.isNotEmpty()) {
+            AskFailCooldown.noteSuccess(source.bookSourceUrl)
             RespondTimeUpdater.noteSuccessAndMaybeFlush(
                 source.bookSourceUrl,
                 System.currentTimeMillis() - startTime,
+                source.respondTime,
             )
         }
         resultBooks.forEach { searchBook ->
@@ -404,7 +437,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 searchStateData.postValue(true)
             }.mapParallelSafe(threadCount) {
                 val source = appDb.bookSourceDao.getBookSource(it.origin)!!
-                withTimeout(60000L) {
+                withTimeout(AskTimeout.timeoutMs(source.respondTime)) {
                     loadBookInfo(source, it.toBook())
                 }
             }.onCompletion {

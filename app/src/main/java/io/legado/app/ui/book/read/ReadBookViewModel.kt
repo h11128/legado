@@ -30,7 +30,11 @@ import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.RespondTimeUpdater
 import io.legado.app.model.SourceCallBack
+import io.legado.app.model.checkalgo.AskFailCooldown
 import io.legado.app.model.checkalgo.AskSourceOrder
+import io.legado.app.model.checkalgo.AskSourcePrefetch
+import io.legado.app.model.checkalgo.AskTimeout
+import io.legado.app.model.checkalgo.CheckHostTokenBucket
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.BaseReadAloudService
@@ -44,16 +48,19 @@ import io.legado.app.utils.mapParallelSafe
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toStringArray
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onEmpty
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileNotFoundException
@@ -330,36 +337,60 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                 appDb.bookSourceDao.allTextEnabledPart,
                 threadCount = AppConfig.threadCount,
             )
-            flow {
-                for (source in sources) {
-                    source.getBookSource()?.let {
-                        emit(it)
-                    }
+            val hostBucket = CheckHostTokenBucket()
+            AskFailCooldown.clear()
+            AskSourcePrefetch.emitSources(sources)
+                .filter { !AskFailCooldown.shouldSkip(it.bookSourceUrl) }
+                .onStart {
+                    ReadBook.upMsg(context.getString(R.string.source_auto_changing))
+                }.mapParallelSafe(AppConfig.threadCount) { source ->
+                val host = AskSourcePrefetch.hostOf(source.bookSourceUrl)
+                if (host.isNotEmpty()) {
+                    hostBucket.acquire(host, source.concurrentRate)
                 }
-            }.onStart {
-                ReadBook.upMsg(context.getString(R.string.source_auto_changing))
-            }.mapParallelSafe(AppConfig.threadCount) { source ->
                 val startTime = System.currentTimeMillis()
-                val book = WebBook.preciseSearchAwait(source, name, author).getOrThrow()
-                if (book.tocUrl.isEmpty()) {
-                    WebBook.getBookInfoAwait(source, book)
+                try {
+                    withTimeout(AskTimeout.autoChangeTimeoutMs(source.respondTime)) {
+                        val book = WebBook.preciseSearchAwait(source, name, author).getOrThrow()
+                        if (book.tocUrl.isEmpty()) {
+                            WebBook.getBookInfoAwait(source, book)
+                        }
+                        val toc = WebBook.getChapterListAwait(source, book).getOrThrow()
+                        val chapter = toc.getOrElse(book.durChapterIndex) {
+                            toc.last()
+                        }
+                        val nextChapter = toc.getOrElse(chapter.index) {
+                            toc.first()
+                        }
+                        WebBook.getContentAwait(
+                            bookSource = source,
+                            book = book,
+                            bookChapter = chapter,
+                            nextChapterUrl = nextChapter.url
+                        )
+                        AskFailCooldown.noteSuccess(source.bookSourceUrl)
+                        Triple(
+                            book,
+                            toc,
+                            System.currentTimeMillis() - startTime to source,
+                        )
+                    }
+                } catch (e: TimeoutCancellationException) {
+                    AskFailCooldown.noteFail(source.bookSourceUrl)
+                    throw e
+                } catch (e: Throwable) {
+                    if (e !is CancellationException) {
+                        AskFailCooldown.noteFail(source.bookSourceUrl)
+                    }
+                    throw e
                 }
-                val toc = WebBook.getChapterListAwait(source, book).getOrThrow()
-                val chapter = toc.getOrElse(book.durChapterIndex) {
-                    toc.last()
-                }
-                val nextChapter = toc.getOrElse(chapter.index) {
-                    toc.first()
-                }
-                WebBook.getContentAwait(
-                    bookSource = source,
-                    book = book,
-                    bookChapter = chapter,
-                    nextChapterUrl = nextChapter.url
-                )
-                Triple(book, toc, System.currentTimeMillis() - startTime to source.bookSourceUrl)
             }.take(1).onEach { (book, toc, timing) ->
-                RespondTimeUpdater.noteSuccess(timing.second, timing.first)
+                val (elapsed, source) = timing
+                RespondTimeUpdater.noteSuccess(
+                    source.bookSourceUrl,
+                    elapsed,
+                    source.respondTime,
+                )
                 RespondTimeUpdater.flush()
                 changeTo(book, toc)
             }.onEmpty {
