@@ -67,6 +67,17 @@ class BookSourceViewModel(application: Application) : BaseViewModel(application)
         }
     }
 
+    /** Persist current on-screen order into customOrder (RFC-001 §6.5). */
+    fun applyViewToManualOrder(items: List<BookSourcePart>) {
+        if (items.isEmpty()) return
+        execute {
+            val ordered = items.mapIndexed { index, part ->
+                part.copy(customOrder = index)
+            }
+            appDb.bookSourceDao.upOrder(ordered)
+        }
+    }
+
     fun enable(enable: Boolean, items: List<BookSourcePart>) {
         execute {
             appDb.bookSourceDao.enable(enable, items)

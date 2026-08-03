@@ -27,7 +27,9 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.ImageProvider
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
+import io.legado.app.model.RespondTimeUpdater
 import io.legado.app.model.SourceCallBack
+import io.legado.app.model.checkalgo.AskSourceOrder
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.BaseReadAloudService
@@ -322,7 +324,10 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
     private fun autoChangeSource(name: String, author: String) {
         if (!AppConfig.autoChangeSource) return
         execute {
-            val sources = appDb.bookSourceDao.allTextEnabledPart
+            val sources = AskSourceOrder.order(
+                appDb.bookSourceDao.allTextEnabledPart,
+                threadCount = AppConfig.threadCount,
+            )
             flow {
                 for (source in sources) {
                     source.getBookSource()?.let {
@@ -332,6 +337,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             }.onStart {
                 ReadBook.upMsg(context.getString(R.string.source_auto_changing))
             }.mapParallelSafe(AppConfig.threadCount) { source ->
+                val startTime = System.currentTimeMillis()
                 val book = WebBook.preciseSearchAwait(source, name, author).getOrThrow()
                 if (book.tocUrl.isEmpty()) {
                     WebBook.getBookInfoAwait(source, book)
@@ -349,8 +355,10 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                     bookChapter = chapter,
                     nextChapterUrl = nextChapter.url
                 )
-                book to toc
-            }.take(1).onEach { (book, toc) ->
+                Triple(book, toc, System.currentTimeMillis() - startTime to source.bookSourceUrl)
+            }.take(1).onEach { (book, toc, timing) ->
+                RespondTimeUpdater.noteSuccess(timing.second, timing.first)
+                RespondTimeUpdater.flush()
                 changeTo(book, toc)
             }.onEmpty {
                 throw NoStackTraceException("没有合适书源")

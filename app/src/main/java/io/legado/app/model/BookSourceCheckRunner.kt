@@ -10,6 +10,7 @@ import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.model.checkalgo.CheckAlgoRuntime
 import io.legado.app.model.checkalgo.CheckHedgedProbe
+import io.legado.app.model.checkalgo.RespondTimeRank
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.selectCheckSourceChapter
 import kotlinx.coroutines.TimeoutCancellationException
@@ -82,8 +83,13 @@ object BookSourceCheckRunner {
                     Outcome(false, "校验失败:$msg")
                 },
             )
-        }.also {
-            source.respondTime = System.currentTimeMillis() - startTime
+        }.also { outcome ->
+            val elapsed = System.currentTimeMillis() - startTime
+            source.respondTime = RespondTimeRank.encode(
+                success = outcome.success,
+                elapsedMs = elapsed,
+                effectiveTimeoutMs = timeoutMs,
+            )
         }
     }
 
@@ -94,7 +100,7 @@ object BookSourceCheckRunner {
         checkMode: CheckMode,
         settings: CheckSource.Settings,
     ) {
-        Debug.startChecking(source)
+        // Session timing is started by CheckSourceService / McpSourceCheckJob callers.
         source.removeInvalidGroups()
         if (settings.wSourceComment) source.removeErrorComment()
         ensureDomain(source, settings)

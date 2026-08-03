@@ -39,8 +39,8 @@ data class BookSourcePart(
     var hasLoginUrl: Boolean = false,
     // 最后更新时间，用于排序
     var lastUpdateTime: Long = 0,
-    // 响应时间，用于排序
-    var respondTime: Long = 180000L,
+    // 响应时间，用于排序（与 BookSource.DEFAULT_RESPOND_TIME 对齐）
+    var respondTime: Long = BookSource.DEFAULT_RESPOND_TIME,
     // 智能排序的权重
     var weight: Int = 0,
     // 是否有发现url
@@ -86,6 +86,13 @@ data class BookSourcePart(
             it.removeAll(groups.splitNotBlank(AppPattern.splitGroupRegex).toSet())
             bookSourceGroup = TextUtils.join(",", it)
         }
+    }
+
+    /** Same invalid-group rule as [BookSource.getInvalidGroupNames]. */
+    fun getInvalidGroupNames(): String {
+        return bookSourceGroup?.splitNotBlank(AppPattern.splitGroupRegex)?.toHashSet()?.filter {
+            "失效" in it || it == "校验超时"
+        }?.joinToString() ?: ""
     }
 
 }

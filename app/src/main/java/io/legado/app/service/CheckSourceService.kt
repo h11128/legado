@@ -270,7 +270,7 @@ class CheckSourceService : BaseService() {
             CheckAlgoRuntime.hostOf(source.bookSourceUrl),
             outcome.success,
         )
-        source.respondTime = Debug.getRespondTime(sessionId, source.bookSourceUrl, outcome.success)
+        // respondTime already encoded by BookSourceCheckRunner (RFC-001 §6.1).
         val updated = appDb.bookSourceDao.updateCheckResult(
             source.bookSourceUrl,
             source.bookSourceGroup,

@@ -3,6 +3,7 @@ package io.legado.app.model
 import android.content.Context
 import io.legado.app.R
 import io.legado.app.constant.IntentAction
+import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.CacheManager
 import io.legado.app.help.IntentData
@@ -60,7 +61,7 @@ object CheckSource {
     }
 
     //校验设置
-    var timeout = CacheManager.getLong("checkSourceTimeout") ?: 180000L
+    var timeout = CacheManager.getLong("checkSourceTimeout") ?: BookSource.DEFAULT_RESPOND_TIME
     var wSourceComment = CacheManager.get("wSourceComment")?.toBoolean() ?: true
     var checkDomain = CacheManager.get("checkDomain")?.toBoolean() ?: false
     var checkSearch = CacheManager.get("checkSearch")?.toBoolean() ?: true

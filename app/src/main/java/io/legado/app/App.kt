@@ -19,6 +19,7 @@ import io.legado.app.base.AppContextWrapper
 import io.legado.app.constant.AppConst.channelIdDownload
 import io.legado.app.constant.AppConst.channelIdReadAloud
 import io.legado.app.constant.AppConst.channelIdWeb
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -39,6 +40,7 @@ import io.legado.app.help.LifecycleHelp
 import io.legado.app.help.RuleBigDataHelp
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig.applyDayNight
 import io.legado.app.help.config.ThemeConfig.applyDayNightInit
@@ -129,6 +131,14 @@ class App : Application() {
             }
             //调整排序序号
             SourceHelp.adjustSortNumber()
+            if (!LocalConfig.respondTimeHealDone) {
+                runCatching {
+                    SourceHelp.healRespondTimeEncoding()
+                    LocalConfig.respondTimeHealDone = true
+                }.onFailure {
+                    AppLog.put("respondTime heal failed", it)
+                }
+            }
             AutoTask.all()
             AutoTaskScheduler.refresh(this@App)
             //同步阅读记录

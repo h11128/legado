@@ -74,8 +74,8 @@ data class BookSource(
     var variableComment: String? = null,
     // 最后更新时间，用于排序
     var lastUpdateTime: Long = 0,
-    // 响应时间，用于排序
-    var respondTime: Long = 180000L,
+    // 响应时间，用于排序（见 RespondTimeRank / DEFAULT_RESPOND_TIME）
+    var respondTime: Long = DEFAULT_RESPOND_TIME,
     // 智能排序的权重
     var weight: Int = 0,
     // 发现url
@@ -272,6 +272,14 @@ data class BookSource(
     }
 
     private fun equal(a: String?, b: String?) = a == b || (a.isNullOrEmpty() && b.isNullOrEmpty())
+
+    companion object {
+        /**
+         * Never-measured sentinel. Success encodes strictly below; failure strictly above.
+         * See RespondTimeRank / RFC-001 §6.1.
+         */
+        const val DEFAULT_RESPOND_TIME = 180000L
+    }
 
     class Converters {
 

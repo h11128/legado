@@ -360,7 +360,7 @@
     <string name="set_charset">Mã hóa văn bản</string>
     <string name="swap_sort">Thứ tự tăng/giảm dần</string>
     <string name="sort">Sắp xếp</string>
-    <string name="sort_auto">Sắp xếp tự động</string>
+    <string name="sort_auto">Sắp xếp theo trọng số</string>
     <string name="sort_manual">Sắp xếp thủ công</string>
     <string name="sort_default">Sắp xếp mặc định</string>
     <string name="sort_by_name">Sắp xếp theo tên</string>

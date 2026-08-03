@@ -59,6 +59,10 @@
 
             </group>
 
+            <item
+                android:id="@+id/menu_apply_view_to_manual_order"
+                android:title="@string/apply_view_to_manual_order" />
+
         </menu>
 
     </item>

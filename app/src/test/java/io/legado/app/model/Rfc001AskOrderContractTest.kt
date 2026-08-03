@@ -1,0 +1,77 @@
+package io.legado.app.model
+
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+
+/**
+ * Source-level contracts for RFC-001 P0a/P0b/P0c wiring.
+ */
+class Rfc001AskOrderContractTest {
+
+    @Test
+    fun runnerEncodesViaRespondTimeRank() {
+        val runner = projectFile("app/src/main/java/io/legado/app/model/BookSourceCheckRunner.kt")
+        assertTrue(runner.contains("RespondTimeRank.encode("))
+        assertFalse(runner.contains("Debug.startChecking(source)"))
+        assertFalse(
+            runner.contains("source.respondTime = System.currentTimeMillis() - startTime")
+        )
+    }
+
+    @Test
+    fun checkSourceServiceDoesNotOverwriteRespondTime() {
+        val service = projectFile("app/src/main/java/io/legado/app/service/CheckSourceService.kt")
+        assertFalse(service.contains("Debug.getRespondTime("))
+    }
+
+    @Test
+    fun askOrderWiredIntoLoadSites() {
+        val change = projectFile(
+            "app/src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceViewModel.kt"
+        )
+        assertTrue(change.contains("AskSourceOrder.order("))
+        assertTrue(change.contains("BookSourceTypeMapper.filterSameType("))
+        assertTrue(change.contains("RespondTimeUpdater.noteSuccessAndMaybeFlush("))
+
+        val scope = projectFile("app/src/main/java/io/legado/app/ui/book/search/SearchScope.kt")
+        assertTrue(scope.contains("AskSourceOrder.order("))
+        assertFalse(scope.contains("sortedBy { it.customOrder }"))
+
+        val read = projectFile("app/src/main/java/io/legado/app/ui/book/read/ReadBookViewModel.kt")
+        assertTrue(read.contains("AskSourceOrder.order("))
+        assertTrue(read.contains("RespondTimeUpdater.noteSuccess("))
+    }
+
+    @Test
+    fun healRunsFromAppStartup() {
+        val app = projectFile("app/src/main/java/io/legado/app/App.kt")
+        assertTrue(app.contains("respondTimeHealDone"))
+        assertTrue(app.contains("healRespondTimeEncoding()"))
+        val help = projectFile("app/src/main/java/io/legado/app/help/source/SourceHelp.kt")
+        assertTrue(help.contains("fun healRespondTimeEncoding()"))
+        assertTrue(help.contains("getInvalidGroupNames()"))
+        assertTrue(help.contains("getPartsWithRespondTimeBelow"))
+        assertTrue(help.contains("updateRespondTime"))
+        val updater = projectFile("app/src/main/java/io/legado/app/model/RespondTimeUpdater.kt")
+        assertTrue(updater.contains("if (Debug.isChecking) return@withLock"))
+    }
+
+    @Test
+    fun daoExposesRespondTimeOnlyUpdateAndHealQuery() {
+        val dao = projectFile("app/src/main/java/io/legado/app/data/dao/BookSourceDao.kt")
+        assertTrue(dao.contains("fun updateRespondTime("))
+        assertTrue(dao.contains("fun getPartsWithRespondTimeBelow("))
+    }
+
+    private fun projectFile(path: String): String {
+        var root = File(requireNotNull(System.getProperty("user.dir")))
+        repeat(6) {
+            val candidate = File(root, path)
+            if (candidate.isFile) return candidate.readText()
+            root = root.parentFile ?: error("Project root not found for: $path")
+        }
+        error("Project file not found: $path")
+    }
+}

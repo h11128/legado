@@ -443,7 +443,7 @@
     <string name="set_charset">设置编码</string>
     <string name="swap_sort">倒序-顺序</string>
     <string name="sort">排序</string>
-    <string name="sort_auto">智能排序</string>
+    <string name="sort_auto">按权重</string>
     <string name="sort_manual">手动排序</string>
     <string name="sort_default">默认排序</string>
     <string name="sort_by_name">名称排序</string>
@@ -1021,6 +1021,8 @@
     <string name="upload_url">上传 URL</string>
     <string name="download_url_rule">下载URL规则(downloadUrls)</string>
     <string name="sort_by_respondTime">响应时间排序</string>
+    <string name="apply_view_to_manual_order">把当前列表写入手动顺序</string>
+    <string name="apply_view_to_manual_order_confirm">将当前列表顺序写入手动顺序（customOrder）？这不会单独改变换源询问顺序；换源按响应时间与置顶排序。</string>
     <string name="respondTime">响应时间：%1$d ms</string>
     <string name="export_success">导出成功</string>
     <string name="path">路径</string>

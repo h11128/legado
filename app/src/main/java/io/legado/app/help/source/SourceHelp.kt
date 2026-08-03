@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.SourceType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
@@ -185,6 +186,27 @@ object SourceHelp {
             }
             appDb.bookSourceDao.upOrder(sources)
         }
+    }
+
+    /**
+     * One-shot heal for MCP-era fast failures that stored raw elapsed ms
+     * while still carrying an invalid/timeout group (RFC-001 §6.1).
+     * Uses the part view (no rule JSON) and only touches respondTime.
+     */
+    fun healRespondTimeEncoding() {
+        val default = BookSource.DEFAULT_RESPOND_TIME
+        val candidates = appDb.bookSourceDao.getPartsWithRespondTimeBelow(default)
+        if (candidates.isEmpty()) return
+        val urls = candidates.mapNotNull { part ->
+            if (part.getInvalidGroupNames().isNotBlank()) part.bookSourceUrl else null
+        }
+        if (urls.isEmpty()) return
+        appDb.runInTransaction {
+            for (url in urls) {
+                appDb.bookSourceDao.updateRespondTime(url, default + 1)
+            }
+        }
+        AppLog.put("respondTime heal: 修复了${urls.size}个失效书源的响应时间编码")
     }
 
     fun openVideoPlayer(source: BaseSource?, url: String, title: String, isFloat: Boolean) {

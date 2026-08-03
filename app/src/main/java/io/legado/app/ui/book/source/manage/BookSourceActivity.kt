@@ -251,6 +251,18 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 upBookSource(searchView.query?.toString())
             }
 
+            R.id.menu_apply_view_to_manual_order -> {
+                alert(
+                    titleResource = R.string.apply_view_to_manual_order,
+                    messageResource = R.string.apply_view_to_manual_order_confirm,
+                ) {
+                    yesButton {
+                        viewModel.applyViewToManualOrder(adapter.getItems())
+                    }
+                    noButton()
+                }
+            }
+
             R.id.menu_enabled_group -> {
                 searchView.setQuery(getString(R.string.enabled), true)
             }

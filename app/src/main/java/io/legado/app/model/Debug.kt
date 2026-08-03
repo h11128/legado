@@ -9,6 +9,7 @@ import io.legado.app.help.book.isWebFile
 import io.legado.app.help.coroutine.CompositeCoroutine
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.sortUrls
+import io.legado.app.model.checkalgo.RespondTimeRank
 import io.legado.app.model.rss.Rss
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.HtmlFormatter
@@ -123,6 +124,15 @@ object Debug {
         debugSource = null
         callback = null
         return true
+    }
+
+    /** Unconditionally drop a wedged debug callback (MCP stale / reset). */
+    @Synchronized
+    fun forceCancelDebug() {
+        debugSessionId++
+        tasks.clear()
+        debugSource = null
+        callback = null
     }
 
     @Synchronized
@@ -283,10 +293,20 @@ object Debug {
 
     @Synchronized
     fun getRespondTime(sessionId: Long, sourceUrl: String, succeeded: Boolean): Long {
-        if (activeCheckSessionId != sessionId) return CheckSource.timeout
-        val startTime = debugTimeMap[sourceUrl] ?: return CheckSource.timeout
+        if (activeCheckSessionId != sessionId) {
+            return if (succeeded) {
+                RespondTimeRank.encodeSuccess(0)
+            } else {
+                RespondTimeRank.encodeFailure(CheckSource.timeout, 0)
+            }
+        }
+        val startTime = debugTimeMap[sourceUrl] ?: return if (succeeded) {
+            RespondTimeRank.encodeSuccess(0)
+        } else {
+            RespondTimeRank.encodeFailure(CheckSource.timeout, 0)
+        }
         val spendingTime = System.currentTimeMillis() - startTime
-        return if (succeeded) spendingTime else CheckSource.timeout + spendingTime
+        return RespondTimeRank.encode(succeeded, spendingTime, CheckSource.timeout)
     }
 
     @Synchronized

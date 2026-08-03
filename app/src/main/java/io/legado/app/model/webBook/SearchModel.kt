@@ -8,6 +8,7 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
+import io.legado.app.model.RespondTimeUpdater
 import io.legado.app.ui.book.search.SearchScope
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.mapParallelSafe
@@ -100,15 +101,23 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
             }.onStart {
                 progress.start(callBack::onSearchStart)
             }.mapParallelSafe(threadCount) {
+                val startTime = System.currentTimeMillis()
                 try {
                     withTimeout(30000L) {
-                        WebBook.searchBookAwait(
+                        val items = WebBook.searchBookAwait(
                             it, key, page,
                             filter = { name, author, kind ->
                                 !precision || name.contains(key) ||
                                         author.contains(key) ||
                                         kind?.contains(key) == true
                             })
+                        if (items.isNotEmpty()) {
+                            RespondTimeUpdater.noteSuccess(
+                                it.bookSourceUrl,
+                                System.currentTimeMillis() - startTime,
+                            )
+                        }
+                        items
                     }
                 } finally {
                     if (currentCoroutineContext().isActive) {
@@ -125,6 +134,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                 currentCoroutineContext().ensureActive()
                 callBack.onSearchSuccess(searchBooks)
             }.onCompletion { error ->
+                RespondTimeUpdater.flush()
                 when {
                     error == null -> progress.finish {
                         callBack.onSearchFinish(searchBooks.isEmpty(), hasMore)

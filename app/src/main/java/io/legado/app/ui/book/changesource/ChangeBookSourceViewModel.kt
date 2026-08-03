@@ -17,6 +17,7 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.BookSourceTypeMapper
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.primaryStr
 import io.legado.app.help.book.releaseHtmlData
@@ -24,6 +25,8 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.SourceConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.SourceHelp
+import io.legado.app.model.RespondTimeUpdater
+import io.legado.app.model.checkalgo.AskSourceOrder
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
@@ -195,17 +198,23 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             tocMapChapterCount = 0
             _changeSourceProgress.value = 0 to ""
             val searchGroup = AppConfig.searchGroup
-            if (searchGroup.isBlank()) {
-                bookSourceParts.addAll(appDb.bookSourceDao.allEnabledPart)
+            val loaded = if (searchGroup.isBlank()) {
+                appDb.bookSourceDao.allEnabledPart
             } else {
                 val sources = appDb.bookSourceDao.getEnabledPartByGroup(searchGroup)
                 if (sources.isEmpty()) {
                     AppConfig.searchGroup = ""
-                    bookSourceParts.addAll(appDb.bookSourceDao.allEnabledPart)
+                    appDb.bookSourceDao.allEnabledPart
                 } else {
-                    bookSourceParts.addAll(sources)
+                    sources
                 }
             }
+            val typed = oldBook?.let {
+                BookSourceTypeMapper.filterSameType(loaded, it.type)
+            } ?: loaded
+            bookSourceParts.addAll(
+                AskSourceOrder.order(typed, threadCount = threadCount)
+            )
             initSearchPool()
             search()
         }
@@ -250,6 +259,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 }
             }.onCompletion {
                 ensureActive()
+                RespondTimeUpdater.flush()
                 searchStateData.postValue(false)
                 searchFinishCallback?.invoke(searchBooks.isEmpty())
             }.catch {
@@ -263,11 +273,18 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         val loadInfo = AppConfig.changeSourceLoadInfo
         val loadToc = AppConfig.changeSourceLoadToc
         val loadWordCount = AppConfig.changeSourceLoadWordCount
+        val startTime = System.currentTimeMillis()
         val resultBooks = WebBook.searchBookAwait(
             source, name,
             filter = { fName, fAuthor, _ ->
                 fName == name && (!checkAuthor || fAuthor.contains(author))
             })
+        if (resultBooks.isNotEmpty()) {
+            RespondTimeUpdater.noteSuccessAndMaybeFlush(
+                source.bookSourceUrl,
+                System.currentTimeMillis() - startTime,
+            )
+        }
         resultBooks.forEach { searchBook ->
             when {
                 loadInfo || loadToc || loadWordCount -> {

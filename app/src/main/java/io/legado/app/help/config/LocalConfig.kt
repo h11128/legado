@@ -71,6 +71,13 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
     val needUpDictRule: Boolean
         get() = !isLastVersion(2, "needUpDictRule")
 
+    /** RFC-001 P0a: one-shot heal of MCP-era fast-fail respondTime rows. */
+    var respondTimeHealDone: Boolean
+        get() = getBoolean("respondTimeHealV1", false)
+        set(value) {
+            putBoolean("respondTimeHealV1", value)
+        }
+
     var versionCode
         get() = getLong(versionCodeKey, 0)
         set(value) {

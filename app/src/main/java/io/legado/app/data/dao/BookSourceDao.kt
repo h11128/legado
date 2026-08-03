@@ -309,6 +309,13 @@ interface BookSourceDao {
         expectedRespondTime: Long,
     ): Int
 
+    /** RespondTime-only write for successful 换源/search probes (RFC-001 §6.4). */
+    @Query("update book_sources set respondTime = :respondTime where bookSourceUrl = :bookSourceUrl")
+    fun updateRespondTime(bookSourceUrl: String, respondTime: Long)
+
+    @Query("select * from book_sources_part where respondTime < :maxRespondTime")
+    fun getPartsWithRespondTimeBelow(maxRespondTime: Long): List<BookSourcePart>
+
     @Delete
     fun delete(vararg bookSource: BookSource)
 
