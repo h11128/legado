@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| Status | Draft (rev 3 — design-review fixes applied) |
+| Status | Implemented (P0a/P0b/P0c/P1 — code in `c5a201d84`) |
 | Date | 2026-08-03 |
 | Repo | `legado` (Android app), branch `master` |
 | Related | `legadoSkill` repair tooling (MCP check paths only; no product UX there) |
