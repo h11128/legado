@@ -346,7 +346,8 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                 }.mapParallelSafe(AppConfig.threadCount) { source ->
                 val host = AskSourcePrefetch.hostOf(source.bookSourceUrl)
                 if (host.isNotEmpty()) {
-                    hostBucket.acquire(host, source.concurrentRate)
+                    // Host-only pacing; per-source concurrentRate stays in AnalyzeUrl.
+                    hostBucket.acquire(host)
                 }
                 val startTime = System.currentTimeMillis()
                 try {

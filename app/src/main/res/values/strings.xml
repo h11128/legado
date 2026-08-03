@@ -1322,7 +1322,7 @@
     <string name="change_source_delay">Change source delay</string>
     <string name="change_source_progress">Result %1$d, Progress %2$d / %3$d: %4$s</string>
     <string name="change_source_early_stop">Stop change-source early</string>
-    <string name="change_source_early_stop_summary">Stop after enough matches (and one parallel wave). Thresholds below.</string>
+    <string name="change_source_early_stop_summary">Stop after enough matches (and one parallel wave), or when the time budget below elapses. Thresholds below.</string>
     <string name="change_source_early_stop_count">Early-stop result count</string>
     <string name="change_source_early_stop_count_s">Stop when results ≥ %s</string>
     <string name="change_source_early_stop_budget">Early-stop time budget (seconds)</string>

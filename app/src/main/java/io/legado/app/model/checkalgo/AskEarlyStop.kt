@@ -5,8 +5,9 @@ import kotlin.math.min
 /**
  * Pure early-stop predicate for ask-path search / 换源.
  *
- * Stops only when enabled, enough results (or time budget exhausted),
+ * Stops when enabled and either enough results or a positive time budget elapsed,
  * and at least one full wave of workers has completed.
+ * Time-budget stop does not require matches (intentional wall-clock cap).
  */
 object AskEarlyStop {
 

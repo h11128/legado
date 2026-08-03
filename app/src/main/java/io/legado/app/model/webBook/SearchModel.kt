@@ -129,7 +129,8 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                 try {
                     val host = AskSourcePrefetch.hostOf(it.bookSourceUrl)
                     if (host.isNotEmpty()) {
-                        tokens.acquire(host, it.concurrentRate)
+                        // Host-only pacing; per-source concurrentRate stays in AnalyzeUrl.
+                        tokens.acquire(host)
                     }
                     val startTime = System.currentTimeMillis()
                     withTimeout(AskTimeout.timeoutMs(it.respondTime)) {
@@ -140,8 +141,8 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                                         author.contains(key) ||
                                         kind?.contains(key) == true
                             })
+                        AskFailCooldown.noteSuccess(it.bookSourceUrl)
                         if (items.isNotEmpty() && notedRespondTimeUrls.add(it.bookSourceUrl)) {
-                            AskFailCooldown.noteSuccess(it.bookSourceUrl)
                             RespondTimeUpdater.noteSuccess(
                                 it.bookSourceUrl,
                                 System.currentTimeMillis() - startTime,

@@ -1312,7 +1312,7 @@
     <string name="change_source_delay">换源间隔</string>
     <string name="change_source_progress">结果 %1$d, 当前进度 %2$d / %3$d: %4$s</string>
     <string name="change_source_early_stop">换源结果足够后提前结束</string>
-    <string name="change_source_early_stop_summary">有足够匹配且至少跑完一轮并行后提前结束；阈值见下方。</string>
+    <string name="change_source_early_stop_summary">有足够匹配且至少跑完一轮并行后提前结束；若设置了下方时间预算，到期也会结束（即使结果很少）。</string>
     <string name="change_source_early_stop_count">提前结束所需结果数</string>
     <string name="change_source_early_stop_count_s">结果数达到 %s 时结束</string>
     <string name="change_source_early_stop_budget">提前结束时间预算（秒）</string>

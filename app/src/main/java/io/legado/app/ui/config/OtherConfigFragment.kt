@@ -172,7 +172,7 @@ class OtherConfigFragment : PreferenceFragment(),
 
             PreferKey.changeSourceEarlyStopCount -> NumberPickerDialog(requireContext())
                 .setTitle(getString(R.string.change_source_early_stop_count))
-                .setMaxValue(50)
+                .setMaxValue(100)
                 .setMinValue(1)
                 .setValue(AppConfig.changeSourceEarlyStopCount)
                 .show {

@@ -43,6 +43,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
@@ -62,6 +63,7 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
@@ -257,7 +259,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 }
                 val host = AskSourcePrefetch.hostOf(source.bookSourceUrl)
                 if (host.isNotEmpty()) {
-                    hostBucket.acquire(host, source.concurrentRate)
+                    // Host-only pacing; per-source concurrentRate stays in AnalyzeUrl.
+                    hostBucket.acquire(host)
                 }
                 try {
                     withTimeout(AskTimeout.timeoutMs(source.respondTime)) {
@@ -291,9 +294,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     currentCoroutineContext().cancel()
                 }
             }.onCompletion {
-                RespondTimeUpdater.flush()
-                searchStateData.postValue(false)
-                searchFinishCallback?.invoke(searchBooks.isEmpty())
+                withContext(NonCancellable) {
+                    RespondTimeUpdater.flush()
+                    searchStateData.postValue(false)
+                    searchFinishCallback?.invoke(searchBooks.isEmpty())
+                }
             }.catch {
                 AppLog.put("换源搜索出错\n${it.localizedMessage}", it)
             }.collect()
@@ -311,14 +316,6 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             filter = { fName, fAuthor, _ ->
                 fName == name && (!checkAuthor || fAuthor.contains(author))
             })
-        if (resultBooks.isNotEmpty()) {
-            AskFailCooldown.noteSuccess(source.bookSourceUrl)
-            RespondTimeUpdater.noteSuccessAndMaybeFlush(
-                source.bookSourceUrl,
-                System.currentTimeMillis() - startTime,
-                source.respondTime,
-            )
-        }
         resultBooks.forEach { searchBook ->
             when {
                 loadInfo || loadToc || loadWordCount -> {
@@ -329,6 +326,15 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     searchCallback?.searchSuccess(searchBook)
                 }
             }
+        }
+        // Probe finished without throw: clear cooldown. Timing only when matched.
+        AskFailCooldown.noteSuccess(source.bookSourceUrl)
+        if (resultBooks.isNotEmpty()) {
+            RespondTimeUpdater.noteSuccessAndMaybeFlush(
+                source.bookSourceUrl,
+                System.currentTimeMillis() - startTime,
+                source.respondTime,
+            )
         }
     }
 
