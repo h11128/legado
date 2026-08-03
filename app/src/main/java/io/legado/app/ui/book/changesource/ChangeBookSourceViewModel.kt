@@ -209,6 +209,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     sources
                 }
             }
+            SourceHelp.ensureRespondTimeHealed()
             val typed = oldBook?.let {
                 BookSourceTypeMapper.filterSameType(loaded, it.type)
             } ?: loaded

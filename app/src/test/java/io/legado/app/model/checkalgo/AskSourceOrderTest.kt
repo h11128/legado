@@ -170,14 +170,42 @@ class BookSourceTypeMapperTest {
     }
 }
 
+class CheckPriorityOrderTest {
+
+    @Test
+    fun checkPriorityUsesRespondTimeRank() {
+        val urls = listOf("fail-fast", "success", "unknown", "missing")
+        val times = mapOf(
+            "fail-fast" to BookSource.DEFAULT_RESPOND_TIME + 1,
+            "success" to 100L,
+            "unknown" to BookSource.DEFAULT_RESPOND_TIME,
+        )
+        val ordered = CheckPriorityOrder.orderByPriority(urls, times)
+        assertEquals(listOf("success", "unknown", "fail-fast", "missing"), ordered)
+    }
+}
+
 class RespondTimeHealLogicTest {
+
+    @Test
+    fun encodeFailureUsesEffectiveTimeoutOverride() {
+        val encoded = RespondTimeRank.encode(
+            success = false,
+            elapsedMs = 50,
+            effectiveTimeoutMs = 10_000,
+        )
+        assertTrue(encoded > BookSource.DEFAULT_RESPOND_TIME)
+        assertEquals(
+            BookSource.DEFAULT_RESPOND_TIME + 50 + 1,
+            encoded,
+        )
+    }
 
     @Test
     fun invalidGroupFastFailClassifiesAsFailureAfterHeal() {
         val healed = BookSource.DEFAULT_RESPOND_TIME + 1
         assertEquals(RespondTimeRank.FAILURE, RespondTimeRank.classify(healed))
         assertTrue(healed > BookSource.DEFAULT_RESPOND_TIME)
-        // Honest fast success stays success and is not a heal target.
         assertEquals(RespondTimeRank.SUCCESS, RespondTimeRank.classify(200))
     }
 

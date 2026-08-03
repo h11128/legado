@@ -132,12 +132,7 @@ class App : Application() {
             //调整排序序号
             SourceHelp.adjustSortNumber()
             if (!LocalConfig.respondTimeHealDone) {
-                runCatching {
-                    SourceHelp.healRespondTimeEncoding()
-                    LocalConfig.respondTimeHealDone = true
-                }.onFailure {
-                    AppLog.put("respondTime heal failed", it)
-                }
+                SourceHelp.ensureRespondTimeHealed()
             }
             AutoTask.all()
             AutoTaskScheduler.refresh(this@App)

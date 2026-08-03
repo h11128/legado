@@ -277,6 +277,22 @@ object Debug {
         startedCheckSessionId = null
         activeCheckSourceUrls.clear()
         activeCheckResults.clear()
+        // Drain any 换源/search success writes that were gated during the check.
+        Coroutine.async {
+            RespondTimeUpdater.flush()
+        }
+        return true
+    }
+
+    /**
+     * Run [block] only when no check session is active.
+     * Synchronized on [Debug] together with [tryStartCheckSession] / [finishChecking]
+     * so RespondTimeUpdater cannot TOCTOU-race a CAS check write.
+     */
+    @Synchronized
+    fun runIfNotChecking(block: () -> Unit): Boolean {
+        if (isChecking) return false
+        block()
         return true
     }
 

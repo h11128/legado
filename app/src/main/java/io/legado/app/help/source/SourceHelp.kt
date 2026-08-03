@@ -12,6 +12,7 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.RssSource
 import io.legado.app.help.AppCacheManager
+import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.SourceConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.AudioPlay
@@ -208,6 +209,25 @@ object SourceHelp {
         }
         AppLog.put("respondTime heal: 修复了${urls.size}个失效书源的响应时间编码")
     }
+
+    /**
+     * Idempotent gate so ask-order never runs against unhealed MCP fast-fail rows
+     * even if the App startup heal is still racing on a background coroutine.
+     */
+    fun ensureRespondTimeHealed() {
+        if (LocalConfig.respondTimeHealDone) return
+        synchronized(healLock) {
+            if (LocalConfig.respondTimeHealDone) return
+            runCatching {
+                healRespondTimeEncoding()
+                LocalConfig.respondTimeHealDone = true
+            }.onFailure {
+                AppLog.put("respondTime heal failed", it)
+            }
+        }
+    }
+
+    private val healLock = Any()
 
     fun openVideoPlayer(source: BaseSource?, url: String, title: String, isFloat: Boolean) {
         if (isFloat) {

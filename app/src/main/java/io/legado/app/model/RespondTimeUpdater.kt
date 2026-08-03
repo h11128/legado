@@ -30,26 +30,25 @@ object RespondTimeUpdater {
 
     /**
      * Persist pending success writes. Skips entirely while a check session is active
-     * (items stay queued for a later flush after the check ends).
+     * (items stay queued; [Debug.finishChecking] schedules another flush).
      */
     suspend fun flush() = mutex.withLock {
-        if (Debug.isChecking) return@withLock
         val batch = LinkedHashMap<String, Long>(FLUSH_EVERY * 2)
         while (true) {
             val item = pending.poll() ?: break
             batch[item.first] = item.second
         }
         if (batch.isEmpty()) return@withLock
-        // Re-check after drain: a check may have started while we held the mutex.
-        if (Debug.isChecking) {
+        val applied = Debug.runIfNotChecking {
+            appDb.runInTransaction {
+                for ((url, respondTime) in batch) {
+                    appDb.bookSourceDao.updateRespondTime(url, respondTime)
+                }
+            }
+        }
+        if (!applied) {
             for ((url, value) in batch) {
                 pending.add(url to value)
-            }
-            return@withLock
-        }
-        appDb.runInTransaction {
-            for ((url, respondTime) in batch) {
-                appDb.bookSourceDao.updateRespondTime(url, respondTime)
             }
         }
     }

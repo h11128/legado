@@ -48,14 +48,24 @@ class Rfc001AskOrderContractTest {
     fun healRunsFromAppStartup() {
         val app = projectFile("app/src/main/java/io/legado/app/App.kt")
         assertTrue(app.contains("respondTimeHealDone"))
-        assertTrue(app.contains("healRespondTimeEncoding()"))
+        assertTrue(app.contains("ensureRespondTimeHealed()"))
         val help = projectFile("app/src/main/java/io/legado/app/help/source/SourceHelp.kt")
         assertTrue(help.contains("fun healRespondTimeEncoding()"))
+        assertTrue(help.contains("fun ensureRespondTimeHealed()"))
         assertTrue(help.contains("getInvalidGroupNames()"))
         assertTrue(help.contains("getPartsWithRespondTimeBelow"))
         assertTrue(help.contains("updateRespondTime"))
         val updater = projectFile("app/src/main/java/io/legado/app/model/RespondTimeUpdater.kt")
-        assertTrue(updater.contains("if (Debug.isChecking) return@withLock"))
+        assertTrue(updater.contains("runIfNotChecking"))
+        val debug = projectFile("app/src/main/java/io/legado/app/model/Debug.kt")
+        assertTrue(debug.contains("fun runIfNotChecking("))
+        assertTrue(debug.contains("RespondTimeUpdater.flush()"))
+        val search = projectFile("app/src/main/java/io/legado/app/model/webBook/SearchModel.kt")
+        assertTrue(search.contains("notedRespondTimeUrls"))
+        val change = projectFile(
+            "app/src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceViewModel.kt"
+        )
+        assertTrue(change.contains("ensureRespondTimeHealed()"))
     }
 
     @Test

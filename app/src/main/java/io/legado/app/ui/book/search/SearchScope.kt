@@ -7,6 +7,7 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.checkalgo.AskSourceOrder
+import io.legado.app.help.source.SourceHelp
 import io.legado.app.utils.splitNotBlank
 import splitties.init.appCtx
 
@@ -139,6 +140,7 @@ data class SearchScope(private var scope: String) {
                 }
             }
         }
+        SourceHelp.ensureRespondTimeHealed()
         return AskSourceOrder.order(
             list.toList(),
             threadCount = AppConfig.threadCount,

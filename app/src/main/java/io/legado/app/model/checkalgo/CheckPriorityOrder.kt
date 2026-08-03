@@ -1,7 +1,9 @@
 package io.legado.app.model.checkalgo
 
 /**
- * Order URLs by historical respondTime (fast first). Unknowns sort last.
+ * Order URLs by historical respondTime (fast first).
+ * Uses [RespondTimeRank] so failure encodings never sort ahead of successes.
+ * Missing map keys sort last (same as before).
  */
 object CheckPriorityOrder {
 
@@ -11,9 +13,19 @@ object CheckPriorityOrder {
     ): List<String> {
         if (urls.size <= 1) return urls
         return urls.mapIndexed { index, url ->
-            Triple(url, respondTimeByUrl[url] ?: Long.MAX_VALUE / 2, index)
+            Entry(url, respondTimeByUrl[url], index)
         }.sortedWith(
-            compareBy<Triple<String, Long, Int>> { it.second }.thenBy { it.third }
-        ).map { it.first }
+            compareBy<Entry> { entry ->
+                entry.respondTime?.let { RespondTimeRank.classify(it) }
+                    ?: (RespondTimeRank.FAILURE + 1)
+            }.thenBy { it.respondTime ?: Long.MAX_VALUE / 2 }
+                .thenBy { it.index }
+        ).map { it.url }
     }
+
+    private data class Entry(
+        val url: String,
+        val respondTime: Long?,
+        val index: Int,
+    )
 }

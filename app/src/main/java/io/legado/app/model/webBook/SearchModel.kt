@@ -45,6 +45,8 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private var searchJob: Job? = null
     private var workingState = MutableStateFlow(true)
     private val activeProgress = AtomicReference<SearchProgressReporter?>()
+    /** URLs already noted for the current [mSearchId] (once per source per run). */
+    private val notedRespondTimeUrls = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
 
     private fun initSearchPool() {
@@ -70,6 +72,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
             }
             mSearchId = searchId
             searchPage = 1
+            notedRespondTimeUrls.clear()
             initSearchPool()
         } else {
             searchPage++
@@ -111,7 +114,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                                         author.contains(key) ||
                                         kind?.contains(key) == true
                             })
-                        if (items.isNotEmpty()) {
+                        if (items.isNotEmpty() && notedRespondTimeUrls.add(it.bookSourceUrl)) {
                             RespondTimeUpdater.noteSuccess(
                                 it.bookSourceUrl,
                                 System.currentTimeMillis() - startTime,

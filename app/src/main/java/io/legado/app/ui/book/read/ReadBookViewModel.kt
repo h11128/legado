@@ -24,6 +24,7 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.ImageProvider
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
@@ -324,6 +325,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
     private fun autoChangeSource(name: String, author: String) {
         if (!AppConfig.autoChangeSource) return
         execute {
+            SourceHelp.ensureRespondTimeHealed()
             val sources = AskSourceOrder.order(
                 appDb.bookSourceDao.allTextEnabledPart,
                 threadCount = AppConfig.threadCount,
