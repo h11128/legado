@@ -56,16 +56,22 @@ class Rfc001AskOrderContractTest {
         assertTrue(help.contains("getPartsWithRespondTimeBelow"))
         assertTrue(help.contains("updateRespondTime"))
         val updater = projectFile("app/src/main/java/io/legado/app/model/RespondTimeUpdater.kt")
-        assertTrue(updater.contains("runIfNotChecking"))
+        assertTrue(updater.contains("tryAcquireRespondTimeFlush"))
+        assertTrue(updater.contains("releaseRespondTimeFlush"))
         val debug = projectFile("app/src/main/java/io/legado/app/model/Debug.kt")
-        assertTrue(debug.contains("fun runIfNotChecking("))
+        assertTrue(debug.contains("fun tryAcquireRespondTimeFlush("))
         assertTrue(debug.contains("RespondTimeUpdater.flush()"))
+        assertTrue(debug.contains("respondTimeFlushHeld"))
         val search = projectFile("app/src/main/java/io/legado/app/model/webBook/SearchModel.kt")
         assertTrue(search.contains("notedRespondTimeUrls"))
         val change = projectFile(
             "app/src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceViewModel.kt"
         )
         assertTrue(change.contains("ensureRespondTimeHealed()"))
+        val scope = projectFile("app/src/main/java/io/legado/app/ui/book/search/SearchScope.kt")
+        assertTrue(scope.contains("ensureRespondTimeHealed()"))
+        val read = projectFile("app/src/main/java/io/legado/app/ui/book/read/ReadBookViewModel.kt")
+        assertTrue(read.contains("ensureRespondTimeHealed()"))
     }
 
     @Test

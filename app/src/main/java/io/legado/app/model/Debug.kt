@@ -58,6 +58,10 @@ object Debug {
     var isChecking: Boolean = false
         private set
 
+    /** True while RespondTimeUpdater holds the flush claim (excludes check start). */
+    @Volatile
+    private var respondTimeFlushHeld = false
+
     @SuppressLint("ConstantLocale")
     private val debugTimeFormat = SimpleDateFormat("[mm:ss.SSS]", Locale.getDefault())
     private var startTime: Long = System.currentTimeMillis()
@@ -176,7 +180,7 @@ object Debug {
 
     @Synchronized
     fun tryStartCheckSession(): Long? {
-        if (callback != null || isChecking) return null
+        if (callback != null || isChecking || respondTimeFlushHeld) return null
         val sessionId = ++nextCheckSessionId
         activeCheckSessionId = sessionId
         startedCheckSessionId = null
@@ -285,15 +289,19 @@ object Debug {
     }
 
     /**
-     * Run [block] only when no check session is active.
-     * Synchronized on [Debug] together with [tryStartCheckSession] / [finishChecking]
-     * so RespondTimeUpdater cannot TOCTOU-race a CAS check write.
+     * Claim exclusive respondTime flush vs check start.
+     * Hold only the claim across DB work — do not run DB under [Debug]'s monitor.
      */
     @Synchronized
-    fun runIfNotChecking(block: () -> Unit): Boolean {
-        if (isChecking) return false
-        block()
+    fun tryAcquireRespondTimeFlush(): Boolean {
+        if (isChecking || respondTimeFlushHeld) return false
+        respondTimeFlushHeld = true
         return true
+    }
+
+    @Synchronized
+    fun releaseRespondTimeFlush() {
+        respondTimeFlushHeld = false
     }
 
     @Synchronized
