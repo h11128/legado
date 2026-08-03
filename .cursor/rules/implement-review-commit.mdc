@@ -9,7 +9,7 @@ alwaysApply: true
 
 ## MUST
 
-1. **Subagent 审查**：用 `Task` 拉起 `code-reviewer`（或项目里的 code-review skill 流程）。**不要**为了「审查更强」另指定模型；不传 `model`，跟当前会话一致。
+1. **Subagent 审查**：用 `Task` 拉起 `code-reviewer`（或项目里的 code-review skill 流程）。按任务难度自选 `model`（禁用任何 Opus / Sonnet）；审查类默认用会话允许列表里的强模型（当前常见：`cursor-grok-4.5-high`），轻量探路可用 fast/flash。不传 `model` 时会继承父会话，一般不推荐。
 2. **修完全部问题**：审查里的 Critical 和 Warning 都要修完（或写清为何不修并得到用户同意）。修完后如改动仍大，可再开一轮短审查。
 3. **再 commit**：审查通过（或用户同意的残留项已记录）后才 `git commit`。用户本轮已要求交付/收尾时，默认应提交；用户明确说「先别 commit」则停下。
 4. **证据**：回复里写清审查结论、修了什么、commit hash/message。
