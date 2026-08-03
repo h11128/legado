@@ -199,7 +199,9 @@ class ReadBookActivity : BaseReadBookActivity(),
                 viewModel.openChapter(
                     it[0] as Int,
                     it[1] as Int,
-                    highlightLayoutTitleLength
+                    highlightLayoutTitleLength,
+                    (it[TocActivityResult.HIGHLIGHT_ANCHOR_TEXT_INDEX] as String)
+                        .takeIf(String::isNotEmpty)
                 )
             }
         }
@@ -966,12 +968,14 @@ class ReadBookActivity : BaseReadBookActivity(),
             editingHighlightSnapshot = value
         }
     private var highlightStyleDialog: HighlightStyleDialog? = null
+    private var highlightPopup: PopupAction? = null
 
     private fun showHighlightActionMenu(highlight: BookHighlight, x: Float, y: Float) {
         editingHighlight = highlight
         binding.textMenuPosition.x = x
         binding.textMenuPosition.y = y
-        popupActionMenu(this) {
+        highlightPopup?.dismiss()
+        highlightPopup = popupActionMenu(this) {
             item(getString(R.string.highlight_style), ACTION_HIGHLIGHT_STYLE)
             item(getString(R.string.highlight_note), ACTION_HIGHLIGHT_NOTE)
             item(getString(R.string.highlight_create_rule), ACTION_HIGHLIGHT_CREATE_RULE)
@@ -1005,6 +1009,32 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onHighlightClick(highlight: BookHighlight, x: Float, y: Float) {
         showHighlightActionMenu(highlight, x, y)
+    }
+
+    override fun onHighlightRuleClick(ruleId: Long, x: Float, y: Float) {
+        binding.textMenuPosition.x = x
+        binding.textMenuPosition.y = y
+        highlightPopup?.dismiss()
+        highlightPopup = popupActionMenu(this) {
+            item(getString(R.string.edit), ACTION_HIGHLIGHT_RULE_EDIT)
+            item(getString(R.string.highlight_rule_disable), ACTION_HIGHLIGHT_RULE_DISABLE)
+            danger(ACTION_HIGHLIGHT_RULE_DISABLE)
+        }.show(binding.textMenuPosition) { action ->
+            when (action) {
+                ACTION_HIGHLIGHT_RULE_EDIT -> showDialogFragment(
+                    HighlightRuleEditDialog.edit(ruleId)
+                )
+
+                ACTION_HIGHLIGHT_RULE_DISABLE -> disableHighlightRule(ruleId)
+            }
+        }
+    }
+
+    private fun disableHighlightRule(ruleId: Long) {
+        val rule = ReadBook.highlightRules.firstOrNull { it.id == ruleId }
+            ?.copy(isEnabled = false) ?: return
+        Coroutine.async(lifecycleScope) { appDb.highlightRuleDao.update(rule) }
+            .onFinally { ReadBook.upHighlightRules() }
     }
 
     override fun currentHighlightStyle(): HighlightStyle {
@@ -1292,6 +1322,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     override fun pageChanged() {
         pageChanged = true
         binding.readView.onPageChange()
+        highlightPopup?.dismiss()
         handler.post {
             upSeekBarProgress()
         }
@@ -2162,7 +2193,8 @@ class ReadBookActivity : BaseReadBookActivity(),
             HighlightStyleDialog.HL_UNDERLINE,
             HighlightStyleDialog.HL_STRIKE,
             HighlightStyleDialog.HL_BOX,
-            HighlightStyleDialog.HL_EMPHASIS -> {
+            HighlightStyleDialog.HL_EMPHASIS,
+            HighlightStyleDialog.HL_SHADOW -> {
                 val style = HighlightStyleDialog.applyChannelColor(
                     currentHighlightStyle(),
                     dialogId,
@@ -2426,6 +2458,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         tts?.clearTts()
         textActionMenu.dismiss()
         popupAction.dismiss()
+        highlightPopup?.dismiss()
         binding.readView.onDestroy()
         ReadBook.unregister(this)
         handler.removeCallbacksAndMessages(null) // 清理Handler消息
@@ -2521,11 +2554,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
         observeEvent<Boolean>(EventBus.REFRESH_BOOK_CONTENT) { //书源js函数触发刷新
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-                ReadBook.book?.let {
-                    ReadBook.curTextChapter = null
-                    binding.readView.upContent()
-                    viewModel.refreshContentDur(it)
-                }
+                refreshDurChapter()
             }
         }
         observeEvent<Boolean>(EventBus.REFRESH_BOOK_TOC) { //书源js函数触发刷新
@@ -2570,6 +2599,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         private const val ACTION_HIGHLIGHT_CREATE_RULE = "highlightCreateRule"
         private const val ACTION_HIGHLIGHT_COPY = "highlightCopy"
         private const val ACTION_HIGHLIGHT_DELETE = "highlightDelete"
+        private const val ACTION_HIGHLIGHT_RULE_EDIT = "highlightRuleEdit"
+        private const val ACTION_HIGHLIGHT_RULE_DISABLE = "highlightRuleDisable"
         private const val STATE_EDITING_HIGHLIGHT = "editingHighlight"
     }
 

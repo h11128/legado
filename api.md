@@ -123,23 +123,42 @@ X-Legado-Token = 设置中配置的令牌
 }
 ```
 
-服务提供 12 个工具：`save_source`、`list_sources`、`get_source`、`delete_sources`、
-`debug_source`、`start_check_sources`、`get_check_progress`、`stop_check_sources`、
-`reset_mcp_channel`、`get_http_logs`、`get_http_log`、`set_http_log_recording`。
+服务提供核心工具：`save_source`、`list_sources`、`get_source`、`delete_sources`、
+`debug_source`、`get_http_logs`、`get_http_log`、`set_http_log_recording`、
+`get_cookies`、`set_cookie`、`clear_cookies`、`eval_js`、`check_source`，以及批量修复路径
+`start_check_sources`、`get_check_progress`、`stop_check_sources`、`reset_mcp_channel`。
 另提供轻量健康检查：`GET /mcp/health`（同样需要 `X-Legado-Token`），返回
 `ok` / `serviceRun` / `debugBusy` / `checkRunning` / `stale` / `lastTool*` 等字段，
 供 PC 在 oneshot 前探测「进程活着但通道卡住」。
-书源写入、删除、调试、批量校验、通道重置和日志开关均属于修改操作；
-书源全文与已脱敏 HTTP 日志仍可能包含敏感业务数据，请只向可信客户端开放令牌。
+书源写入、删除、调试、批量校验、通道重置、日志开关、Cookie 持久层写入和清理、
+脚本求值均可能修改应用状态；书源全文、未脱敏 Cookie 与已脱敏 HTTP 日志仍可能包含敏感业务数据，
+请只向可信客户端开放令牌。
+
 `debug_source` 为单通道逐步调试，默认超时 **90s**（与 PC MCP 客户端对齐），输出不会脱敏；
-批量校验请用 `start_check_sources`（多线程，与 App「校验书源」同逻辑），再用
+调试期间会发送 `notifications/message` 日志；请求 `_meta.progressToken` 时还会同步发送
+`notifications/progress`。通知超时或客户端不支持通知不会影响最终的完整有界日志结果。
+`check_source` 按当前应用配置启动 App 内校验会话，更新书源分组、错误备注和响应时间，
+也会在每个书源得到明确结果后发送日志和可选进度通知；校验期间若书源被删除或重新保存，
+该项会标记为未完成，旧校验结果不会覆盖新记录。客户端取消 MCP 请求不会中止已经启动的
+应用内校验，可在应用的校验通知中手动停止。
+批量修复/PC 脚本请优先用 `start_check_sources`（多线程，与 App「校验书源」同逻辑），再用
 `get_check_progress` 分页取结果（含 `lastProgressAt` / `checkFlags`）。
 `reset_mcp_channel` 仅用于紧急解锁长期占用的 debug/校验通道。
 大批量时建议电脑侧先 DNS 预检，再按 50–100 URL 分批调用，避免一次加载全库压垮手机堆。
-设备侧校验已启用目录采样、搜索成功跳过发现深检、按 host 分片、批量写库与 HTTP body 上限。
+设备侧校验已启用目录采样、搜索成功跳过发现深检、按 host 分片、AIMD/令牌桶与 HTTP body 上限。
 `list_sources` 支持 `offset`/`limit` 分页（默认 100，最大 500），避免大库被截断。
 `save_source` 默认保留已有 `enabled` 与空分组回填；传入 `preserveEnabled=false` /
 `preserveGroup=false` 可覆盖启用状态或清空分组。
+`get_cookies` 返回持久层与会话层合并后的未脱敏 Cookie；`set_cookie` 只合并写入持久层，
+同名会话 Cookie 在当前会话中仍优先；`clear_cookies` 会同时清理持久层、会话层和 WebView Cookie。
+`eval_js` 可在应用书源环境执行任意 JavaScript，令牌等同于书源脚本执行权限；求值结果和 `java.log`
+输出不会脱敏，也可能访问网络、Cookie、缓存及已绑定书源的数据。传入书源 URL 只绑定其运行时身份，
+不会自动执行该书源的 `mainJs`。
+
+服务还会将应用内置 Markdown 帮助文档作为只读 resources 暴露，URI 格式为 `legado://help/<文件名>`，
+例如 `legado://help/jsHelp` 和 `legado://help/ruleHelp`。客户端可先列出 resources，再按 URI 读取；
+返回内容使用 UTF-8 和 `text/markdown`，不会修改应用状态。
+
 MCP 开关在进程崩溃后会按用户偏好自启；仅用户关闭服务时才会持久为关闭。
 装包/开机走 `McpLifecycleReceiver`（`BOOT_COMPLETED` / `MY_PACKAGE_REPLACED`）；
 划掉任务在偏好开启时不杀 MCP；`McpWatchdog` 约每 3 分钟恢复服务并清理僵死通道。
@@ -156,7 +175,7 @@ python scripts/mcp_discover.py          # 发现并写回 config/mcp_defaults.js
 Cursor IDE 内置 MCP 客户端不走 Python：若工具仍超时，discover 写完配置后 **Reload MCP / 重开 agent 一次** 即可，不要手改 DHCP IP。
 勿死记 DHCP IP；SOT 仍是 `config/mcp_defaults.json`。
 
-`start_check_sources` 参数（与 App「校验书源」同逻辑；布尔开关缺省=App 当前配置，任务结束后恢复）：
+`start_check_sources` 参数（与 App「校验书源」同逻辑；布尔开关缺省=App 当前配置，仅作用于本次 MCP 批量校验）：
 
 | 参数 | 类型 | 默认 / 修复波次建议 | 含义 |
 |------|------|---------------------|------|

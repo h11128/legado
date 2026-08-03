@@ -599,6 +599,7 @@ cache.deleteMemory(key: String)
 ```js
 // 跳转外部链接，传入http链接或者scheme跳转到浏览器或其他应用
 // 指定mimeType，可以跳转指定类型应用，例如（video/*）
+// legado:// 或 yuedu:// 导入链接会直接打开应用内导入确认页
 java.openUrl(url: String, mimeType: String = null)
 ```
 ## 视频播放器函数
@@ -828,7 +829,7 @@ function getBookInfo(book) {
 `isPay`、`resourceUrl`、`tag` 和 `wordCount`。
 
 卷名行推荐设置 `isVolume: true`，并令 `url` 与 `title` 完全相同。应用不会为这种行补全
-URL，打开时直接使用 `tag` 作为内容，不调用 `getContent`。
+URL，打开时作为空正文的卷名分隔页显示，不调用 `getContent`。
 
 #### getContent
 

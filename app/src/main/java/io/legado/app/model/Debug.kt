@@ -20,7 +20,25 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
+enum class CheckSourceStatus {
+    PASSED,
+    FAILED,
+    NOT_COMPLETED,
+}
+
+data class CheckSourceResult(
+    val status: CheckSourceStatus,
+    val detail: String = "",
+)
+
+data class CheckSourceSnapshot(
+    val messages: Map<String, String>,
+    val results: Map<String, CheckSourceResult>,
+)
+
 object Debug {
+    private const val MAX_FINISHED_CHECK_SESSIONS = 4
+
     @get:Synchronized
     var callback: Callback? = null
         private set
@@ -29,7 +47,13 @@ object Debug {
     private var debugSessionId = 0L
     val debugMessageMap = ConcurrentHashMap<String, String>()
     private val debugTimeMap = ConcurrentHashMap<String, Long>()
-    @Volatile
+    private var nextCheckSessionId = 0L
+    private var activeCheckSessionId: Long? = null
+    private var startedCheckSessionId: Long? = null
+    private val activeCheckSourceUrls = HashSet<String>()
+    private val activeCheckResults = HashMap<String, CheckSourceResult>()
+    private val finishedCheckSnapshots = LinkedHashMap<Long, CheckSourceSnapshot>()
+    @get:Synchronized
     var isChecking: Boolean = false
         private set
 
@@ -62,8 +86,7 @@ object Debug {
             }
             it.printLog(state, printMsg)
         }
-        // Checking path: ConcurrentHashMap, no need to hold the callback lock further.
-        if (isChecking && sourceUrl != null && msg.length < 30) {
+        if (isChecking && sourceUrl != null && (msg).length < 30) {
             var printMsg = msg
             if (isHtml) {
                 printMsg = HtmlFormatter.format(msg)
@@ -100,15 +123,6 @@ object Debug {
         debugSource = null
         callback = null
         return true
-    }
-
-    /** Emergency unlock when MCP debug callback was left held after a hung tool call. */
-    @Synchronized
-    fun forceCancelDebug() {
-        debugSessionId++
-        tasks.clear()
-        debugSource = null
-        callback = null
     }
 
     @Synchronized
@@ -151,41 +165,151 @@ object Debug {
     }
 
     @Synchronized
-    fun tryStartChecking(): Boolean {
-        if (callback != null || isChecking) return false
+    fun tryStartCheckSession(): Long? {
+        if (callback != null || isChecking) return null
+        val sessionId = ++nextCheckSessionId
+        activeCheckSessionId = sessionId
+        startedCheckSessionId = null
+        activeCheckSourceUrls.clear()
+        activeCheckResults.clear()
         isChecking = true
+        return sessionId
+    }
+
+    fun tryStartChecking(): Boolean = tryStartCheckSession() != null
+
+    @Synchronized
+    fun markCheckServiceStarted(sessionId: Long): Boolean {
+        if (!isChecking || activeCheckSessionId != sessionId) return false
+        startedCheckSessionId = sessionId
         return true
     }
 
-    fun startChecking(source: BookSource) {
-        if (!isChecking || callback != null) return
+    @Synchronized
+    fun isCheckServiceStarted(sessionId: Long): Boolean =
+        startedCheckSessionId == sessionId || finishedCheckSnapshots.containsKey(sessionId)
+
+    @Synchronized
+    fun isChecking(sessionId: Long): Boolean =
+        isChecking && activeCheckSessionId == sessionId
+
+    @Synchronized
+    fun prepareCheckSession(sessionId: Long, sourceUrls: Collection<String>) {
+        if (activeCheckSessionId != sessionId) return
+        activeCheckSourceUrls.clear()
+        activeCheckSourceUrls.addAll(sourceUrls)
+        activeCheckResults.clear()
+        sourceUrls.forEach {
+            debugMessageMap.remove(it)
+            debugTimeMap.remove(it)
+        }
+    }
+
+    @Synchronized
+    fun getCheckSnapshot(
+        sessionId: Long,
+        sourceUrls: Collection<String>,
+    ): CheckSourceSnapshot {
+        val snapshot = if (activeCheckSessionId == sessionId) {
+            CheckSourceSnapshot(debugMessageMap, activeCheckResults)
+        } else {
+            finishedCheckSnapshots[sessionId] ?: CheckSourceSnapshot(emptyMap(), emptyMap())
+        }
+        return CheckSourceSnapshot(
+            messages = sourceUrls.associateWith { snapshot.messages[it].orEmpty() },
+            results = sourceUrls.mapNotNull { url ->
+                snapshot.results[url]?.let { url to it }
+            }.toMap(),
+        )
+    }
+
+    @Synchronized
+    fun takeCheckSnapshot(
+        sessionId: Long,
+        sourceUrls: Collection<String>,
+    ): CheckSourceSnapshot {
+        val snapshot = getCheckSnapshot(sessionId, sourceUrls)
+        if (activeCheckSessionId != sessionId) {
+            finishedCheckSnapshots.remove(sessionId)
+        }
+        return snapshot
+    }
+
+    @Synchronized
+    fun recordCheckResult(sessionId: Long, sourceUrl: String, result: CheckSourceResult) {
+        if (activeCheckSessionId != sessionId) return
+        activeCheckResults[sourceUrl] = result
+    }
+
+    @Synchronized
+    fun startChecking(sessionId: Long, source: BookSource) {
+        if (!isChecking || activeCheckSessionId != sessionId || callback != null) return
         debugTimeMap[source.bookSourceUrl] = System.currentTimeMillis()
         debugMessageMap[source.bookSourceUrl] = "${debugTimeFormat.format(Date(0))} 开始校验"
     }
 
     @Synchronized
-    fun finishChecking() {
+    fun finishChecking(sessionId: Long): Boolean {
+        if (!isChecking || activeCheckSessionId != sessionId) return false
+        if (startedCheckSessionId == sessionId) {
+            finishedCheckSnapshots[sessionId] = CheckSourceSnapshot(
+                messages = activeCheckSourceUrls.associateWith { debugMessageMap[it].orEmpty() },
+                results = activeCheckSourceUrls.mapNotNull { url ->
+                    activeCheckResults[url]?.let { url to it }
+                }.toMap(),
+            )
+        }
+        while (finishedCheckSnapshots.size > MAX_FINISHED_CHECK_SESSIONS) {
+            finishedCheckSnapshots.remove(finishedCheckSnapshots.keys.first())
+        }
         isChecking = false
-        debugTimeMap.clear()
-        debugMessageMap.clear()
+        activeCheckSessionId = null
+        startedCheckSessionId = null
+        activeCheckSourceUrls.clear()
+        activeCheckResults.clear()
+        return true
     }
 
+    @Synchronized
+    fun finishChecking() {
+        activeCheckSessionId?.let { finishChecking(it) }
+    }
+
+    @Synchronized
     fun clearSourceCheckState(sourceUrl: String) {
         debugTimeMap.remove(sourceUrl)
         debugMessageMap.remove(sourceUrl)
     }
 
-    fun getRespondTime(sourceUrl: String): Long {
-        return debugTimeMap[sourceUrl] ?: CheckSource.timeout
+    @Synchronized
+    fun getRespondTime(sessionId: Long, sourceUrl: String, succeeded: Boolean): Long {
+        if (activeCheckSessionId != sessionId) return CheckSource.timeout
+        val startTime = debugTimeMap[sourceUrl] ?: return CheckSource.timeout
+        val spendingTime = System.currentTimeMillis() - startTime
+        return if (succeeded) spendingTime else CheckSource.timeout + spendingTime
     }
 
+    @Synchronized
+    fun updateFinalMessage(sessionId: Long, sourceUrl: String, state: String) {
+        if (activeCheckSessionId != sessionId) return
+        updateFinalMessage(sourceUrl, state)
+    }
+
+    @Synchronized
     fun updateFinalMessage(sourceUrl: String, state: String) {
-        val started = debugTimeMap[sourceUrl] ?: return
-        if (!debugMessageMap.containsKey(sourceUrl)) return
-        val spendingTime = System.currentTimeMillis() - started
-        debugTimeMap[sourceUrl] =
-            if (state == "校验成功") spendingTime else CheckSource.timeout + spendingTime
-        val printTime = debugTimeFormat.format(Date(spendingTime))
+        if (debugTimeMap[sourceUrl] != null && debugMessageMap[sourceUrl] != null) {
+            val spendingTime = System.currentTimeMillis() - debugTimeMap[sourceUrl]!!
+            debugTimeMap[sourceUrl] =
+                if (state == "校验成功") spendingTime else CheckSource.timeout + spendingTime
+            val printTime = debugTimeFormat.format(Date(spendingTime))
+            debugMessageMap[sourceUrl] = "$printTime $state"
+        }
+    }
+
+    @Synchronized
+    fun updateCheckMessage(sessionId: Long, sourceUrl: String, state: String) {
+        if (activeCheckSessionId != sessionId) return
+        val printTime = debugMessageMap[sourceUrl]?.substringBefore(' ') ?: return
         debugMessageMap[sourceUrl] = "$printTime $state"
     }
 

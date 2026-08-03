@@ -1,8 +1,10 @@
 package io.legado.app.web.mcp
 
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.BookSourcePart
+import io.legado.app.model.CheckSourceResult
+import io.legado.app.model.CheckSourceStatus
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -44,20 +46,72 @@ class McpFormatTest {
     }
 
     @Test
-    fun pageSummariesAndEnabledFilter() {
-        val a = BookSource(bookSourceName = "A", bookSourceUrl = "https://a.com", enabled = true)
-        val b = BookSource(bookSourceName = "B", bookSourceUrl = "https://b.com", enabled = false)
-        val enabled = McpFormat.summarizeSources(listOf(a, b), null, enabledOnly = true)
-        assertEquals(1, enabled.size)
-        assertEquals("https://a.com", enabled[0]["bookSourceUrl"])
+    fun renderCheckSummarySeparatesFailedPassedAndPending() {
+        val failed = BookSourcePart(
+            bookSourceName = "坏站",
+            bookSourceUrl = "https://bad.example",
+        )
+        val passed = BookSourcePart(
+            bookSourceName = "好站",
+            bookSourceUrl = "https://good.example",
+        )
+        val pending = BookSourcePart(
+            bookSourceName = "未跑完",
+            bookSourceUrl = "https://pending.example",
+        )
 
-        val all = McpFormat.summarizeSources(listOf(a, b), null)
-        val page = McpFormat.pageSummaries(all, offset = 1, limit = 1)
-        assertEquals(2, page["total"])
-        assertEquals(1, page["offset"])
-        assertEquals(1, page["count"])
-        val json = McpFormat.toPrettyJson(page)
-        assertTrue(json.contains("https://b.com"))
-        assertFalse(json.contains("\"bookSourceUrl\": \"https://a.com\""))
+        val rendered = McpFormat.renderCheckSummary(
+            listOf(failed, passed, pending),
+            mapOf(
+                failed.bookSourceUrl to CheckSourceResult(
+                    CheckSourceStatus.FAILED,
+                    "搜索失效 | // Error: 搜索超时",
+                ),
+                passed.bookSourceUrl to CheckSourceResult(CheckSourceStatus.PASSED),
+            ),
+            mapOf(pending.bookSourceUrl to "[00:01.000] 校验成功"),
+        )
+
+        assertTrue(rendered.contains("失败 1/3"))
+        assertTrue(rendered.contains("[失败] 坏站"))
+        assertTrue(rendered.contains("// Error: 搜索超时"))
+        assertTrue(rendered.contains("通过 1/3"))
+        assertTrue(rendered.contains("[通过] 好站"))
+        assertTrue(rendered.contains("未完成 1/3"))
+        assertTrue(rendered.contains("[未完成] 未跑完"))
+        assertTrue(rendered.contains("[00:01.000] 校验成功"))
+    }
+
+    @Test
+    fun renderCheckSummaryKeepsDeletedAndChangedRequests() {
+        val changedRequest = BookSourcePart(
+            bookSourceName = "已修改",
+            bookSourceUrl = "https://changed.example",
+            lastUpdateTime = 1,
+        )
+        val deletedRequest = BookSourcePart(
+            bookSourceName = "已删除",
+            bookSourceUrl = "https://deleted.example",
+            lastUpdateTime = 1,
+        )
+        val rendered = McpFormat.renderCheckSummary(
+            listOf(changedRequest, deletedRequest),
+            mapOf(
+                changedRequest.bookSourceUrl to CheckSourceResult(
+                    CheckSourceStatus.NOT_COMPLETED,
+                    "书源已变更，校验结果未写回",
+                ),
+                deletedRequest.bookSourceUrl to CheckSourceResult(
+                    CheckSourceStatus.NOT_COMPLETED,
+                    "书源已删除",
+                ),
+            ),
+            emptyMap(),
+        )
+
+        assertTrue(rendered.contains("通过 0/2"))
+        assertTrue(rendered.contains("未完成 2/2"))
+        assertTrue(rendered.contains("已修改(https://changed.example):书源已变更"))
+        assertTrue(rendered.contains("已删除(https://deleted.example):书源已删除"))
     }
 }
