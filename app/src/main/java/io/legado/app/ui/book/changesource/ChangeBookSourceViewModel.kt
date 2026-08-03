@@ -177,8 +177,13 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     private fun initSearchPool() {
-        searchPool = Executors
-            .newFixedThreadPool(min(threadCount, AppConst.MAX_THREAD)).asCoroutineDispatcher()
+        // Reuse for ViewModel lifetime; closing/recreating each search leaked pools
+        // after stopSearch stopped calling close(). onCleared() shuts it down.
+        if (searchPool == null) {
+            searchPool = Executors
+                .newFixedThreadPool(min(threadCount, AppConst.MAX_THREAD))
+                .asCoroutineDispatcher()
+        }
     }
 
     fun refresh(): Boolean {
