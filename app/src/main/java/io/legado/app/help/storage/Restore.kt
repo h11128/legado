@@ -36,6 +36,7 @@ import io.legado.app.help.book.upType
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
+import io.legado.app.lib.theme.WallpaperTheme
 import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
 import io.legado.app.model.BookCover
 import io.legado.app.model.localBook.LocalBook
@@ -199,10 +200,12 @@ object Restore {
                 if (readRecord.deviceId != androidId) {
                     appDb.readRecordDao.insert(readRecord)
                 } else {
-                    val time = appDb.readRecordDao
-                        .getReadTime(readRecord.deviceId, readRecord.bookName)
-                    if (time == null || time < readRecord.readTime) {
+                    val current = appDb.readRecordDao
+                        .getRecord(readRecord.deviceId, readRecord.bookName)
+                    if (current == null || current.readTime < readRecord.readTime) {
                         appDb.readRecordDao.insert(readRecord)
+                    } else if (readRecord.author.isNotBlank()) {
+                        appDb.readRecordDao.insert(current.copy(author = readRecord.author))
                     }
                 }
             }
@@ -342,6 +345,7 @@ object Restore {
             if (!BuildConfig.DEBUG) {
                 LauncherIconHelp.changeIcon(appCtx.getPrefString(PreferKey.launcherIcon))
             }
+            WallpaperTheme.syncWithPreferences(appCtx)
             ThemeConfig.applyDayNight(appCtx)
         }
     }

@@ -9,6 +9,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.widget.SeekBar
 import androidx.activity.viewModels
+import androidx.core.view.doOnLayout
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -408,8 +409,9 @@ class AudioPlayActivity :
     }
 
     private fun upCover(path: String?) {
-        BookCover.load(this, path, sourceOrigin = AudioPlay.bookSource?.bookSourceUrl) {
-            BookCover.loadBlur(this, path, sourceOrigin = AudioPlay.bookSource?.bookSourceUrl)
+        val sourceOrigin = AudioPlay.book?.getCoverSourceOrigin()
+        BookCover.load(this, path, sourceOrigin = sourceOrigin) {
+            BookCover.loadBlur(this, path, sourceOrigin = sourceOrigin)
                 .into(binding.ivBg)
         }.into(binding.ivCover)
     }
@@ -421,11 +423,8 @@ class AudioPlayActivity :
             binding.lyricViewX.gone()
             return
         }
-        lyricViewX.loadLyric(lyric)
-        binding.lyricViewX.visible()
-        if (lyricOn) {
-            upLyricP(AudioPlay.durChapterPos)
-        } else {
+        val firstLyric = !lyricOn
+        if (firstLyric) {
             lyricOn = true
             lyricViewX.apply {
                 setNormalTextSize(50F)
@@ -439,9 +438,19 @@ class AudioPlayActivity :
                     }
                 })
             }
+        }
+        lyricViewX.visible()
+        lyricViewX.doOnLayout {
+            if (oldLyric == lyric) {
+                lyricViewX.loadLyric(lyric)
+            }
+        }
+        if (firstLyric) {
             lyricViewX.postDelayed({
                 upLyricP(AudioPlay.durChapterPos)
             }, 100)
+        } else {
+            upLyricP(AudioPlay.durChapterPos)
         }
     }
     override fun upLyricP(position: Int) {

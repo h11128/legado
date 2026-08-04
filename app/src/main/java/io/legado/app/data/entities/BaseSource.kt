@@ -24,7 +24,6 @@ import io.legado.app.model.SharedJsScope.remove
 import io.legado.app.model.jsSource.JsSourceEngine
 import io.legado.app.model.login.LoginUiV2
 import io.legado.app.utils.GSON
-import io.legado.app.utils.GSONStrict
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.has
@@ -50,6 +49,12 @@ internal object LoginInfoMapInitialization {
             }
         }
     }
+}
+
+internal fun BaseSource.getStoredLoginInfoMap(): MutableMap<String, String>? {
+    val json = getLoginInfo() ?: return null
+    return GSON.fromJsonObject<MutableMap<String, String>>(json).getOrNull()
+        ?: mutableMapOf()
 }
 
 /**
@@ -187,10 +192,7 @@ interface BaseSource : JsExtensions {
 
                     else -> it
                 }
-                GSONStrict.fromJsonObject<Map<String, String>>(json).getOrNull()?.let { map ->
-                    putAll(map)
-                } ?: GSON.fromJsonObject<Map<String, String>>(json).getOrNull()?.let { map ->
-                    log("请求头规则 JSON 格式不规范，请改为规范格式")
+                GSON.fromJsonObject<Map<String, String>>(json).getOrNull()?.let { map ->
                     putAll(map)
                 }
             } catch (e: Exception) {
@@ -260,10 +262,7 @@ interface BaseSource : JsExtensions {
     }
 
     fun getLoginInfoMap(): MutableMap<String, String> {
-        getLoginInfo()?.let { json ->
-            return GSON.fromJsonObject<MutableMap<String, String>>(json).getOrNull()
-                ?: mutableMapOf()
-        }
+        getStoredLoginInfoMap()?.let { return it }
         if (isLoginUiV2()) return mutableMapOf()
         val loginUiRule = loginUi?.trim().takeUnless { it.isNullOrBlank() } ?: return mutableMapOf()
         return LoginInfoMapInitialization.run(

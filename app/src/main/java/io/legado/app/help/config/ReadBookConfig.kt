@@ -9,6 +9,7 @@ import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PageAnim
 import io.legado.app.constant.PreferKey
+import io.legado.app.constant.PunctuationCompressMode
 import io.legado.app.help.DefaultData
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.utils.BitmapUtils
@@ -25,6 +26,7 @@ import io.legado.app.utils.getFile
 import io.legado.app.utils.getMeanColor
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefInt
+import io.legado.app.utils.getPrefString
 import io.legado.app.utils.hexString
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.putPrefBoolean
@@ -246,6 +248,19 @@ object ReadBookConfig {
      */
     val textBottomJustify get() = appCtx.getPrefBoolean(PreferKey.textBottomJustify, true)
 
+    /**
+     * 段首标点悬挂
+     */
+    val hangingPunctuation get() = appCtx.getPrefBoolean(PreferKey.hangingPunctuation, false)
+
+    /**
+     * 标点挤压
+     */
+    val punctuationCompress
+        get() = PunctuationCompressMode.fromKey(
+            appCtx.getPrefString(PreferKey.punctuationCompress)
+        )
+
     var hideStatusBar = appCtx.getPrefBoolean(PreferKey.hideStatusBar)
     var hideNavigationBar = appCtx.getPrefBoolean(PreferKey.hideNavigationBar)
     var useZhLayout = appCtx.getPrefBoolean(PreferKey.useZhLayout)
@@ -347,6 +362,18 @@ object ReadBookConfig {
         get() = config.reviewIconColor
         set(value) {
             config.reviewIconColor = value
+        }
+
+    var reviewIconSvg: String
+        get() = config.reviewIconSvg
+        set(value) {
+            config.reviewIconSvg = value
+        }
+
+    var reviewIconScale: Int
+        get() = config.reviewIconScale
+        set(value) {
+            config.reviewIconScale = value.coerceIn(50, 200)
         }
 
     var paddingBottom: Int
@@ -476,6 +503,8 @@ object ReadBookConfig {
             exportConfig.headerMode = shareConfig.headerMode
             exportConfig.footerMode = shareConfig.footerMode
             exportConfig.reviewIconColor = shareConfig.reviewIconColor
+            exportConfig.reviewIconSvg = shareConfig.reviewIconSvg
+            exportConfig.reviewIconScale = shareConfig.reviewIconScale
         }
         return exportConfig
     }
@@ -585,6 +614,8 @@ object ReadBookConfig {
         var paragraphIndent: String = "　　",//段落缩进
         var underlineMode: Int = 0, //下划线
         var reviewIconColor: Int = 0, //段评内置图标颜色(0=跟随主题)
+        var reviewIconSvg: String = "",
+        var reviewIconScale: Int = 100,
         var paddingBottom: Int = 6,
         var paddingLeft: Int = 16,
         var paddingRight: Int = 16,
@@ -881,6 +912,8 @@ object ReadBookConfig {
             "paragraphIndent" to paragraphIndent,
             "underlineMode" to underlineMode,
             "reviewIconColor" to reviewIconColor,
+            "reviewIconSvg" to reviewIconSvg,
+            "reviewIconScale" to reviewIconScale,
             "paddingBottom" to paddingBottom,
             "paddingLeft" to paddingLeft,
             "paddingRight" to paddingRight,

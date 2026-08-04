@@ -101,6 +101,11 @@
         <item>双击生效</item>
     </string-array>
 
+    <string-array name="highlight_action_trigger_title">
+        <item>@string/highlight_action_trigger_click</item>
+        <item>@string/highlight_action_trigger_long_press</item>
+    </string-array>
+
 	<string-array name="double_page_title">
 		<item>Single page</item>
 		<item>Double page</item>
@@ -194,6 +199,14 @@
 		<item>default_version</item>
 		<item>beta_release_version</item>
 		<item>beta_releaseS_version</item>
+	</string-array>
+
+	<string-array name="punctuation_compress_title">
+		<item>@string/punctuation_compress_none</item>
+		<item>@string/punctuation_compress_line_end</item>
+		<item>@string/punctuation_compress_adjacent</item>
+		<item>@string/punctuation_compress_adjacent_line_end</item>
+		<item>@string/punctuation_compress_all</item>
 	</string-array>
 
 	<string-array name="tip_color">
