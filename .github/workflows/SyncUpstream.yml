@@ -1,4 +1,4 @@
-name: Sync Upstream (gedoor/legado)
+name: Sync Upstream (LegadoTeam/legado)
 
 on:
   schedule:
@@ -28,13 +28,13 @@ jobs:
 
       - name: Add or update upstream
         run: |
+          # Development lineage is LegadoTeam/legado (gedoor/legado main is unrelated history).
           if git remote | grep -q '^upstream$'; then
-            git remote set-url upstream https://github.com/gedoor/legado.git
+            git remote set-url upstream https://github.com/LegadoTeam/legado.git
           else
-            git remote add upstream https://github.com/gedoor/legado.git
+            git remote add upstream https://github.com/LegadoTeam/legado.git
           fi
           git fetch upstream
-          # Resolve default branch (gedoor/legado moved master → main)
           git remote set-head upstream -a
 
       - name: Check for upstream updates
@@ -45,12 +45,12 @@ jobs:
           echo "Using upstream ref: $UPSTREAM_REF"
           LOCAL=$(git rev-parse master)
           REMOTE=$(git rev-parse "$UPSTREAM_REF")
-          if [ "$LOCAL" = "$REMOTE" ]; then
+          if git merge-base --is-ancestor "$REMOTE" "$LOCAL"; then
             echo "up_to_date=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Already up to date."
+            echo "✅ Already up to date (upstream tip is ancestor of master)."
           else
             echo "up_to_date=false" >> "$GITHUB_OUTPUT"
-            echo "🔄 Upstream has new commits ($LOCAL -> $REMOTE)."
+            echo "🔄 Upstream has commits to merge ($LOCAL <- $REMOTE)."
           fi
 
       - name: Merge upstream changes
