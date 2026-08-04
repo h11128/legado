@@ -50,6 +50,8 @@ class ChangeChapterSourceViewModel(application: Application) :
     var chapterTitle: String = ""
 
     private val probeByOrigin = ConcurrentHashMap<String, ChangeSourceChapterProbe>()
+    /** Session bodies for multi-source consensus (origin → processed chapter text). */
+    private val probeContentSamples = ConcurrentHashMap<String, String>()
     private var verifyJob: Job? = null
     private val verifyGeneration = AtomicInteger(0)
 
@@ -72,6 +74,7 @@ class ChangeChapterSourceViewModel(application: Application) :
         chapterIndex = index
         chapterTitle = title
         probeByOrigin.clear()
+        probeContentSamples.clear()
         searchBooks.forEach {
             it.chapterWordCountText = null
             it.chapterWordCount = -1
@@ -85,6 +88,7 @@ class ChangeChapterSourceViewModel(application: Application) :
 
     override fun startSearch() {
         probeByOrigin.clear()
+        probeContentSamples.clear()
         super.startSearch()
     }
 
@@ -222,6 +226,8 @@ class ChangeChapterSourceViewModel(application: Application) :
                     )
                     notifySearchAdapter()
                 }
+                applyMultiSourceConsensus(chapterKey)
+                notifySearchAdapter()
                 updateChangeSourceProgress(
                     contentDone.get().coerceAtLeast(1),
                     getApplication<Application>().getString(R.string.change_source_verify_done)
@@ -251,11 +257,36 @@ class ChangeChapterSourceViewModel(application: Application) :
 
     private fun loadProbesFromDb(chapterKey: String) {
         probeByOrigin.clear()
+        probeContentSamples.clear()
         val minTime = System.currentTimeMillis() - PROBE_TTL_MS
         appDb.changeSourceChapterProbeDao.list(name, author, chapterKey).forEach {
             if (it.time >= minTime) {
                 probeByOrigin[it.origin] = it
             }
+        }
+    }
+
+    /**
+     * After Top-K bodies are collected: demote origins that disagree with every peer
+     * while at least one agreeing cluster exists.
+     */
+    private fun applyMultiSourceConsensus(chapterKey: String) {
+        val outliers = ChangeChapterVerify.multiSourceOutlierOrigins(probeContentSamples.toMap())
+        if (outliers.isEmpty()) return
+        val app = getApplication<Application>()
+        val msg = app.getString(R.string.change_source_chapter_hijack)
+        outliers.forEach { origin ->
+            upsertProbe(
+                origin = origin,
+                chapterKey = chapterKey,
+                status = ChangeSourceChapterProbe.STATUS_CONTENT_FAIL,
+                score = 0.0,
+            )
+            searchBooks.find { it.origin == origin }?.let { book ->
+                book.chapterWordCountText = msg
+                book.chapterWordCount = -1
+            }
+            probeContentSamples.remove(origin)
         }
     }
 
@@ -458,6 +489,7 @@ class ChangeChapterSourceViewModel(application: Application) :
                         status = ChangeSourceChapterProbe.STATUS_OK,
                         score = quality.length.toDouble(),
                     )
+                    probeContentSamples[searchBook.origin] = processed
                     searchBook.chapterWordCount = quality.length
                     searchBook.chapterWordCountText = getApplication<Application>().getString(
                         R.string.change_source_chapter_ok,

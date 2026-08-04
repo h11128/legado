@@ -186,6 +186,53 @@ class ChangeChapterVerifyTest {
     }
 
     @Test
+    fun evaluateContentDetectsStitchedMultiNovelParagraphs() {
+        val stitched = listOf(
+            "罗峰站在黑洞边缘，感受宇宙深处传来的威压，手中战刀微微震动不止。",
+            "萧炎看向药老虚影，纳戒里的异火忽然躁动起来，焚决开始疯狂运转。",
+            "叶凡走出北斗仙棺，古禁地的气息让周围修士纷纷退避三舍不敢靠近。",
+            "韩立掐诀祭出青竹蜂云剑，对面的魔修脸色瞬间变得铁青无比。",
+        ).joinToString("\n\n")
+        assertTrue(stitched.length >= ChangeChapterVerify.MIN_CONTENT_CHARS)
+        assertTrue(ChangeChapterVerify.looksLikeStitchedParagraphs(stitched))
+        assertTrue(
+            ChangeChapterVerify.evaluateContent(stitched) is ChangeChapterVerify.ContentQuality.Hijack
+        )
+
+        val coherent = listOf(
+            "罗峰站在黑洞边缘，感受宇宙深处传来的威压，宇宙之力在经脉中游荡不止一刻。",
+            "他握紧战刀，宇宙之力顺着经脉缓缓流转，黑洞的威压愈发强烈难当，几乎令人窒息。",
+            "不远处的飞船里，同伴正等待罗峰发出下一步指令，关注着黑洞边缘的情况变化与能量波动异常。",
+        ).joinToString("\n\n")
+        assertTrue(
+            "len=${coherent.length}",
+            coherent.length >= ChangeChapterVerify.MIN_CONTENT_CHARS,
+        )
+        assertTrue(!ChangeChapterVerify.looksLikeStitchedParagraphs(coherent))
+        assertTrue(
+            ChangeChapterVerify.evaluateContent(coherent)
+                    is ChangeChapterVerify.ContentQuality.Ok
+        )
+    }
+
+    @Test
+    fun multiSourceConsensusFlagsOutlierBodies() {
+        val goodA = "罗峰站在黑洞边缘，感受宇宙之力缓缓汇入体内。" + "修炼".repeat(40)
+        val goodB = "罗峰站在黑洞边缘，感受宇宙之力不断汇入体内。" + "修炼".repeat(38)
+        val goodC = "罗峰立于黑洞之侧，宇宙之力自四面八方汇来。" + "修炼".repeat(36)
+        val bad = "萧炎看向药老，异火在体内疯狂咆哮。" + "焚决".repeat(40)
+        val outliers = ChangeChapterVerify.multiSourceOutlierOrigins(
+            mapOf(
+                "a" to goodA,
+                "b" to goodB,
+                "c" to goodC,
+                "x" to bad,
+            )
+        )
+        assertEquals(setOf("x"), outliers)
+    }
+
+    @Test
     fun evaluateContentDetectsHijackViaLowReferenceSimilarity() {
         val reference = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(120)
         val hijack = """

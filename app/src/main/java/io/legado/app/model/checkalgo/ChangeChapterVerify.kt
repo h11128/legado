@@ -34,15 +34,29 @@ object ChangeChapterVerify {
     /** Reference chapter must be at least this long to run similarity. */
     const val REFERENCE_MIN_CHARS = 200
     /**
-     * Digram Jaccard below this vs the known-good chapter ⇒ wrong/hijacked text.
-     * Same chapter from another source usually stays well above; ads/other books fall near 0.
+     * Digram Jaccard below this vs a known-good chapter ⇒ wrong/hijacked text.
+     * Optional boost when local cache exists; not required for primary detection.
      */
     const val REFERENCE_SIM_HIJACK_MAX = 0.04
+    /** Paragraph must be at least this long to join stitch detection. */
+    const val STITCH_PARA_MIN_CHARS = 20
+    /** Need at least this many long paragraphs. */
+    const val STITCH_PARA_MIN_COUNT = 3
+    /** Consecutive paragraphs below this digram Jaccard count as a "cut". */
+    const val STITCH_PARA_SIM_MAX = 0.03
+    /** Fraction of consecutive cuts that marks stitched multi-novel spam. */
+    const val STITCH_CUT_RATIO = 0.5
+    /** Multi-source: need this many body samples before consensus. */
+    const val MULTI_SOURCE_MIN_SAMPLES = 3
+    /** Multi-source: evidence that at least two sources agree. */
+    const val MULTI_SOURCE_CLUSTER_MIN_SIM = 0.10
+    /** Multi-source: max similarity to any peer below this ⇒ outlier. */
+    const val MULTI_SOURCE_OUTLIER_MAX_SIM = 0.045
 
     data class ContentEvalContext(
         /** Typical chapter length from peer OK probes / current chapter; null = skip relative. */
         val expectedChars: Int? = null,
-        /** Known-good chapter body (e.g. cached content of the chapter being replaced). */
+        /** Optional known-good chapter body; boost only, not required. */
         val referenceContent: String? = null,
     )
 
@@ -64,18 +78,20 @@ object ChangeChapterVerify {
         data class Ok(val length: Int) : ContentQuality()
         data object TooShort : ContentQuality()
         data object AntiTheft : ContentQuality()
-        /** Body is long enough but diverges sharply from the known-good chapter. */
+        /** Wrong book / stitched multi-novel / multi-source outlier. */
         data object Hijack : ContentQuality()
     }
 
     /**
      * Decide whether fetched chapter text counts as a real readable chapter.
      *
-     * Order (structural first):
-     * 1) absolute length floor
-     * 2) relative length vs expected
-     * 3) digram similarity vs reference chapter (when available)
-     * 4) tiny high-precision shell markers only
+     * Structural order (no rotating title lists):
+     * 1) absolute / relative length
+     * 2) intra-document stitch: consecutive paragraphs look like different novels
+     * 3) optional similarity to local reference chapter
+     * 4) tiny high-precision shell markers
+     *
+     * Cross-source consensus is applied separately via [multiSourceOutlierOrigins].
      */
     fun evaluateContent(
         content: String,
@@ -88,6 +104,10 @@ object ChangeChapterVerify {
         if (expected != null && expected >= RELATIVE_MIN_EXPECTED) {
             val floor = max(MIN_CONTENT_CHARS, (expected * RELATIVE_MIN_RATIO).toInt())
             if (text.length < floor) return ContentQuality.TooShort
+        }
+
+        if (looksLikeStitchedParagraphs(text)) {
+            return ContentQuality.Hijack
         }
 
         val reference = context.referenceContent?.trim().orEmpty()
@@ -106,6 +126,59 @@ object ChangeChapterVerify {
         return ContentQuality.Ok(text.length)
     }
 
+    /**
+     * Anti-scrape / mixed-ad pattern: each block is cut from a different novel
+     * (little shared diction across paragraphs — different casts / settings).
+     *
+     * Uses isolation vs the rest of the document, not only consecutive pairs,
+     * so a normal chapter with scene breaks is less likely to false-positive.
+     */
+    fun looksLikeStitchedParagraphs(content: String): Boolean {
+        val paragraphs = content
+            .split(Regex("\\n+"))
+            .map { it.trim() }
+            .filter { it.length >= STITCH_PARA_MIN_CHARS }
+        if (paragraphs.size < STITCH_PARA_MIN_COUNT) return false
+        var isolated = 0
+        for (i in paragraphs.indices) {
+            val others = buildString {
+                for (j in paragraphs.indices) {
+                    if (j != i) append(paragraphs[j])
+                }
+            }
+            if (digramJaccard(paragraphs[i], others) < STITCH_PARA_SIM_MAX) {
+                isolated++
+            }
+        }
+        return isolated >= 2 && isolated.toDouble() / paragraphs.size >= STITCH_CUT_RATIO
+    }
+
+    /**
+     * Among probed bodies for the same chapter, drop origins that do not agree with
+     * any peer while at least one agreeing cluster exists.
+     */
+    fun multiSourceOutlierOrigins(
+        samples: Map<String, String>,
+        minSamples: Int = MULTI_SOURCE_MIN_SAMPLES,
+    ): Set<String> {
+        if (samples.size < minSamples) return emptySet()
+        val origins = samples.keys.toList()
+        var bestPairSim = 0.0
+        val maxPeerSim = HashMap<String, Double>(origins.size)
+        for (i in origins.indices) {
+            var best = 0.0
+            for (j in origins.indices) {
+                if (i == j) continue
+                val sim = digramJaccard(samples.getValue(origins[i]), samples.getValue(origins[j]))
+                if (sim > best) best = sim
+                if (sim > bestPairSim) bestPairSim = sim
+            }
+            maxPeerSim[origins[i]] = best
+        }
+        if (bestPairSim < MULTI_SOURCE_CLUSTER_MIN_SIM) return emptySet()
+        return maxPeerSim.filterValues { it < MULTI_SOURCE_OUTLIER_MAX_SIM }.keys
+    }
+
     /** Character digram Jaccard; Android-free structural similarity. */
     fun digramJaccard(a: String, b: String): Double {
         val da = digrams(a)
@@ -121,7 +194,14 @@ object ChangeChapterVerify {
     }
 
     private fun digrams(text: String): Set<String> {
-        val normalized = text.replace("\\s".toRegex(), "")
+        // Drop ultra-common function chars so cross-novel paragraphs don't "match" on 的/了/是.
+        val normalized = buildString(text.length) {
+            for (ch in text) {
+                if (ch.isWhitespace()) continue
+                if (ch in frequentFunctionChars) continue
+                append(ch)
+            }
+        }
         if (normalized.length < 2) return emptySet()
         val out = HashSet<String>(normalized.length)
         for (i in 0 until normalized.length - 1) {
@@ -129,6 +209,10 @@ object ChangeChapterVerify {
         }
         return out
     }
+
+    private val frequentFunctionChars =
+        ("的了是在不人有我他这个们中来上大为和地到以说时要就出会可也你对生能而"
+                + "那得于着下自之年过发后作里用道行所然方后义话合回当与想看关点经").toSet()
 
     fun chapterKey(chapterIndex: Int, chapterTitle: String?): String {
         val pure = pureChapterName(chapterTitle)
