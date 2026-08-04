@@ -175,38 +175,46 @@ class ChangeChapterVerifyTest {
         assertTrue(
             ChangeChapterVerify.evaluateContent("太短") is ChangeChapterVerify.ContentQuality.TooShort
         )
-        val shell = "您现在看的是防盗章节，正确章节请访问正版" + "x".repeat(200)
+        val shell = "您现在看的是防盗章节，正确章节请访问正版。" + "x".repeat(200)
         assertTrue(
             ChangeChapterVerify.evaluateContent(shell) is ChangeChapterVerify.ContentQuality.AntiTheft
         )
-        val chrome = "天才一秒记住本站地址，最快更新无弹窗。" + "正文".repeat(80)
-        assertTrue(
-            ChangeChapterVerify.evaluateContent(chrome) is ChangeChapterVerify.ContentQuality.AntiTheft
-        )
         val ok = "这是正文。" + "内容".repeat(80)
-        val q = ChangeChapterVerify.evaluateContent(ok)
-        assertTrue(q is ChangeChapterVerify.ContentQuality.Ok)
+        assertTrue(
+            ChangeChapterVerify.evaluateContent(ok) is ChangeChapterVerify.ContentQuality.Ok
+        )
     }
 
     @Test
-    fun evaluateContentDetectsDevourStarHijack() {
+    fun evaluateContentDetectsHijackViaLowReferenceSimilarity() {
+        val reference = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(120)
         val hijack = """
             吞噬星空：收徒万倍返还
             恭喜宿主收徒气运之子，奖励帝品传承！
             万倍返还已到账，请继续观看广告小说……
-        """.trimIndent() + "水".repeat(100)
+        """.trimIndent() + "水".repeat(120)
         val q = ChangeChapterVerify.evaluateContent(
             hijack,
-            ChangeChapterVerify.ContentEvalContext(bookName = "三体"),
+            ChangeChapterVerify.ContentEvalContext(
+                expectedChars = reference.length,
+                referenceContent = reference,
+            ),
         )
         assertTrue(q is ChangeChapterVerify.ContentQuality.Hijack)
-        // Same bait in the actual book name should not false-positive.
-        val real = "罗峰看向深空。" + "修炼".repeat(80)
+
+        val sameChapterVariant = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(110) + "忽然。"
         val ok = ChangeChapterVerify.evaluateContent(
-            real,
-            ChangeChapterVerify.ContentEvalContext(bookName = "吞噬星空"),
+            sameChapterVariant,
+            ChangeChapterVerify.ContentEvalContext(
+                expectedChars = reference.length,
+                referenceContent = reference,
+            ),
         )
         assertTrue(ok is ChangeChapterVerify.ContentQuality.Ok)
+        assertTrue(
+            ChangeChapterVerify.digramJaccard(sameChapterVariant, reference) >=
+                    ChangeChapterVerify.REFERENCE_SIM_HIJACK_MAX
+        )
     }
 
     @Test

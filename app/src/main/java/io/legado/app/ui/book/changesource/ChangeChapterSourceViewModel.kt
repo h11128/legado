@@ -11,6 +11,7 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.ChangeSourceChapterProbe
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.primaryStr
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.SourceConfig
@@ -353,10 +354,24 @@ class ChangeChapterSourceViewModel(application: Application) :
     }
 
     private fun contentEvalContext(): ChangeChapterVerify.ContentEvalContext {
+        val reference = referenceChapterContent()
+        val expected = expectedChapterChars()
+            ?: reference?.length?.takeIf { it >= ChangeChapterVerify.MIN_CONTENT_CHARS }
         return ChangeChapterVerify.ContentEvalContext(
-            bookName = name,
-            expectedChars = expectedChapterChars(),
+            expectedChars = expected,
+            referenceContent = reference,
         )
+    }
+
+    /** Cached body of the chapter being replaced, when available on the current book. */
+    private fun referenceChapterContent(): String? {
+        val book = oldBook ?: return null
+        val chapters = appDb.bookChapterDao.getChapterList(book.bookUrl)
+        if (chapters.isEmpty()) return null
+        val idx = ChangeChapterVerify.alignIndex(chapterIndex, chapterTitle, chapters)
+            ?: chapterIndex.takeIf { it in chapters.indices }
+            ?: return null
+        return BookHelp.getContent(book, chapters[idx])?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     /** Median of quality OK probe scores among current candidates; else null. */
