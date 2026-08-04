@@ -168,7 +168,7 @@
         "beforeShellExecution"
       ],
       "action": "deny",
-      "agent_message": "DENY: GRADLE_USER_HOME on C: (or %USERPROFILE%\\.gradle) with this repo on E: causes KSP IllegalArgumentException: different roots. Unset GRADLE_USER_HOME or set it to <repo>/.gradle-home, then use ./gradlew (wrapper auto-sets this on Windows).",
+      "agent_message": "DENY: GRADLE_USER_HOME on C: (or %USERPROFILE%\\.gradle) causes KSP different roots for E: projects. Set GRADLE_USER_HOME=E:\\.gradle (machine standard) and use ./gradlew.",
       "user_message": null,
       "plugin": null
     },
