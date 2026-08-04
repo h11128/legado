@@ -4,6 +4,7 @@
 import type { webReadConfig } from '@/web'
 import ajax from './axios'
 import {
+  bindSourceApiTokenEndpoint,
   clearSourceApiToken,
   getSourceApiToken,
   requestSourceApiToken,
@@ -18,12 +19,17 @@ import type {
   ReviewSummary,
   SeachBook,
 } from '@/book'
-import type { Source } from '@/source'
+import type { BookSoure, Source } from '@/source'
 
 export type LeagdoApiResponse<T> = {
   isSuccess: boolean
   errorMsg: string
   data: T
+}
+
+export type LegacyReviewSession = {
+  id: string
+  nonce: string
 }
 
 export let legado_http_entry_point = ''
@@ -42,9 +48,10 @@ export const setApiEntryPoint = (
   http_entry_point: string,
   webSocket_entry_point: string,
 ) => {
-  legado_http_entry_point = new URL(http_entry_point).toString()
+  const nextHttpEntryPoint = new URL(http_entry_point).toString()
+  bindSourceApiTokenEndpoint(nextHttpEntryPoint)
+  legado_http_entry_point = nextHttpEntryPoint
   legado_webSocket_entry_point = new URL(webSocket_entry_point).toString()
-  clearSourceApiToken()
   ajax.defaults.baseURL = legado_http_entry_point
 }
 
@@ -139,6 +146,26 @@ const getReviewReplies = (
     },
   })
 
+const openLegacyReview = (
+  bookUrl: string,
+  chapterIndex: number,
+  src: string,
+) =>
+  ajax.post<LeagdoApiResponse<LegacyReviewSession>>('openLegacyReview', {
+    url: bookUrl,
+    index: chapterIndex,
+    src,
+  })
+
+const runLegacyReview = (id: string, script: string) =>
+  ajax.post<LeagdoApiResponse<string>>('runLegacyReview', { id, script })
+
+const getLegacyReviewPage = (id: string) =>
+  ajax.post<string>('legacyReviewPage', new URLSearchParams({ id }), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    responseType: 'text',
+  })
+
 // webSocket
 const search = (
   searchKey: string,
@@ -200,6 +227,12 @@ const saveSource = (data: Source) =>
   isBookSource
     ? ajax.post<LeagdoApiResponse<string>>('saveBookSource', data)
     : ajax.post<LeagdoApiResponse<string>>('saveRssSource', data)
+
+const saveJsSource = (script: string, openedSourceUrl?: string) =>
+  ajax.post<LeagdoApiResponse<BookSoure>>('saveJsSource', script, {
+    params: { openedSourceUrl },
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  })
 
 const saveSources = (data: Source[]) =>
   isBookSource
@@ -296,6 +329,9 @@ export default {
   getReviewSummary,
   getReviewDetail,
   getReviewReplies,
+  openLegacyReview,
+  runLegacyReview,
+  getLegacyReviewPage,
   search,
   saveBook,
   deleteBook,
@@ -303,6 +339,7 @@ export default {
   getSources,
   saveSources,
   saveSource,
+  saveJsSource,
   deleteSource,
   debug,
 

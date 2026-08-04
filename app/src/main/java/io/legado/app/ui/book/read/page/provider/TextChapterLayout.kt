@@ -109,6 +109,12 @@ class TextChapterLayout(
     private val isMiddleTitle = ReadBookConfig.isMiddleTitle
     private val textFullJustify = ReadBookConfig.textFullJustify
     private val hangingPunctuation = ReadBookConfig.hangingPunctuation
+    private val punctuationCompressMode = ReadBookConfig.punctuationCompress
+    private val punctuationCompressor = if (punctuationCompressMode.enabled) {
+        PunctuationCompressor(contentPaint)
+    } else {
+        null
+    }
     private val adaptSpecialStyle = AppConfig.adaptSpecialStyle
     private val pageAnim = book.getPageAnim()
     private val reviewTitleOffset = if (
@@ -945,6 +951,9 @@ class TextChapterLayout(
     ) {
         val widthsArray = allocateFloatArray(text.length)
         textPaint.getTextWidthsCompat(text, widthsArray, reviewCharWidth)
+        //标点挤压改写字宽,断行与列排布都用挤压后的宽度,标题不参与
+        val compressor = if (isTitle) null else punctuationCompressor
+        compressor?.beginParagraph(text, widthsArray, punctuationCompressMode)
         val hangingWidth = hangingPunctuationWidth(text, widthsArray, isTitle, isFirstLine)
         val layout = if (useZhLayout) {
             val (words, widths) = measureTextSplit(text, widthsArray)
@@ -1008,6 +1017,18 @@ class TextChapterLayout(
             val lineEnd = layout.getLineEnd(lineIndex)
             val lineText = text.substring(lineStart, lineEnd)
             val (words, widths) = measureTextSplit(lineText, widthsArray, lineStart)
+            if (
+                punctuationCompressMode.compressLineEnd &&
+                lineIndex < layout.lineCount - 1
+            ) {
+                //末行的行尾就是段尾,压了只会让右边界无故缩进
+                compressor?.compressLineEnd(words, widths, lineStart)
+            }
+            //挤压过的列窄于字宽,整行一次性绘制会按原字宽排字,须退回逐列绘制
+            val drawOffsets = compressor?.lineDrawOffsets(words, lineStart)
+            if (drawOffsets != null) {
+                textLine.compressedPunctuation = true
+            }
             val desiredWidth = widths.fastSum()
             textLine.text = lineText
             when (lineIndex) {
@@ -1015,7 +1036,7 @@ class TextChapterLayout(
                     //多行的第一行 非标题
                     addCharsToLineFirst(
                         book, absStartX, textLine, words, textPaint,
-                        desiredWidth, widths, srcList, clickList, hangingWidth
+                        desiredWidth, widths, srcList, clickList, hangingWidth, drawOffsets
                     )
                 }
                 layout.lineCount - 1 -> {
@@ -1033,7 +1054,7 @@ class TextChapterLayout(
                     addCharsToLineNatural(
                         book, absStartX, textLine, words,
                         startX, !isTitle && lineIndex == 0, widths, srcList, clickList,
-                        if (lineIndex == 0) hangingWidth else 0f
+                        if (lineIndex == 0) hangingWidth else 0f, drawOffsets
                     )
                 }
                 else -> {
@@ -1052,7 +1073,7 @@ class TextChapterLayout(
                         //中间行
                         addCharsToLineMiddle(
                             book, absStartX, textLine, words, textPaint,
-                            desiredWidth, 0f, widths, srcList, clickList
+                            desiredWidth, 0f, widths, srcList, clickList, drawOffsets
                         )
                     }
                 }
@@ -1121,12 +1142,14 @@ class TextChapterLayout(
         textWidths: List<Float>,
         srcList: LinkedList<String>?,
         clickList: LinkedList<String?>?,
-        hangingWidth: Float
+        hangingWidth: Float,
+        /**挤压过的标点在列内的绘制偏移,与 words 同下标*/
+        drawOffsets: FloatArray?
     ) {
         if (!textFullJustify) {
             addCharsToLineNatural(
                 book, absStartX, textLine, words,
-                0f, true, textWidths, srcList, clickList, hangingWidth
+                0f, true, textWidths, srcList, clickList, hangingWidth, drawOffsets
             )
             return
         }
@@ -1152,7 +1175,7 @@ class TextChapterLayout(
                     textLine.hangingPunctuation = true
                 }
                 addCharToLine(
-                    book, absStartX, textLine, words[index],
+                    book, absStartX, textLine, words[index], drawOffsets?.get(index) ?: 0f,
                     xStart, xEnd, index + 1 == words.size, srcList, clickList
                 )
             }
@@ -1197,13 +1220,15 @@ class TextChapterLayout(
         startX: Float,
         textWidths: List<Float>,
         srcList: LinkedList<String>?,
-        clickList: LinkedList<String?>?
+        clickList: LinkedList<String?>?,
+        /**挤压过的标点在列内的绘制偏移,与 words 同下标*/
+        drawOffsets: FloatArray?
     ) {
         if (!textFullJustify) {
             addCharsToLineNatural(
                 book, absStartX, textLine, words,
                 startX, false, textWidths, srcList,
-                clickList
+                clickList, drawOffsets = drawOffsets
             )
             return
         }
@@ -1214,7 +1239,7 @@ class TextChapterLayout(
             }
         ) { index, xStart, xEnd, _ ->
             addCharToLine(
-                book, absStartX, textLine, words[index],
+                book, absStartX, textLine, words[index], drawOffsets?.get(index) ?: 0f,
                 xStart, xEnd, index + 1 == words.size, srcList,
                 clickList
             )
@@ -1235,7 +1260,9 @@ class TextChapterLayout(
         textWidths: List<Float>,
         srcList: LinkedList<String>?,
         clickList: LinkedList<String?>?,
-        hangingWidth: Float = 0f
+        hangingWidth: Float = 0f,
+        /**挤压过的标点在列内的绘制偏移,与 words 同下标*/
+        drawOffsets: FloatArray? = null
     ) {
         textLine.startX = absStartX + startX
         LineColumnLayout.natural(
@@ -1247,7 +1274,7 @@ class TextChapterLayout(
                 textLine.hangingPunctuation = true
             }
             addCharToLine(
-                book, absStartX, textLine, words[index],
+                book, absStartX, textLine, words[index], drawOffsets?.get(index) ?: 0f,
                 xStart, xEnd, index + 1 == words.size, srcList, clickList
             )
         }
@@ -1262,6 +1289,8 @@ class TextChapterLayout(
         absStartX: Int,
         textLine: TextLine,
         char: String,
+        /**挤压过的标点在列内的绘制偏移*/
+        drawOffset: Float,
         xStart: Float,
         xEnd: Float,
         isLineEnd: Boolean,
@@ -1292,7 +1321,8 @@ class TextChapterLayout(
                 TextColumn(
                     start = absStartX + xStart,
                     end = absStartX + xEnd,
-                    charData = char
+                    charData = char,
+                    drawOffset = drawOffset
                 )
             }
         }

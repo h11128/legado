@@ -28,6 +28,8 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     ElText: typeof import('element-plus/es')['ElText']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    JsSourceEditor: typeof import('./components/JsSourceEditor.vue')['default']
+    LegacyReviewDialog: typeof import('./components/LegacyReviewDialog.vue')['default']
     PopCatalog: typeof import('./components/PopCatalog.vue')['default']
     ReadSettings: typeof import('./components/ReadSettings.vue')['default']
     ReviewDialog: typeof import('./components/ReviewDialog.vue')['default']

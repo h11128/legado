@@ -1,3 +1,4 @@
+
 <resources>
     <!--App-->
     <string name="app_name">閲讀</string>
@@ -362,7 +363,7 @@
     <string name="set_charset">設置編碼</string>
     <string name="swap_sort">倒序-順序</string>
     <string name="sort">排序</string>
-    <string name="sort_auto">按權重</string>
+    <string name="sort_auto">智能排序</string>
     <string name="sort_default">默認排序</string>
     <string name="sort_manual">手動排序</string>
     <string name="sort_by_name">名稱排序</string>
@@ -756,6 +757,13 @@
     <string name="text_bottom_justify">文字底部對齊</string>
     <string name="hanging_punctuation">段首標點懸掛</string>
     <string name="hanging_punctuation_summary">段首引號等標點懸掛於縮排內，使正文首字與其他段落對齊</string>
+    <string name="punctuation_compress">標點擠壓</string>
+    <string name="punctuation_compress_summary">裁去全形標點字框內多餘的空白，開啟中文排版效果最佳</string>
+    <string name="punctuation_compress_none">關閉（全形）</string>
+    <string name="punctuation_compress_line_end">行尾擠壓</string>
+    <string name="punctuation_compress_adjacent">相鄰標點擠壓</string>
+    <string name="punctuation_compress_adjacent_line_end">相鄰與行尾擠壓</string>
+    <string name="punctuation_compress_all">全部半形</string>
     <string name="starting_download">正在啟動下載</string>
     <string name="already_in_download">該書已在下載列表</string>
     <string name="click_to_open">點擊打開</string>
@@ -919,8 +927,6 @@
     <string name="upload_url">上傳URL</string>
     <string name="download_url_rule">下载URL规则(downloadUrls)</string>
     <string name="sort_by_respondTime">響應時間排序</string>
-    <string name="apply_view_to_manual_order">把目前列表寫入手動順序</string>
-    <string name="apply_view_to_manual_order_confirm">將目前列表順序寫入手動順序（customOrder）？這不會單獨改變換源詢問順序；換源按響應時間與置頂排序。</string>
     <string name="respondTime">響應時間：%1$d ms</string>
     <string name="export_success">導出成功</string>
     <string name="path">路徑</string>
@@ -1271,4 +1277,9 @@
     <string name="drag_to_reorder">拖曳排序</string>
     <string name="move_to_more">移至更多</string>
     <string name="move_to_floating_bar">移至浮動列</string>
+
+    <!-- from local ask-order -->
+    <string name="apply_view_to_manual_order">把目前列表寫入手動順序</string>
+    <string name="apply_view_to_manual_order_confirm">將目前列表順序寫入手動順序（customOrder）？這不會單獨改變換源詢問順序；換源按響應時間與置頂排序。</string>
+
 </resources>
