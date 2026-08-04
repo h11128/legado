@@ -1,0 +1,20 @@
+---
+description: Windows Gradle/KSP must use same-drive GRADLE_USER_HOME (.gradle-home on E:)
+alwaysApply: true
+---
+
+# Windows Gradle / KSP same-drive home
+
+This repo lives on `E:`. Default `%USERPROFILE%\.gradle` is on `C:`.
+
+KSP then fails with `IllegalArgumentException: this and base files have different roots`.
+That is **not** a wrong `--tests` filter or bad package path.
+
+## MUST
+
+1. Run builds via `./gradlew` / `gradlew.bat` (wrapper sets `GRADLE_USER_HOME` to `<repo>/.gradle-home`).
+2. Never set `GRADLE_USER_HOME` to `C:\Users\…\.gradle` / `%USERPROFILE%\.gradle` for this project.
+3. If the error appears: remount home to `<repo>/.gradle-home`, rerun the **same** command — do not invent other root causes.
+4. Android Studio: set Gradle user home to `E:\Projects\legado\.gradle-home` (or the clone path’s `.gradle-home`).
+
+Hook enforcement: `legado_windows_gradle_home_on_c` (deny) + `legado_ksp_different_roots_output` (ask).

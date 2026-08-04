@@ -2,7 +2,9 @@
   {
     "id": "legado_hedged_ledger_success",
     "source": "book-source-repair-discipline §23 (deep-diagnose anti-stall 2026-07-29)",
-    "events": ["beforeShellExecution"],
+    "events": [
+      "beforeShellExecution"
+    ],
     "severity": "violation",
     "message": "Hedged ledger success is banned. Write 校验成功 only when verify_ok=true; otherwise fail:<reason> / skip:<reason>.",
     "check": {
@@ -21,7 +23,9 @@
       ]
     },
     "intercept": {
-      "events": ["beforeShellExecution"],
+      "events": [
+        "beforeShellExecution"
+      ],
       "action": "deny",
       "agent_message": "DENY: hedged ledger success (discipline §23). Use exact 校验成功 only when verify_ok=true, else fail:<reason> or skip:<reason>. Same gate exists in Rust: source_closeout::ledger_result_blocked.",
       "user_message": null,
@@ -46,7 +50,9 @@
   {
     "id": "legado_l0_only_live_repair",
     "source": "book-source-repair-discipline §15 (dcrsu 2026-07-27)",
-    "events": ["beforeShellExecution"],
+    "events": [
+      "beforeShellExecution"
+    ],
     "severity": "violation",
     "message": "--l0-only on live progress/diagnose/repair skips the L2 dead/wall sniff and burns phone time on dead hosts.",
     "check": {
@@ -70,7 +76,9 @@
       ]
     },
     "intercept": {
-      "events": ["beforeShellExecution"],
+      "events": [
+        "beforeShellExecution"
+      ],
       "action": "deny",
       "agent_message": "DENY: --l0-only on live progress/diagnose/repair (discipline §15). Run the full gate instead.",
       "user_message": null,
@@ -95,7 +103,9 @@
   {
     "id": "legado_serial_long_await",
     "source": "book-source-repair-discipline §19/§21 (deep-diagnose anti-stall 2026-07-29)",
-    "events": ["beforeShellExecution"],
+    "events": [
+      "beforeShellExecution"
+    ],
     "severity": "warn",
     "message": "Long blocking wait (>=120s). Poll temp/full_fix/serial_heartbeat.json every <=90s and seal deep_active before ending the turn.",
     "check": {
@@ -106,7 +116,9 @@
       "multiline": false
     },
     "intercept": {
-      "events": ["beforeShellExecution"],
+      "events": [
+        "beforeShellExecution"
+      ],
       "action": "ask",
       "agent_message": "ASK: long sleep (>=120s) detected. Book-source repair must poll serial_heartbeat.json <=90s (discipline §19) and never end a turn with an unsealed deep_active (§21-22).",
       "user_message": null,
@@ -125,6 +137,94 @@
     "file_pattern_exclude": null,
     "version": 2,
     "created_at": "2026-07-29",
+    "reviewed_at": null,
+    "reviewed_version": null
+  },
+  {
+    "id": "legado_windows_gradle_home_on_c",
+    "source": "Windows KSP cross-drive (2026-08-04): project on E:, cache on C: → different roots",
+    "events": [
+      "beforeShellExecution"
+    ],
+    "severity": "violation",
+    "message": "Do not point GRADLE_USER_HOME at C: while this repo lives on E:. KSP fails with different roots.",
+    "check": {
+      "type": "all_of",
+      "checks": [
+        {
+          "type": "regex",
+          "field": "command",
+          "pattern": "(?i)(?:^|[\\s;&|./\\\\])gradlew?(?:\\.bat)?\\b|\\bgradle\\s"
+        },
+        {
+          "type": "regex",
+          "field": "command",
+          "pattern": "(?i)GRADLE_USER_HOME\\s*=\\s*[\"']?(?:[Cc]:|/c/|/mnt/c/|%USERPROFILE%|%HOMEDRIVE%%HOMEPATH%|\\$HOME|\\$\\{HOME\\}|~)/?\\.gradle\\b|(?:[Cc]:\\\\Users\\\\|/c/Users/).*\\.gradle"
+        }
+      ]
+    },
+    "intercept": {
+      "events": [
+        "beforeShellExecution"
+      ],
+      "action": "deny",
+      "agent_message": "DENY: GRADLE_USER_HOME on C: (or %USERPROFILE%\\.gradle) with this repo on E: causes KSP IllegalArgumentException: different roots. Unset GRADLE_USER_HOME or set it to <repo>/.gradle-home, then use ./gradlew (wrapper auto-sets this on Windows).",
+      "user_message": null,
+      "plugin": null
+    },
+    "side_effect": null,
+    "always_record": null,
+    "order": 15,
+    "min_length": 0,
+    "min_length_field": "",
+    "disabled": false,
+    "trial_until": null,
+    "platform": "windows",
+    "experiment": null,
+    "workspace_filter": "legado",
+    "file_pattern_exclude": null,
+    "version": 1,
+    "created_at": "2026-08-04",
+    "reviewed_at": null,
+    "reviewed_version": null
+  },
+  {
+    "id": "legado_ksp_different_roots_output",
+    "source": "Windows KSP cross-drive (2026-08-04)",
+    "events": [
+      "afterShellExecution"
+    ],
+    "severity": "warn",
+    "message": "KSP/Gradle reported cross-drive different roots. Remount GRADLE_USER_HOME to <repo>/.gradle-home and rerun via ./gradlew — do not treat this as a wrong --tests filter.",
+    "check": {
+      "type": "regex",
+      "field": "output",
+      "pattern": "(?i)different roots:.*\\.gradle|\\[ksp\\].*different roots",
+      "ignorecase": true,
+      "multiline": false
+    },
+    "intercept": {
+      "events": [
+        "afterShellExecution"
+      ],
+      "action": "ask",
+      "agent_message": "ASK: build hit KSP/Gradle 'different roots' (cross-drive). This is NOT a bad test class path. Fix: unset C: GRADLE_USER_HOME; use ./gradlew so <repo>/.gradle-home on E: is used; then rerun the same tests. Do not invent unrelated root causes.",
+      "user_message": null,
+      "plugin": null
+    },
+    "side_effect": null,
+    "always_record": null,
+    "order": 16,
+    "min_length": 0,
+    "min_length_field": "",
+    "disabled": false,
+    "trial_until": null,
+    "platform": "windows",
+    "experiment": null,
+    "workspace_filter": "legado",
+    "file_pattern_exclude": null,
+    "version": 1,
+    "created_at": "2026-08-04",
     "reviewed_at": null,
     "reviewed_version": null
   }
