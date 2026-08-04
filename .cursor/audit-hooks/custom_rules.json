@@ -195,7 +195,7 @@
       "afterShellExecution"
     ],
     "severity": "warn",
-    "message": "KSP/Gradle reported cross-drive different roots. Remount GRADLE_USER_HOME to <repo>/.gradle-home and rerun via ./gradlew — do not treat this as a wrong --tests filter.",
+    "message": "KSP/Gradle reported cross-drive different roots. Remount GRADLE_USER_HOME to E:\\.gradle and rerun via ./gradlew — do not treat this as a wrong --tests filter.",
     "check": {
       "type": "regex",
       "field": "output",
