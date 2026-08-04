@@ -87,12 +87,13 @@ class Rfc001AskOrderContractTest {
         assertFalse(debug.contains("fun getRespondTime("))
         val search = projectFile("app/src/main/java/io/legado/app/model/webBook/SearchModel.kt")
         assertTrue(search.contains("notedRespondTimeUrls"))
+        assertTrue(search.contains("ensureRespondTimeHealed()"))
         val change = projectFile(
             "app/src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceViewModel.kt"
         )
         assertTrue(change.contains("ensureRespondTimeHealed()"))
         val scope = projectFile("app/src/main/java/io/legado/app/ui/book/search/SearchScope.kt")
-        assertTrue(scope.contains("ensureRespondTimeHealed()"))
+        assertFalse(scope.contains("ensureRespondTimeHealed()"))
         val read = projectFile("app/src/main/java/io/legado/app/ui/book/read/ReadBookViewModel.kt")
         assertTrue(read.contains("ensureRespondTimeHealed()"))
     }

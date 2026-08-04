@@ -157,21 +157,27 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     protected open fun sortSearchBooks(books: List<SearchBook>): List<SearchBook> {
         val expected = wordCountEvalContext?.expectedChars
-        // Quality tier first — liked/high-score sources must not outrank hijack/soft-fail.
+        // Content first → length band → likes → probe respondTime → soft latest/TOC hint.
         return books.sortedWith(
             compareBy<SearchBook> {
-                ChangeBookSourceQuality.sortTier(
+                ChangeBookSourceQuality.contentSortTier(
                     chapterWordCount = it.chapterWordCount,
                     wordCountText = it.chapterWordCountText,
-                    metaTier = qualityTiers[it.origin]
-                        ?: ChangeBookSourceQuality.TIER_UNKNOWN,
                     softFailed = it.origin in sessionSoftFail,
                 )
             }
-                .thenByDescending { getBookScore(it) }
-                .thenByDescending { SourceConfig.getSourceScore(it.origin) }
                 .thenByDescending {
                     ChangeBookSourceQuality.lengthBandScore(it.chapterWordCount, expected)
+                }
+                .thenByDescending { getBookScore(it) }
+                .thenByDescending { SourceConfig.getSourceScore(it.origin) }
+                .thenBy {
+                    ChangeBookSourceQuality.respondTimeSortKey(it.respondTime)
+                }
+                .thenBy {
+                    ChangeBookSourceQuality.softMetaPenalty(
+                        qualityTiers[it.origin] ?: ChangeBookSourceQuality.TIER_UNKNOWN
+                    )
                 }
                 .thenBy { it.originOrder }
         )

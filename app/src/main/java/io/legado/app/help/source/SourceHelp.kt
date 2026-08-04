@@ -213,6 +213,9 @@ object SourceHelp {
     /**
      * Idempotent gate so ask-order never runs against unhealed MCP fast-fail rows
      * even if the App startup heal is still racing on a background coroutine.
+     *
+     * Call from a worker (App init, ViewModel execute/IO, search pool) — not the
+     * main thread. Once [LocalConfig.respondTimeHealDone] is true this is a no-op.
      */
     fun ensureRespondTimeHealed() {
         if (LocalConfig.respondTimeHealDone) return

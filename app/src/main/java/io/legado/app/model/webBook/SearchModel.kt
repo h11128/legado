@@ -8,8 +8,9 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.data.entities.toBookSource
 import io.legado.app.exception.NoStackTraceException
-import io.legado.app.help.config.AppConfig
 import io.legado.app.help.book.releaseHtmlData
+import io.legado.app.help.config.AppConfig
+import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.RespondTimeUpdater
 import io.legado.app.model.checkalgo.AskSourcePrefetch
 import io.legado.app.model.checkalgo.AskTimeout
@@ -53,6 +54,10 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private var activeProgress = AtomicReference<SearchProgressReporter?>()
     /** URLs already noted for the current [mSearchId] (once per source per run). */
     private val notedRespondTimeUrls = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    /** First page of a new searchId must heal+load parts on the pool thread. */
+    private var reloadPartsOnStart = false
+    /** Scope string captured at search() — avoids pool reading a later UI edit. */
+    private var pendingScopeSnapshot: String? = null
 
 
     private fun initSearchPool() {
@@ -71,17 +76,16 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                 close()
             }
             searchBooks.clear()
-            bookSourceParts = callBack.getSearchScope().getBookSourceParts()
-            if (bookSourceParts.isEmpty()) {
-                callBack.onSearchCancel(NoStackTraceException("启用书源为空"))
-                return
-            }
+            bookSourceParts = emptyList()
             mSearchId = searchId
             searchPage = 1
             notedRespondTimeUrls.clear()
+            reloadPartsOnStart = true
+            pendingScopeSnapshot = callBack.getSearchScope().toString()
             initSearchPool()
         } else {
             searchPage++
+            reloadPartsOnStart = false
         }
         startSearch()
     }
@@ -89,12 +93,31 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private fun startSearch() {
         val precision = appCtx.getPrefBoolean(PreferKey.precisionSearch)
         var hasMore = false
-        val sourceParts = bookSourceParts
         val key = searchKey
         val page = searchPage
-        val progress = SearchProgressReporter(sourceParts.size, callBack::onSearchProgress)
-        activeProgress.getAndSet(progress)?.cancel()
+        val needReloadParts = reloadPartsOnStart
+        val scopeSnapshot = pendingScopeSnapshot
+        reloadPartsOnStart = false
+        pendingScopeSnapshot = null
+        activeProgress.getAndSet(null)?.cancel()
         searchJob = scope.launch(searchPool!!) {
+            if (needReloadParts) {
+                // Heal on the search pool (not main): App startup may still be racing.
+                SourceHelp.ensureRespondTimeHealed()
+                val parts = SearchScope(scopeSnapshot.orEmpty()).getBookSourceParts()
+                if (parts.isEmpty()) {
+                    callBack.onSearchCancel(NoStackTraceException("启用书源为空"))
+                    return@launch
+                }
+                bookSourceParts = parts
+            }
+            val sourceParts = bookSourceParts
+            if (sourceParts.isEmpty()) {
+                callBack.onSearchCancel(NoStackTraceException("启用书源为空"))
+                return@launch
+            }
+            val progress = SearchProgressReporter(sourceParts.size, callBack::onSearchProgress)
+            activeProgress.getAndSet(progress)?.cancel()
             flow {
                 for (chunk in AskSourcePrefetch.chunkParts(sourceParts)) {
                     val resolved = chunk.toBookSource()
