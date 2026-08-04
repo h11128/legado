@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.annotation.CallSuper
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
+import io.legado.app.R
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
@@ -29,6 +30,7 @@ import io.legado.app.model.RespondTimeUpdater
 import io.legado.app.model.checkalgo.AskSourceOrder
 import io.legado.app.model.checkalgo.AskSourcePrefetch
 import io.legado.app.model.checkalgo.AskTimeout
+import io.legado.app.model.checkalgo.ChangeChapterVerify
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
@@ -88,6 +90,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     protected val contentProcessor by lazy {
         ContentProcessor.get(oldBook!!)
     }
+    /** Cached once per 整书换源 search; cleared in [startSearch]. */
+    private var wordCountEvalContext: ChangeChapterVerify.ContentEvalContext? = null
     protected var searchCallback: SourceCallback? = null
     private val chapterNumRegex = "^\\[(\\d+)]".toRegex()
     private val comparatorBase by lazy {
@@ -244,6 +248,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             tocMap.clear()
             bookMap.clear()
             tocMapChapterCount = 0
+            wordCountEvalContext = null
             _changeSourceProgress.value = 0 to ""
             val searchGroup = AppConfig.searchGroup
             val loaded = if (searchGroup.isBlank()) {
@@ -276,6 +281,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             tocMap.clear()
             bookMap.clear()
             tocMapChapterCount = 0
+            wordCountEvalContext = null
             bookSourceParts.add(appDb.bookSourceDao.getBookSourcePart(origin)!!)
             searchBooks.removeIf { it.origin == origin }
             initSearchPool()
@@ -400,8 +406,28 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             val nextChapterUrl = chapters.getOrNull(chapterIndex + 1)?.url
             var content = WebBook.getContentAwait(source, book, bookChapter, nextChapterUrl, false)
             content = contentProcessor.getContent(oldBook!!, bookChapter, content, false).toString()
-            val len = content.length
-            len to "[${chapterIndex + 1}] ${title}\n字数：${len}"
+            // Same structural gates as 单章换源: length / stitch / optional local reference.
+            // Title+author match alone still lets adult-mirror shells rank by raw length.
+            when (val quality = ChangeChapterVerify.evaluateContent(
+                content,
+                bookChangeContentEvalContext(chapterIndex, bookChapter.title),
+            )) {
+                is ChangeChapterVerify.ContentQuality.Ok -> {
+                    quality.length to "[${chapterIndex + 1}] ${title}\n字数：${quality.length}"
+                }
+                ChangeChapterVerify.ContentQuality.TooShort -> {
+                    -1 to "[${chapterIndex + 1}] ${title}\n" +
+                        getApplication<Application>().getString(R.string.change_source_chapter_too_short)
+                }
+                ChangeChapterVerify.ContentQuality.AntiTheft -> {
+                    -1 to "[${chapterIndex + 1}] ${title}\n" +
+                        getApplication<Application>().getString(R.string.change_source_chapter_anti_theft)
+                }
+                ChangeChapterVerify.ContentQuality.Hijack -> {
+                    -1 to "[${chapterIndex + 1}] ${title}\n" +
+                        getApplication<Application>().getString(R.string.change_source_chapter_hijack)
+                }
+            }
         } catch (t: Throwable) {
             if (t is CancellationException) throw t
             -1 to "[${chapterIndex + 1}] ${title}\n获取字数失败：${t.localizedMessage}"
@@ -413,6 +439,47 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             respondTime = (endTime - startTime).toInt()
         }
         searchCallback?.searchSuccess(searchBook)
+    }
+
+    /**
+     * Local chapter body aligned to the candidate chapter being probed.
+     * Cached for the search session (same logical chapter for from-read probes).
+     * If disk cache is empty, one-shot fetch from the book's current origin.
+     */
+    private suspend fun bookChangeContentEvalContext(
+        candidateChapterIndex: Int,
+        candidateTitle: String,
+    ): ChangeChapterVerify.ContentEvalContext {
+        wordCountEvalContext?.let { return it }
+        val book = oldBook ?: return ChangeChapterVerify.ContentEvalContext()
+            .also { wordCountEvalContext = it }
+        val localChapters = appDb.bookChapterDao.getChapterList(book.bookUrl)
+        if (localChapters.isEmpty()) {
+            return ChangeChapterVerify.ContentEvalContext().also { wordCountEvalContext = it }
+        }
+        val idx = ChangeChapterVerify.alignIndex(
+            candidateChapterIndex,
+            candidateTitle,
+            localChapters,
+        ) ?: wordCountChapterIndex(localChapters).coerceIn(0, localChapters.lastIndex)
+        val localChapter = localChapters[idx]
+        var reference = BookHelp.getContent(book, localChapter)?.trim()?.takeIf { it.isNotEmpty() }
+        if (reference == null) {
+            val origin = appDb.bookSourceDao.getBookSource(book.origin)
+            if (origin != null) {
+                reference = runCatchingCancellable {
+                    val nextUrl = localChapters.getOrNull(idx + 1)?.url
+                    val raw = WebBook.getContentAwait(origin, book, localChapter, nextUrl, false)
+                    contentProcessor.getContent(book, localChapter, raw, false).toString()
+                }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+            }
+        }
+        return ChangeChapterVerify.ContentEvalContext(
+            expectedChars = reference?.length?.takeIf {
+                it >= ChangeChapterVerify.MIN_CONTENT_CHARS
+            },
+            referenceContent = reference,
+        ).also { wordCountEvalContext = it }
     }
 
     fun onLoadWordCountChecked(isChecked: Boolean) {

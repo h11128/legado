@@ -63,12 +63,15 @@ Fill after each run:
 | A Unit | PASS (2026-08-04) | `./gradlew …ChangeChapterVerifyTest :app:installAppDebug` → `BUILD SUCCESSFUL` |
 | B Install | PASS (2026-08-04) | `Installed on 1 device` SM-A366U1; package `com.legado.app.debug` |
 | C UI | PASS (2026-08-04, 未分组) | Book **学霸也开挂** (未分组). Long-press 换源 → **单章换源**. Progress `校验章节 …` then `章节校验完成`. Badges seen: `已对齐章节`, `字数：2565`, `字数：37`, `无此章`, earlier `获取字数失败：内容为空`. Log: `ChangeChapterSourceDialog` + `换源类型过滤`. |
+| C2 整书换源 | PASS schedule (2026-08-04); quality gate **code-only** | Book **吞噬星空：收徒万倍返还** (新乙, 养肥2). Short-tap 换源. Progress `1/1113` → `143/1113` complete. Type filter: 1252 enabled → **1113** text. Ask-order: first non-reserve source **Xpicvid** (rt=35) matches `AskSourceOrder` rest sort. Early results ~18 by ~272 done; stall ~40s on dead hosts (60s `CHANGE_SOURCE_MS`). WebView/site UI flash (**仙域书库**) mid-search. **Pre-fix list:** many OK ~3800 on ch410, but same-title shells (PO18/海棠/肉文*) also ~4400 — length-only rank promoted them. **Post-fix:** `loadBookWordCount` now runs `ChangeChapterVerify.evaluateContent` (+ one-shot origin fetch if no disk cache); device re-verify of demotion badges not re-run this session. |
 | D Logs | PASS (partial) | `AppLog 换源类型过滤…`; LiveEventBus on `ChangeChapterSourceDialog` / `sourceChanged`. |
 
 ### Notes
 
 - Short tap 换源 = 整书换源; **long-press** 换源 = menu with 单章换源 / 整书换源.
 - First attempt on 「在追」 book hit auto-换源 / lock; switched to **未分组** as requested.
+- RFC-001 ask-order works, but almost all sources are SUCCESS-class (`respondTime < 180000`); only ~3 FAILURE rows → rank band barely helps; rest is ascending respondTime. RFC forbids writing failure on empty/timeout ask probes — dead hosts stay SUCCESS until a proper check encodes failure.
+- Follow-up in tree: 整书换源 word-count path runs `ChangeChapterVerify.evaluateContent` (align local chapter by title; one-shot fetch from current origin if disk cache empty; session-cached context). Device re-test of 「疑似错书」badges on PO18 shells still pending.
 
 ## Out of scope
 
