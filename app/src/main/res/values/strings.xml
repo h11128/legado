@@ -1328,6 +1328,8 @@
     <string name="change_source_chapter_toc_ok">Chapter matched</string>
     <string name="change_source_chapter_missing">Chapter not found</string>
     <string name="change_source_chapter_content_fail">Content failed</string>
+    <string name="change_source_chapter_too_short">Content too short</string>
+    <string name="change_source_chapter_anti_theft">Likely anti-theft / empty shell</string>
     <string name="change_source_early_stop">Stop change-source early</string>
     <string name="change_source_early_stop_summary">Stop after enough matches (and one parallel wave), or when the time budget below elapses. Thresholds below.</string>
     <string name="change_source_early_stop_count">Early-stop result count</string>

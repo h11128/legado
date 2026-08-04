@@ -356,10 +356,11 @@ class ChangeChapterSourceViewModel(application: Application) :
      * If search already loaded word-count for the aligned chapter, promote to OK without re-fetch.
      */
     private fun reuseWordCountAsOk(searchBook: SearchBook, chapterKey: String): Boolean {
-        if (searchBook.chapterWordCount <= 0) return false
+        if (searchBook.chapterWordCount < ChangeChapterVerify.MIN_CONTENT_CHARS) return false
         if (probeByOrigin[searchBook.origin]?.status != ChangeSourceChapterProbe.STATUS_TOC_OK) {
             return false
         }
+        // Word-count from search has no full text; only accept length gate.
         upsertProbe(
             origin = searchBook.origin,
             chapterKey = chapterKey,
@@ -409,18 +410,37 @@ class ChangeChapterSourceViewModel(application: Application) :
             val processed = oldBook?.let {
                 contentProcessor.getContent(it, chapter, content, false).toString()
             } ?: content
-            val len = processed.length
-            upsertProbe(
-                origin = searchBook.origin,
-                chapterKey = chapterKey,
-                status = ChangeSourceChapterProbe.STATUS_OK,
-                score = len.toDouble(),
-            )
-            searchBook.chapterWordCount = len
-            searchBook.chapterWordCountText = getApplication<Application>().getString(
-                R.string.change_source_chapter_ok,
-                len
-            )
+            when (val quality = ChangeChapterVerify.evaluateContent(processed)) {
+                is ChangeChapterVerify.ContentQuality.Ok -> {
+                    upsertProbe(
+                        origin = searchBook.origin,
+                        chapterKey = chapterKey,
+                        status = ChangeSourceChapterProbe.STATUS_OK,
+                        score = quality.length.toDouble(),
+                    )
+                    searchBook.chapterWordCount = quality.length
+                    searchBook.chapterWordCountText = getApplication<Application>().getString(
+                        R.string.change_source_chapter_ok,
+                        quality.length
+                    )
+                }
+                ChangeChapterVerify.ContentQuality.TooShort -> {
+                    markContentQualityFail(
+                        searchBook,
+                        chapterKey,
+                        contentStop,
+                        R.string.change_source_chapter_too_short,
+                    )
+                }
+                ChangeChapterVerify.ContentQuality.AntiTheft -> {
+                    markContentQualityFail(
+                        searchBook,
+                        chapterKey,
+                        contentStop,
+                        R.string.change_source_chapter_anti_theft,
+                    )
+                }
+            }
         } catch (e: TimeoutCancellationException) {
             markContentFailUnlessStopped(searchBook, chapterKey, contentStop)
         } catch (e: CancellationException) {
@@ -436,9 +456,23 @@ class ChangeChapterSourceViewModel(application: Application) :
         chapterKey: String,
         contentStop: AtomicBoolean,
     ) {
+        markContentQualityFail(
+            searchBook,
+            chapterKey,
+            contentStop,
+            R.string.change_source_chapter_content_fail,
+        )
+    }
+
+    private fun markContentQualityFail(
+        searchBook: SearchBook,
+        chapterKey: String,
+        contentStop: AtomicBoolean,
+        messageRes: Int,
+    ) {
+        val msg = getApplication<Application>().getString(messageRes)
         if (contentStop.get()) {
-            searchBook.chapterWordCountText =
-                getApplication<Application>().getString(R.string.change_source_chapter_content_fail)
+            searchBook.chapterWordCountText = msg
             searchBook.chapterWordCount = -1
             return
         }
@@ -448,8 +482,7 @@ class ChangeChapterSourceViewModel(application: Application) :
             status = ChangeSourceChapterProbe.STATUS_CONTENT_FAIL,
             score = 0.0,
         )
-        searchBook.chapterWordCountText =
-            getApplication<Application>().getString(R.string.change_source_chapter_content_fail)
+        searchBook.chapterWordCountText = msg
         searchBook.chapterWordCount = -1
     }
 

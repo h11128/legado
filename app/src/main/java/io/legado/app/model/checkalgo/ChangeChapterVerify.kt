@@ -17,10 +17,24 @@ object ChangeChapterVerify {
     const val TOC_ALIGN_CAP = 24
     /** Stop fetching more TOC once this many usable alignments exist (ok + toc_ok). */
     const val TOC_OK_TARGET = 12
-    /** Stop content probes once this many STATUS_OK exist. */
-    const val CONTENT_OK_EARLY_STOP = 2
+    /**
+     * Stop content probes once this many *quality* STATUS_OK exist among current candidates.
+     * Default = [TOP_K_CONTENT]: probe the full Top-K unless cache already filled enough OKs.
+     * (Do not use a tiny number like 2 — short/anti-theft pages would starve the list.)
+     */
+    const val CONTENT_OK_EARLY_STOP = TOP_K_CONTENT
     /** Parallelism for content probes (host bucket still paces per host). */
     const val CONTENT_PARALLEL = 4
+    /** Below this, treat fetched body as not a real chapter. */
+    const val MIN_CONTENT_CHARS = 120
+    /** Short-ish pages with these markers are usually paywall / anti-theft shells. */
+    const val ANTI_THEFT_MAX_CHARS = 800
+
+    private val antiTheftMarkers = listOf(
+        "防盗", "盗版", "本章未完结", "本章未完", "内容加载失败", "请购买本章",
+        "订阅后阅读", "付费章节", "完整版请", "下载APP", "下载app", "正在手打",
+        "章节内容缺失", "抱歉，本章", "加入书架即可", "开通VIP", "开通vip",
+    )
 
     private val whitespace = "\\s".toRegex()
     private val pureStrip =
@@ -39,6 +53,27 @@ object ChangeChapterVerify {
     )
 
     data class AlignResult(val index: Int, val quality: Double)
+
+    sealed class ContentQuality {
+        data class Ok(val length: Int) : ContentQuality()
+        data object TooShort : ContentQuality()
+        data object AntiTheft : ContentQuality()
+    }
+
+    /**
+     * Decide whether fetched chapter text counts as a real readable chapter.
+     * Short shells and common anti-theft / paywall blurbs must not become STATUS_OK.
+     */
+    fun evaluateContent(content: String): ContentQuality {
+        val text = content.trim()
+        if (text.length < MIN_CONTENT_CHARS) return ContentQuality.TooShort
+        val head = text.take(400)
+        val hitAntiTheft = antiTheftMarkers.any { head.contains(it) || text.contains(it) }
+        if (hitAntiTheft && text.length < ANTI_THEFT_MAX_CHARS) {
+            return ContentQuality.AntiTheft
+        }
+        return ContentQuality.Ok(text.length)
+    }
 
     fun chapterKey(chapterIndex: Int, chapterTitle: String?): String {
         val pure = pureChapterName(chapterTitle)

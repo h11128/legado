@@ -165,8 +165,23 @@ class ChangeChapterVerifyTest {
     fun tocAndContentEarlyStopPredicates() {
         assertTrue(ChangeChapterVerify.shouldStopTocAlign(12))
         assertTrue(!ChangeChapterVerify.shouldStopTocAlign(11))
-        assertTrue(ChangeChapterVerify.shouldStopContentProbe(2))
-        assertTrue(!ChangeChapterVerify.shouldStopContentProbe(1))
+        assertTrue(ChangeChapterVerify.shouldStopContentProbe(ChangeChapterVerify.TOP_K_CONTENT))
+        assertTrue(!ChangeChapterVerify.shouldStopContentProbe(ChangeChapterVerify.TOP_K_CONTENT - 1))
+        assertEquals(ChangeChapterVerify.TOP_K_CONTENT, ChangeChapterVerify.CONTENT_OK_EARLY_STOP)
+    }
+
+    @Test
+    fun evaluateContentRejectsShortAndAntiTheft() {
+        assertTrue(
+            ChangeChapterVerify.evaluateContent("太短") is ChangeChapterVerify.ContentQuality.TooShort
+        )
+        val shell = "防盗章节提示：" + "x".repeat(200)
+        assertTrue(
+            ChangeChapterVerify.evaluateContent(shell) is ChangeChapterVerify.ContentQuality.AntiTheft
+        )
+        val ok = "这是正文。" + "内容".repeat(80)
+        val q = ChangeChapterVerify.evaluateContent(ok)
+        assertTrue(q is ChangeChapterVerify.ContentQuality.Ok)
     }
 
     @Test
