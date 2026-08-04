@@ -25,31 +25,75 @@ object ChangeChapterVerify {
     const val CONTENT_OK_EARLY_STOP = TOP_K_CONTENT
     /** Parallelism for content probes (host bucket still paces per host). */
     const val CONTENT_PARALLEL = 4
-    /** Below this, treat fetched body as not a real chapter. */
+    /** Below this, treat fetched body as not a real chapter (absolute floor). */
     const val MIN_CONTENT_CHARS = 120
-    /** Short-ish pages with these markers are usually paywall / anti-theft shells. */
-    const val ANTI_THEFT_MAX_CHARS = 800
+    /**
+     * Phrase/regex anti-theft still applies under this length.
+     * Longer pages with hijack titles are still caught by [looksLikeWrongBookHijack].
+     */
+    const val ANTI_THEFT_PHRASE_MAX_CHARS = 1200
+    /** Relative length: fail when below this fraction of expected chapter size. */
+    const val RELATIVE_MIN_RATIO = 0.22
+    /** Only apply relative check when expected size is at least this. */
+    const val RELATIVE_MIN_EXPECTED = 400
 
-    private val antiTheftMarkers = listOf(
-        "防盗", "盗版", "本章未完结", "本章未完", "内容加载失败", "请购买本章",
-        "订阅后阅读", "付费章节", "完整版请", "下载APP", "下载app", "正在手打",
-        "章节内容缺失", "抱歉，本章", "加入书架即可", "开通VIP", "开通vip",
+    data class ContentEvalContext(
+        val bookName: String = "",
+        /** Typical chapter length from current book / peer OK probes; null = skip relative. */
+        val expectedChars: Int? = null,
     )
 
-    private val whitespace = "\\s".toRegex()
-    private val pureStrip =
-        "[^\\w\\u4E00-\\u9FEF〇\\u3400-\\u4DBF\\u20000-\\u2A6DF\\u2A700-\\u2EBEF]".toRegex()
-    private val chapterNumPattern1 =
-        Regex(".*?第([\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+)[章节篇回集话]")
-    private val chapterNumPattern2 =
-        Regex("^(?:[\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+[,:、])*([\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+)(?:[,:、]|\\.[^\\d])")
-    private val chineseDigits = mapOf(
-        '零' to 0, '〇' to 0, '一' to 1, '二' to 2, '两' to 2, '三' to 3, '四' to 4,
-        '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9,
-        '十' to 10, '百' to 100, '千' to 1000, '万' to 10000,
-        '壹' to 1, '贰' to 2, '叁' to 3, '肆' to 4, '伍' to 5,
-        '陆' to 6, '柒' to 7, '捌' to 8, '玖' to 9, '拾' to 10,
-        '佰' to 100, '仟' to 1000,
+    /**
+     * Common pirate-site shells, paywall blurbs, and Qidian-style delayed "防盗章".
+     * Prefer distinctive multi-char phrases over single words like "VIP".
+     */
+    private val antiTheftMarkers = listOf(
+        "防盗章节", "防盗章", "您现在看的是防盗", "本章为防盗", "内容更新延迟",
+        "订阅比例", "72小时后", "24小时后", "四十八小时", "七十二小时",
+        "请支持正版", "请购买正版", "请到正版", "正版平台", "起点中文网",
+        "本章未完结", "本章未完", "内容加载失败", "章节内容加载失败",
+        "请购买本章", "订阅后阅读", "付费章节", "开通VIP", "开通vip", "VIP章节",
+        "完整版请", "下载客户端", "下载APP", "下载app", "正在手打",
+        "章节内容缺失", "抱歉，本章", "加入书架即可", "加入书架后",
+        "关闭浏览器的阅读模式", "关闭广告屏蔽", "只支持手机浏览器",
+        "本站所有小说都是转载", "转载至本站只是为了宣传",
+    )
+
+    /** Site chrome / remember-domain spam (笔趣阁系). */
+    private val siteChromeMarkers = listOf(
+        "一秒记住", "天才一秒记住", "请记住本站", "请牢记本站", "请牢记收藏",
+        "手机版阅读网址", "手机同步阅读", "最快更新", "无弹窗", "无错小说",
+        "纯文字在线", "破防盗完美章节", "搜索引擎各种小说",
+        "请移步到", "清爽无广告", "相关阅读：", "猜你喜欢：",
+    )
+
+    /**
+     * Regex shells that survive after replace rules strip domains.
+     * Keep Android-free: Kotlin Regex only.
+     */
+    private val antiTheftRegexes = listOf(
+        Regex("一秒记住.{0,12}【?.{0,12}】?"),
+        Regex("天才一秒记住"),
+        Regex("请记住.{0,8}(本站|域名|网址)"),
+        Regex("您现在看的是防盗"),
+        Regex("正确章节请(访问|前往)"),
+        Regex("无防盗.{0,6}(免费|阅读|全文)"),
+        Regex("最快更新.{0,10}无弹窗"),
+        Regex("关闭.{0,6}(阅读模式|畅读模式|小说模式)"),
+        Regex("(订阅|购买).{0,8}(比例|章节).{0,12}(防盗|可见)"),
+    )
+
+    /**
+     * Popular titles / spam hooks frequently injected into unrelated chapters
+     * (e.g. 「吞噬星空」「收徒万倍返还」广告劫持). Skipped when [ContentEvalContext.bookName]
+     * already contains the same title.
+     */
+    private val hijackTitleBaits = listOf(
+        "吞噬星空", "收徒万倍返还", "万倍返还", "斗破苍穹", "完美世界", "遮天",
+        "凡人修仙传", "仙逆", "莽荒纪", "武动乾坤", "大主宰", "斗罗大陆",
+        "元尊", "圣墟", "深空彼岸", "剑来", "诡秘之主", "我有一座恐怖屋",
+        "全职法师", "逆天邪神", "万古神帝", "帝霸", "一念永恒", "大道朝天",
+        "恭喜宿主", "系统已激活", "万界圣师系统", "从斗破开始",
     )
 
     data class AlignResult(val index: Int, val quality: Double)
@@ -58,21 +102,75 @@ object ChangeChapterVerify {
         data class Ok(val length: Int) : ContentQuality()
         data object TooShort : ContentQuality()
         data object AntiTheft : ContentQuality()
+        /** Wrong-book / promo injection (e.g. 吞噬星空 + 收徒万倍返还 spam). */
+        data object Hijack : ContentQuality()
     }
 
     /**
      * Decide whether fetched chapter text counts as a real readable chapter.
-     * Short shells and common anti-theft / paywall blurbs must not become STATUS_OK.
      */
-    fun evaluateContent(content: String): ContentQuality {
+    fun evaluateContent(
+        content: String,
+        context: ContentEvalContext = ContentEvalContext(),
+    ): ContentQuality {
         val text = content.trim()
         if (text.length < MIN_CONTENT_CHARS) return ContentQuality.TooShort
-        val head = text.take(400)
-        val hitAntiTheft = antiTheftMarkers.any { head.contains(it) || text.contains(it) }
-        if (hitAntiTheft && text.length < ANTI_THEFT_MAX_CHARS) {
+
+        val expected = context.expectedChars
+        if (expected != null && expected >= RELATIVE_MIN_EXPECTED) {
+            val floor = max(MIN_CONTENT_CHARS, (expected * RELATIVE_MIN_RATIO).toInt())
+            if (text.length < floor) return ContentQuality.TooShort
+        }
+
+        if (looksLikeWrongBookHijack(text, context.bookName)) {
+            return ContentQuality.Hijack
+        }
+
+        val head = text.take(500)
+        val phraseHit = antiTheftMarkers.any { head.contains(it) || text.contains(it) } ||
+                siteChromeMarkers.any { head.contains(it) }
+        val regexHit = antiTheftRegexes.any { it.containsMatchIn(head) || it.containsMatchIn(text.take(800)) }
+        if ((phraseHit || regexHit) && text.length < ANTI_THEFT_PHRASE_MAX_CHARS) {
+            return ContentQuality.AntiTheft
+        }
+        // Dense site-chrome even in longer pages: many markers in the head.
+        val chromeHits = siteChromeMarkers.count { head.contains(it) }
+        if (chromeHits >= 2 && text.length < 2000) {
             return ContentQuality.AntiTheft
         }
         return ContentQuality.Ok(text.length)
+    }
+
+    /**
+     * Detect injected promo / wrong-book blocks such as 「吞噬星空：收徒万倍返还」.
+     */
+    fun looksLikeWrongBookHijack(content: String, bookName: String): Boolean {
+        val text = content.trim()
+        if (text.isEmpty()) return false
+        val name = bookName.trim()
+        val head = text.take(800)
+        val baits = hijackTitleBaits.filter { bait ->
+            !name.contains(bait) && (head.contains(bait) || text.contains(bait))
+        }
+        if (baits.isEmpty()) return false
+        // Strong: classic dual spam "吞噬星空" + "收徒/万倍返还" style pair.
+        val hasDevour = baits.any { it.contains("吞噬") || it == "吞噬星空" }
+        val hasReturn = baits.any { it.contains("万倍") || it.contains("收徒") }
+        if (hasDevour && hasReturn) return true
+        // Strong: system-novel hooks in a book that is not about 系统.
+        if (baits.any { it == "恭喜宿主" || it == "系统已激活" || it == "万界圣师系统" } &&
+            !name.contains("系统")
+        ) {
+            return true
+        }
+        // Multiple unrelated famous titles in one chapter → almost always hijack/ads.
+        if (baits.size >= 2) return true
+        // Single bait title dominating a short/medium page.
+        if (baits.size == 1 && text.length < 1500) {
+            val bait = baits.first()
+            if (head.indexOf(bait) in 0..120) return true
+        }
+        return false
     }
 
     fun chapterKey(chapterIndex: Int, chapterTitle: String?): String {
@@ -250,6 +348,22 @@ object ChangeChapterVerify {
             index = parts.getOrNull(2)?.toIntOrNull() ?: 0,
         )
     }
+
+    private val whitespace = "\\s".toRegex()
+    private val pureStrip =
+        "[^\\w\\u4E00-\\u9FEF〇\\u3400-\\u4DBF\\u20000-\\u2A6DF\\u2A700-\\u2EBEF]".toRegex()
+    private val chapterNumPattern1 =
+        Regex(".*?第([\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+)[章节篇回集话]")
+    private val chapterNumPattern2 =
+        Regex("^(?:[\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+[,:、])*([\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+)(?:[,:、]|\\.[^\\d])")
+    private val chineseDigits = mapOf(
+        '零' to 0, '〇' to 0, '一' to 1, '二' to 2, '两' to 2, '三' to 3, '四' to 4,
+        '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9,
+        '十' to 10, '百' to 100, '千' to 1000, '万' to 10000,
+        '壹' to 1, '贰' to 2, '叁' to 3, '肆' to 4, '伍' to 5,
+        '陆' to 6, '柒' to 7, '捌' to 8, '玖' to 9, '拾' to 10,
+        '佰' to 100, '仟' to 1000,
+    )
 
     private fun pureChapterName(chapterName: String?): String {
         if (chapterName.isNullOrEmpty()) return ""

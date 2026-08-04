@@ -352,6 +352,28 @@ class ChangeChapterSourceViewModel(application: Application) :
         searchBook.chapterWordCount = -1
     }
 
+    private fun contentEvalContext(): ChangeChapterVerify.ContentEvalContext {
+        return ChangeChapterVerify.ContentEvalContext(
+            bookName = name,
+            expectedChars = expectedChapterChars(),
+        )
+    }
+
+    /** Median of quality OK probe scores among current candidates; else null. */
+    private fun expectedChapterChars(): Int? {
+        val lengths = probeByOrigin.values.mapNotNull { probe ->
+            if (probe.status == ChangeSourceChapterProbe.STATUS_OK &&
+                probe.score >= ChangeChapterVerify.MIN_CONTENT_CHARS
+            ) {
+                probe.score.toInt()
+            } else {
+                null
+            }
+        }.sorted()
+        if (lengths.isEmpty()) return null
+        return lengths[lengths.size / 2]
+    }
+
     /**
      * If search already loaded word-count for the aligned chapter, promote to OK without re-fetch.
      */
@@ -410,7 +432,10 @@ class ChangeChapterSourceViewModel(application: Application) :
             val processed = oldBook?.let {
                 contentProcessor.getContent(it, chapter, content, false).toString()
             } ?: content
-            when (val quality = ChangeChapterVerify.evaluateContent(processed)) {
+            when (val quality = ChangeChapterVerify.evaluateContent(
+                processed,
+                contentEvalContext(),
+            )) {
                 is ChangeChapterVerify.ContentQuality.Ok -> {
                     upsertProbe(
                         origin = searchBook.origin,
@@ -438,6 +463,14 @@ class ChangeChapterSourceViewModel(application: Application) :
                         chapterKey,
                         contentStop,
                         R.string.change_source_chapter_anti_theft,
+                    )
+                }
+                ChangeChapterVerify.ContentQuality.Hijack -> {
+                    markContentQualityFail(
+                        searchBook,
+                        chapterKey,
+                        contentStop,
+                        R.string.change_source_chapter_hijack,
                     )
                 }
             }

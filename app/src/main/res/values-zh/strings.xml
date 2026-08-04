@@ -1320,6 +1320,7 @@
     <string name="change_source_chapter_content_fail">正文获取失败</string>
     <string name="change_source_chapter_too_short">正文过短</string>
     <string name="change_source_chapter_anti_theft">疑似防盗/空壳</string>
+    <string name="change_source_chapter_hijack">疑似错书/广告劫持</string>
     <string name="change_source_early_stop">换源结果足够后提前结束</string>
     <string name="change_source_early_stop_summary">有足够匹配且至少跑完一轮并行后提前结束；若设置了下方时间预算，到期也会结束（即使结果很少）。</string>
     <string name="change_source_early_stop_count">提前结束所需结果数</string>
