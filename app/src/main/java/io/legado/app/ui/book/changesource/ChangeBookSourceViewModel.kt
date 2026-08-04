@@ -30,6 +30,7 @@ import io.legado.app.model.RespondTimeUpdater
 import io.legado.app.model.checkalgo.AskSourceOrder
 import io.legado.app.model.checkalgo.AskSourcePrefetch
 import io.legado.app.model.checkalgo.AskTimeout
+import io.legado.app.model.checkalgo.ChangeBookSourceQuality
 import io.legado.app.model.checkalgo.ChangeChapterVerify
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
@@ -43,7 +44,9 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -65,6 +68,8 @@ import kotlinx.coroutines.withTimeout
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.min
 
 @Suppress("MemberVisibilityCanBePrivate")
@@ -92,21 +97,15 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
     /** Cached once per 整书换源 search; cleared in [startSearch]. */
     private var wordCountEvalContext: ChangeChapterVerify.ContentEvalContext? = null
+    /** OK chapter bodies for multi-source consensus (origin → text). */
+    private val probeContentSamples = ConcurrentHashMap<String, String>()
+    /** Meta quality tiers (latest / toc); worse wins via [ChangeBookSourceQuality.worseTier]. */
+    private val qualityTiers = ConcurrentHashMap<String, Int>()
+    /** Session-only soft fails (timeout / hijack); never written to BookSource.respondTime. */
+    private val sessionSoftFail = ConcurrentHashMap.newKeySet<String>()
+    private val qualityOkCount = AtomicInteger(0)
+    private val earlyStopped = AtomicBoolean(false)
     protected var searchCallback: SourceCallback? = null
-    private val chapterNumRegex = "^\\[(\\d+)]".toRegex()
-    private val comparatorBase by lazy {
-        compareByDescending<SearchBook> { getBookScore(it) }
-            .thenByDescending { SourceConfig.getSourceScore(it.origin) }
-    }
-    private val defaultComparator by lazy {
-        comparatorBase.thenBy { it.originOrder }
-    }
-    private val wordCountComparator by lazy {
-        comparatorBase.thenByDescending { it.chapterWordCount > 1000 }
-            .thenByDescending { getChapterNum(it.chapterWordCountText) }
-            .thenByDescending { it.chapterWordCount }
-            .thenBy { it.originOrder }
-    }
     protected var task: Job? = null
     val bookMap = ConcurrentHashMap<String, Book>()
     val searchDataFlow = callbackFlow {
@@ -157,12 +156,25 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     protected open fun onCachedSearchReady() = Unit
 
     protected open fun sortSearchBooks(books: List<SearchBook>): List<SearchBook> {
-        val comparator = if (AppConfig.changeSourceLoadWordCount) {
-            wordCountComparator
-        } else {
-            defaultComparator
-        }
-        return books.sortedWith(comparator)
+        val expected = wordCountEvalContext?.expectedChars
+        // Quality tier first — liked/high-score sources must not outrank hijack/soft-fail.
+        return books.sortedWith(
+            compareBy<SearchBook> {
+                ChangeBookSourceQuality.sortTier(
+                    chapterWordCount = it.chapterWordCount,
+                    wordCountText = it.chapterWordCountText,
+                    metaTier = qualityTiers[it.origin]
+                        ?: ChangeBookSourceQuality.TIER_UNKNOWN,
+                    softFailed = it.origin in sessionSoftFail,
+                )
+            }
+                .thenByDescending { getBookScore(it) }
+                .thenByDescending { SourceConfig.getSourceScore(it.origin) }
+                .thenByDescending {
+                    ChangeBookSourceQuality.lengthBandScore(it.chapterWordCount, expected)
+                }
+                .thenBy { it.originOrder }
+        )
     }
 
     /** Chapter used for word-count / content probe alignment. */
@@ -249,6 +261,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             bookMap.clear()
             tocMapChapterCount = 0
             wordCountEvalContext = null
+            probeContentSamples.clear()
+            qualityTiers.clear()
+            sessionSoftFail.clear()
+            qualityOkCount.set(0)
+            earlyStopped.set(false)
             _changeSourceProgress.value = 0 to ""
             val searchGroup = AppConfig.searchGroup
             val loaded = if (searchGroup.isBlank()) {
@@ -282,6 +299,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             bookMap.clear()
             tocMapChapterCount = 0
             wordCountEvalContext = null
+            probeContentSamples.clear()
+            qualityTiers.clear()
+            sessionSoftFail.clear()
+            qualityOkCount.set(0)
+            earlyStopped.set(false)
             bookSourceParts.add(appDb.bookSourceDao.getBookSourcePart(origin)!!)
             searchBooks.removeIf { it.origin == origin }
             initSearchPool()
@@ -295,8 +317,14 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             AskSourcePrefetch.emitSources(parts).onStart {
                 searchStateData.postValue(true)
             }.mapParallel(threadCount) { source ->
+                if (earlyStopped.get()) return@mapParallel source
+                if (source.bookSourceUrl in sessionSoftFail) return@mapParallel source
                 try {
                     search(source)
+                } catch (e: TimeoutCancellationException) {
+                    // Session demote only — RFC-001 forbids persisting failure on ask timeout.
+                    sessionSoftFail.add(source.bookSourceUrl)
+                    currentCoroutineContext().ensureActive()
                 } catch (_: Exception) {
                     currentCoroutineContext().ensureActive()
                 }
@@ -305,12 +333,22 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 _changeSourceProgress.update { _ ->
                     index + 1 to value.bookSourceName
                 }
+                if (ChangeBookSourceQuality.shouldEarlyStop(
+                        qualityOkCount = qualityOkCount.get(),
+                        enabled = AppConfig.changeSourceEarlyStop,
+                        target = AppConfig.changeSourceEarlyStopCount,
+                    )
+                ) {
+                    earlyStopped.set(true)
+                    currentCoroutineContext().cancel()
+                }
             }.onCompletion { cause ->
                 withContext(NonCancellable + IO) {
+                    applyBookQualityGates(force = true)
                     RespondTimeUpdater.flush()
                     searchStateData.postValue(false)
                     // User cancel / restart: do not invoke finish callback (avoids false empty toast).
-                    if (cause == null) {
+                    if (cause == null || earlyStopped.get()) {
                         onSearchTaskFinished(searchBooks.isEmpty())
                     }
                 }
@@ -347,7 +385,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 }
             } else {
                 resultBooks.forEach { searchBook ->
-                    searchCallback?.searchSuccess(searchBook)
+                    publishSearchBook(searchBook)
                 }
             }
         }
@@ -361,8 +399,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             loadBookToc(source, book)
         } else {
             //从详情页里获取最新章节
-            val searchBook = book.toSearchBook()
-            searchCallback?.searchSuccess(searchBook)
+            publishSearchBook(book.toSearchBook())
         }
     }
 
@@ -377,8 +414,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         if (AppConfig.changeSourceLoadWordCount) {
             loadBookWordCount(source, book, chapters)
         } else {
-            val searchBook = book.toSearchBook()
-            searchCallback?.searchSuccess(searchBook)
+            publishSearchBook(book.toSearchBook(), tocSize = chapters.size)
         }
     }
 
@@ -392,7 +428,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 chapterWordCountText = "目录为空"
                 chapterWordCount = -1
             }
-            searchCallback?.searchSuccess(searchBook)
+            publishSearchBook(searchBook, tocSize = 0)
             return@coroutineScope
         }
         val chapterIndex = wordCountChapterIndex(chapters).coerceIn(0, chapters.lastIndex)
@@ -402,12 +438,13 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             title = title.substring(0, 20) + "…"
         }
         val startTime = System.currentTimeMillis()
+        var processedContent: String? = null
         val pair = try {
             val nextChapterUrl = chapters.getOrNull(chapterIndex + 1)?.url
             var content = WebBook.getContentAwait(source, book, bookChapter, nextChapterUrl, false)
             content = contentProcessor.getContent(oldBook!!, bookChapter, content, false).toString()
+            processedContent = content
             // Same structural gates as 单章换源: length / stitch / optional local reference.
-            // Title+author match alone still lets adult-mirror shells rank by raw length.
             when (val quality = ChangeChapterVerify.evaluateContent(
                 content,
                 bookChangeContentEvalContext(chapterIndex, bookChapter.title),
@@ -438,7 +475,118 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             chapterWordCount = pair.first
             respondTime = (endTime - startTime).toInt()
         }
+        if (ChangeBookSourceQuality.isQualityOkWordCount(pair.first) && processedContent != null) {
+            probeContentSamples[searchBook.origin] = processedContent
+            qualityOkCount.incrementAndGet()
+        } else if (pair.first < 0) {
+            sessionSoftFail.add(searchBook.origin)
+            mergeTier(searchBook.origin, ChangeBookSourceQuality.TIER_CONTENT_BAD)
+        }
+        publishSearchBook(searchBook, tocSize = chapters.size)
+        applyBookQualityGates(force = false)
+    }
+
+    private fun publishSearchBook(searchBook: SearchBook, tocSize: Int? = null) {
+        annotateMetaQuality(searchBook, tocSize)
         searchCallback?.searchSuccess(searchBook)
+    }
+
+    private fun annotateMetaQuality(searchBook: SearchBook, tocSize: Int?) {
+        val origin = searchBook.origin
+        val local = oldBook
+        if (tocSize != null &&
+            local != null &&
+            !ChangeBookSourceQuality.tocConsistent(local.totalChapterNum, tocSize)
+        ) {
+            mergeTier(origin, ChangeBookSourceQuality.TIER_TOC_BAD)
+            searchBook.chapterWordCountText = appendBadge(
+                searchBook.chapterWordCountText,
+                getApplication<Application>().getString(R.string.change_source_toc_mismatch),
+            )
+        }
+        when (ChangeBookSourceQuality.latestMatchesLocal(
+            local?.latestChapterTitle,
+            searchBook.latestChapterTitle,
+        )) {
+            false -> {
+                mergeTier(origin, ChangeBookSourceQuality.TIER_LATEST_BAD)
+                searchBook.chapterWordCountText = appendBadge(
+                    searchBook.chapterWordCountText,
+                    getApplication<Application>().getString(R.string.change_source_latest_mismatch),
+                )
+            }
+            else -> Unit
+        }
+    }
+
+    private fun applyBookQualityGates(force: Boolean) {
+        val samples = probeContentSamples.toMap()
+        if (force || samples.size >= ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES) {
+            val outliers = ChangeChapterVerify.multiSourceOutlierOrigins(
+                samples = samples,
+                referenceContent = wordCountEvalContext?.referenceContent,
+            )
+            for (origin in outliers) {
+                demoteOriginContent(
+                    origin,
+                    getApplication<Application>().getString(R.string.change_source_chapter_hijack),
+                )
+            }
+        }
+        val titles = searchBooks.mapNotNull { book ->
+            book.latestChapterTitle?.trim()?.takeIf { it.isNotEmpty() }?.let { book.origin to it }
+        }.toMap()
+        if (force || titles.size >= ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES) {
+            val latestOutliers = ChangeBookSourceQuality.latestTitleOutliers(
+                titlesByOrigin = titles,
+                localLatest = oldBook?.latestChapterTitle,
+            )
+            for (origin in latestOutliers) {
+                mergeTier(origin, ChangeBookSourceQuality.TIER_LATEST_BAD)
+                searchBooks.find { it.origin == origin }?.let { book ->
+                    book.chapterWordCountText = appendBadge(
+                        book.chapterWordCountText,
+                        getApplication<Application>().getString(R.string.change_source_latest_mismatch),
+                    )
+                }
+            }
+        }
+        if (force || titles.size >= ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES ||
+            samples.size >= ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES
+        ) {
+            searchCallback?.upAdapter()
+        }
+    }
+
+    private fun demoteOriginContent(origin: String, badge: String) {
+        sessionSoftFail.add(origin)
+        mergeTier(origin, ChangeBookSourceQuality.TIER_CONTENT_BAD)
+        val removedSample = probeContentSamples.remove(origin) != null
+        searchBooks.find { it.origin == origin }?.let { book ->
+            val wasOk = ChangeBookSourceQuality.isQualityOkWordCount(book.chapterWordCount)
+            book.chapterWordCount = -1
+            book.chapterWordCountText = appendBadge(book.chapterWordCountText, badge)
+            if (removedSample || wasOk) {
+                qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
+            }
+        } ?: run {
+            if (removedSample) {
+                qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
+            }
+        }
+    }
+
+    private fun mergeTier(origin: String, tier: Int) {
+        qualityTiers[origin] = ChangeBookSourceQuality.worseTier(
+            qualityTiers[origin] ?: ChangeBookSourceQuality.TIER_UNKNOWN,
+            tier,
+        )
+    }
+
+    private fun appendBadge(existing: String?, badge: String): String {
+        val base = existing?.trim().orEmpty()
+        if (base.contains(badge)) return base
+        return if (base.isEmpty()) badge else "$base\n$badge"
     }
 
     /**
@@ -698,11 +846,6 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     fun getBookScore(searchBook: SearchBook): Int {
         return SourceConfig.getBookScore(searchBook.origin, searchBook.name, searchBook.author)
-    }
-
-    private fun getChapterNum(wordCountText: String?): Int {
-        wordCountText ?: return -1
-        return chapterNumRegex.find(wordCountText)?.groupValues?.get(1)?.toIntOrNull() ?: -1
     }
 
     interface SourceCallback {

@@ -152,6 +152,8 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             ?.isChecked = AppConfig.changeSourceLoadToc
         binding.toolBar.menu.findItem(R.id.menu_load_word_count)
             ?.isChecked = AppConfig.changeSourceLoadWordCount
+        binding.toolBar.menu.findItem(R.id.menu_early_stop)
+            ?.isChecked = AppConfig.changeSourceEarlyStop
     }
 
     private fun initView() {
@@ -298,6 +300,11 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                 AppConfig.changeSourceLoadWordCount = !item.isChecked
                 item.isChecked = !item.isChecked
                 viewModel.onLoadWordCountChecked(item.isChecked)
+            }
+
+            R.id.menu_early_stop -> {
+                AppConfig.changeSourceEarlyStop = !item.isChecked
+                item.isChecked = !item.isChecked
             }
 
             R.id.menu_start_stop -> viewModel.startOrStopSearch()

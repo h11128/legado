@@ -43,6 +43,8 @@ class Rfc001AskOrderContractTest {
         assertTrue(change.contains("RespondTimeUpdater.noteSuccessAndMaybeFlush("))
         assertTrue(change.contains("AskTimeout.CHANGE_SOURCE_MS"))
         assertTrue(change.contains("ChangeChapterVerify.evaluateContent("))
+        assertTrue(change.contains("ChangeBookSourceQuality.shouldEarlyStop("))
+        assertTrue(change.contains("ChangeChapterVerify.multiSourceOutlierOrigins("))
         assertFalse(change.contains("CheckHostTokenBucket("))
         assertFalse(change.contains("AskFailCooldown("))
         assertFalse(change.contains("AskEarlyStop."))

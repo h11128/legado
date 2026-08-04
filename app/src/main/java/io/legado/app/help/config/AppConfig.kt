@@ -7,6 +7,7 @@ import io.legado.app.BuildConfig
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
+import io.legado.app.model.checkalgo.ChangeBookSourceQuality
 import io.legado.app.utils.GSON
 import io.legado.app.utils.canvasrecorder.CanvasRecorderFactory
 import io.legado.app.utils.fromJsonObject
@@ -550,6 +551,22 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.changeSourceLoadWordCount)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.changeSourceLoadWordCount, value)
+        }
+
+    /** Stop 整书换源 after enough quality-OK hits (default on). */
+    var changeSourceEarlyStop: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.changeSourceEarlyStop, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.changeSourceEarlyStop, value)
+        }
+
+    var changeSourceEarlyStopCount: Int
+        get() = appCtx.getPrefInt(
+            PreferKey.changeSourceEarlyStopCount,
+            ChangeBookSourceQuality.EARLY_STOP_QUALITY_OK,
+        )
+        set(value) {
+            appCtx.putPrefInt(PreferKey.changeSourceEarlyStopCount, value)
         }
 
     var openBookInfoByClickTitle: Boolean

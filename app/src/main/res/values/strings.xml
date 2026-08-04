@@ -1339,6 +1339,9 @@
     <string name="change_source_chapter_too_short">Content too short</string>
     <string name="change_source_chapter_anti_theft">Likely anti-theft / empty shell</string>
     <string name="change_source_chapter_hijack">Likely wrong-book / ad hijack</string>
+    <string name="change_source_latest_mismatch">Latest chapter looks unrelated</string>
+    <string name="change_source_toc_mismatch">TOC size looks inconsistent</string>
+    <string name="change_source_early_stop">Stop when enough good sources</string>
     <string name="open_book_info_by_click_title">Click on the book title to open details</string>
     <string name="export_wait">Waiting for export</string>
     <string name="show_bookshelf_fast_scroller">Show quick scroll bar</string>
