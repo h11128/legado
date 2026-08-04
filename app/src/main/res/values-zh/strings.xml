@@ -1030,6 +1030,7 @@
     <string name="sort_by_respondTime">响应时间排序</string>
     <string name="apply_view_to_manual_order">把当前列表写入手动顺序</string>
     <string name="apply_view_to_manual_order_confirm">将当前列表顺序写入手动顺序（customOrder）？这不会单独改变换源询问顺序；换源按响应时间与置顶排序。</string>
+    <string name="apply_view_to_manual_order_need_clear_filter">请先清空搜索过滤，再写入手动顺序（避免只重排当前筛选子集）。</string>
     <string name="respondTime">响应时间：%1$d ms</string>
     <string name="export_success">导出成功</string>
     <string name="path">路径</string>
@@ -1328,12 +1329,6 @@
     <string name="change_source_chapter_too_short">正文过短</string>
     <string name="change_source_chapter_anti_theft">疑似防盗/空壳</string>
     <string name="change_source_chapter_hijack">疑似错书/广告劫持</string>
-    <string name="change_source_early_stop">换源结果足够后提前结束</string>
-    <string name="change_source_early_stop_summary">有足够匹配且至少跑完一轮并行后提前结束；若设置了下方时间预算，到期也会结束（即使结果很少）。</string>
-    <string name="change_source_early_stop_count">提前结束所需结果数</string>
-    <string name="change_source_early_stop_count_s">结果数达到 %s 时结束</string>
-    <string name="change_source_early_stop_budget">提前结束时间预算（秒）</string>
-    <string name="change_source_early_stop_budget_s">%s 秒（0 表示关闭）</string>
     <string name="open_book_info_by_click_title">点击书名打开详情</string>
     <string name="export_wait">等待导出</string>
     <string name="sync_book_progress_success">进度同步成功</string>

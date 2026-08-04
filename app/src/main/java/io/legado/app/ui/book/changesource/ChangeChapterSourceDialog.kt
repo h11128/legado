@@ -150,8 +150,6 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             ?.isChecked = AppConfig.changeSourceLoadInfo
         binding.toolBar.menu.findItem(R.id.menu_load_toc)
             ?.isChecked = AppConfig.changeSourceLoadToc
-        binding.toolBar.menu.findItem(R.id.menu_early_stop)
-            ?.isChecked = AppConfig.changeSourceEarlyStop
         binding.toolBar.menu.findItem(R.id.menu_load_word_count)
             ?.isChecked = AppConfig.changeSourceLoadWordCount
     }
@@ -293,11 +291,6 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
 
             R.id.menu_load_toc -> {
                 AppConfig.changeSourceLoadToc = !item.isChecked
-                item.isChecked = !item.isChecked
-            }
-
-            R.id.menu_early_stop -> {
-                AppConfig.changeSourceEarlyStop = !item.isChecked
                 item.isChecked = !item.isChecked
             }
 

@@ -67,11 +67,20 @@ class BookSourceViewModel(application: Application) : BaseViewModel(application)
         }
     }
 
-    /** Persist current on-screen order into customOrder (RFC-001 §6.5). */
+    /**
+     * Persist current on-screen order into customOrder (RFC-001 §6.5).
+     * Always rewrites the **full** source table: view items keep relative order at the
+     * front; sources not in the view follow, sorted by their previous customOrder.
+     * Never assign 0..n-1 to a filtered subset alone (that creates duplicate orders).
+     */
     fun applyViewToManualOrder(items: List<BookSourcePart>) {
         if (items.isEmpty()) return
         execute {
-            val ordered = items.mapIndexed { index, part ->
+            val viewUrls = items.mapTo(HashSet(items.size)) { it.bookSourceUrl }
+            val rest = appDb.bookSourceDao.allPart
+                .filter { it.bookSourceUrl !in viewUrls }
+                .sortedBy { it.customOrder }
+            val ordered = (items + rest).mapIndexed { index, part ->
                 part.copy(customOrder = index)
             }
             appDb.bookSourceDao.upOrder(ordered)

@@ -100,7 +100,8 @@ object BookSourceCheckRunner {
         checkMode: CheckMode,
         settings: CheckSource.Settings,
     ) {
-        // Session timing is started by CheckSourceService / McpSourceCheckJob callers.
+        // Session timing for UI manage-page status is started by
+        // CheckSourceService / McpSourceCheckJob via Debug.startChecking(sessionId, source).
         source.removeInvalidGroups()
         if (settings.wSourceComment) source.removeErrorComment()
         ensureDomain(source, settings)

@@ -6,7 +6,9 @@ import kotlin.math.min
 /**
  * Ask-order for 换源 / search / auto 换源 (§6.2 RFC-001).
  *
- * Head reserve (by customOrder) then state rank → respondTime → customOrder.
+ * Head reserve (by customOrder) then respondTime → customOrder.
+ * respondTime already encodes SUCCESS < UNKNOWN < FAILURE (§6.1), so a
+ * separate classify step is redundant.
  */
 object AskSourceOrder {
 
@@ -33,8 +35,6 @@ object AskSourceOrder {
     }
 
     private val restComparator = compareBy<BookSourcePart> {
-        RespondTimeRank.classify(it.respondTime)
-    }.thenBy {
         it.respondTime
     }.thenBy {
         it.customOrder

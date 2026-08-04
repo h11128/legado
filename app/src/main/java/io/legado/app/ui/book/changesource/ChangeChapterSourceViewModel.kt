@@ -15,10 +15,8 @@ import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.primaryStr
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.SourceConfig
-import io.legado.app.model.checkalgo.AskSourcePrefetch
 import io.legado.app.model.checkalgo.AskTimeout
 import io.legado.app.model.checkalgo.ChangeChapterVerify
-import io.legado.app.model.checkalgo.CheckHostTokenBucket
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
@@ -149,7 +147,6 @@ class ChangeChapterSourceViewModel(application: Application) :
                     return@launch
                 }
 
-                val hostBucket = CheckHostTokenBucket()
                 val parallelism = min(AppConfig.threadCount, 8).coerceAtLeast(1)
                 val candidateOrigins = candidates.map { it.origin }.toHashSet()
                 val toAlign = ChangeChapterVerify.prioritizeForTocAlign(
@@ -164,7 +161,7 @@ class ChangeChapterSourceViewModel(application: Application) :
                     toAlign.forEach { emit(it) }
                 }.mapParallel(parallelism) { searchBook ->
                     if (tocStop.get()) return@mapParallel searchBook
-                    alignOne(searchBook, chapterKey, hostBucket)
+                    alignOne(searchBook, chapterKey)
                     if (ChangeChapterVerify.shouldStopTocAlign(
                             ChangeChapterVerify.countUsableAlignments(
                                 probeByOrigin,
@@ -207,7 +204,7 @@ class ChangeChapterSourceViewModel(application: Application) :
                     toProbe.forEach { emit(it) }
                 }.mapParallel(contentParallel) { searchBook ->
                     if (contentStop.get()) return@mapParallel null
-                    contentProbeOne(searchBook, chapterKey, hostBucket, contentStop)
+                    contentProbeOne(searchBook, chapterKey, contentStop)
                     if (ChangeChapterVerify.shouldStopContentProbe(
                             ChangeChapterVerify.countOk(probeByOrigin, candidateOrigins)
                         )
@@ -329,7 +326,6 @@ class ChangeChapterSourceViewModel(application: Application) :
     private suspend fun alignOne(
         searchBook: SearchBook,
         chapterKey: String,
-        hostBucket: CheckHostTokenBucket,
     ) {
         currentCoroutineContext().ensureActive()
         when (probeByOrigin[searchBook.origin]?.status) {
@@ -344,7 +340,7 @@ class ChangeChapterSourceViewModel(application: Application) :
             bookMap[it.primaryStr()] = it
         }
         val chapters = try {
-            ensureToc(book, searchBook.origin, hostBucket) ?: run {
+            ensureToc(book, searchBook.origin) ?: run {
                 markTransientTocFail(searchBook)
                 return
             }
@@ -448,14 +444,13 @@ class ChangeChapterSourceViewModel(application: Application) :
     private suspend fun contentProbeOne(
         searchBook: SearchBook,
         chapterKey: String,
-        hostBucket: CheckHostTokenBucket,
         contentStop: AtomicBoolean,
     ) {
         val book = bookMap[searchBook.toBook().primaryStr()] ?: searchBook.toBook().also {
             bookMap[it.primaryStr()] = it
         }
         val chapters = try {
-            ensureToc(book, searchBook.origin, hostBucket) ?: return
+            ensureToc(book, searchBook.origin) ?: return
         } catch (e: TimeoutCancellationException) {
             markContentFailUnlessStopped(searchBook, chapterKey, contentStop)
             return
@@ -469,12 +464,10 @@ class ChangeChapterSourceViewModel(application: Application) :
         val aligned = ChangeChapterVerify.alignResult(chapterIndex, chapterTitle, chapters) ?: return
         val chapter = chapters[aligned.index]
         val source = appDb.bookSourceDao.getBookSource(searchBook.origin) ?: return
-        val host = AskSourcePrefetch.hostOf(searchBook.origin)
-        if (host.isNotEmpty()) hostBucket.acquire(host)
         if (contentStop.get()) return
         try {
             val nextUrl = chapters.getOrNull(aligned.index + 1)?.url
-            val content = withTimeout(AskTimeout.SUCCESS_MS) {
+            val content = withTimeout(AskTimeout.CHANGE_SOURCE_MS) {
                 WebBook.getContentAwait(source, book, chapter, nextUrl, false)
             }
             if (contentStop.get()) return
@@ -572,13 +565,10 @@ class ChangeChapterSourceViewModel(application: Application) :
     private suspend fun ensureToc(
         book: Book,
         origin: String,
-        hostBucket: CheckHostTokenBucket,
     ): List<BookChapter>? {
         tocMap[book.primaryStr()]?.let { return it }
-        val host = AskSourcePrefetch.hostOf(origin)
-        if (host.isNotEmpty()) hostBucket.acquire(host)
         val source = appDb.bookSourceDao.getBookSource(origin) ?: return null
-        return withTimeout(AskTimeout.timeoutMs(source.respondTime)) {
+        return withTimeout(AskTimeout.CHANGE_SOURCE_MS) {
             if (book.tocUrl.isEmpty()) {
                 WebBook.getBookInfoAwait(source, book)
             }

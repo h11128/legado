@@ -1,24 +1,19 @@
 package io.legado.app.model.checkalgo
 
 /**
- * Per-source ask timeout by historical [RespondTimeRank] class.
+ * Fixed per-path ask timeouts (pre-RFC behaviour).
+ *
+ * Do **not** tier by [RespondTimeRank]: SUCCESS→60s doubles global search,
+ * UNKNOWN→30s halves 换源 on fresh installs, and FAILURE→8s self-reinforces.
  */
 object AskTimeout {
 
-    const val SUCCESS_MS = 60_000L
-    const val UNKNOWN_MS = 30_000L
-    const val FAILURE_MS = 8_000L
+    /** Global search — original fixed budget. */
+    const val SEARCH_MS = 30_000L
 
-    fun timeoutMs(respondTime: Long): Long {
-        return when (RespondTimeRank.classify(respondTime)) {
-            RespondTimeRank.SUCCESS -> SUCCESS_MS
-            RespondTimeRank.FAILURE -> FAILURE_MS
-            else -> UNKNOWN_MS
-        }
-    }
+    /** Manual / chapter 换源 — original fixed budget wrapping the whole probe. */
+    const val CHANGE_SOURCE_MS = 60_000L
 
-    /** Multi-step auto 换源 (search+info+toc+content) needs a wider budget. */
-    fun autoChangeTimeoutMs(respondTime: Long): Long {
-        return maxOf(timeoutMs(respondTime) * 3, UNKNOWN_MS)
-    }
+    /** Multi-step auto 换源 (search+info+toc+content). */
+    const val AUTO_CHANGE_MS = 180_000L
 }

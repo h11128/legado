@@ -23,13 +23,13 @@ class CheckHttpLimitsContractTest {
         assertTrue(mcp.contains("restoreDefaultHttpLimits"))
         assertTrue(mcp.contains("allUrls()") || mcp.contains("allEnabledUrls()"))
         assertTrue(mcp.contains("MAX_STORED_RESULTS"))
-        assertTrue(mcp.contains("clearSourceCheckState"))
+        assertTrue(mcp.contains("Debug.startChecking(sessionId, source)"))
         assertFalse(Regex("""bookSourceDao\.all(?![A-Za-z])""").containsMatchIn(mcp))
 
         val service = projectFile("app/src/main/java/io/legado/app/service/CheckSourceService.kt")
         assertTrue(service.contains("configureCheckHttpLimits"))
         assertTrue(service.contains("restoreDefaultHttpLimits"))
-        assertTrue(service.contains("clearSourceCheckState"))
+        assertTrue(service.contains("Debug.startChecking(sessionId, source)"))
     }
 
     private fun projectFile(path: String): String {

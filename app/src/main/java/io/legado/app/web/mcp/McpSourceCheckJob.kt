@@ -99,6 +99,7 @@ object McpSourceCheckJob {
     @Volatile private var activeFlags: CheckFlags? = null
     @Volatile private var activeSettings: CheckSource.Settings? = null
     @Volatile private var activeTokens: CheckHostTokenBucket? = null
+    @Volatile private var checkSessionId: Long? = null
 
     private val finished = AtomicInteger(0)
     private val success = AtomicInteger(0)
@@ -145,9 +146,8 @@ object McpSourceCheckJob {
         if (Debug.callback != null || Debug.isChecking) {
             return "调试/校验通道占用中，请稍后重试"
         }
-        if (!Debug.tryStartChecking()) {
-            return "调试/校验通道占用中，请稍后重试"
-        }
+        val sessionId = Debug.tryStartCheckSession() ?: return "调试/校验通道占用中，请稍后重试"
+        checkSessionId = sessionId
         val rawUrls = resolveUrls(urls, enabledOnly)
         val pendingUrls = rawUrls.filterNot { CheckAlgoRuntime.bloom.mightContain(it) }
             .ifEmpty { rawUrls }
@@ -156,7 +156,8 @@ object McpSourceCheckJob {
         }
         val sourceUrls = CheckPriorityOrder.orderByPriority(pendingUrls, respondTimes)
         if (sourceUrls.isEmpty()) {
-            Debug.finishChecking()
+            checkSessionId = null
+            Debug.finishChecking(sessionId)
             return "没有可校验的书源"
         }
         keyword = keywordOverride?.takeIf { it.isNotBlank() } ?: CheckSource.keyword
@@ -176,6 +177,7 @@ object McpSourceCheckJob {
         activeFlags = jobSettings.toCheckFlags()
         try {
             resetCounters(sourceUrls.size)
+            Debug.prepareCheckSession(sessionId, sourceUrls)
             CheckDnsGuard.clear()
             CheckAlgoRuntime.resetEwma()
             val aimd = CheckAimdLimiter(
@@ -236,11 +238,12 @@ object McpSourceCheckJob {
                     activeSettings = null
                     activeFlags = null
                     activeTokens = null
+                    checkSessionId = null
                     CheckSourceResultWriter.flush()
                     running = false
                     finishedAt = System.currentTimeMillis()
                     lastProgressAt = finishedAt
-                    Debug.finishChecking()
+                    Debug.finishChecking(sessionId)
                     restoreDefaultHttpLimits()
                     runCatching { myDispatcher.close() }
                     McpChannelGuard.noteCheckFinished(finished.get(), total)
@@ -250,7 +253,8 @@ object McpSourceCheckJob {
             activeSettings = null
             activeFlags = null
             activeTokens = null
-            Debug.finishChecking()
+            checkSessionId = null
+            Debug.finishChecking(sessionId)
             throw t
         }
         val flags = activeFlags ?: captureFlags()
@@ -273,6 +277,7 @@ object McpSourceCheckJob {
         CheckSourceResultWriter.flush()
         // finishChecking / restore / dispatcher close happen in job finally when join returns;
         // if job was already null/dead, still clear gates.
+        checkSessionId = null
         if (Debug.isChecking) Debug.finishChecking()
         restoreDefaultHttpLimits()
         return "已停止 MCP 批量校验（完成 ${finished.get()}/$total）"
@@ -363,6 +368,10 @@ object McpSourceCheckJob {
         timeoutMs: Long,
         aimd: CheckAimdLimiter,
     ): BookSourceCheckRunner.Outcome {
+        val sessionId = checkSessionId
+        if (sessionId != null) {
+            Debug.startChecking(sessionId, source)
+        }
         val begin = System.currentTimeMillis()
         val settings = activeSettings ?: CheckSource.Settings.fromGlobals()
         val outcome = BookSourceCheckRunner.checkSource(
@@ -393,7 +402,7 @@ object McpSourceCheckJob {
                 durationMs = duration,
             )
         )
-        Debug.clearSourceCheckState(source.bookSourceUrl)
+        // Keep debugMessageMap until session finish so manage-page shows per-source status.
         finished.incrementAndGet()
         if (outcome.success) success.incrementAndGet() else failed.incrementAndGet()
         lastProgressAt = System.currentTimeMillis()

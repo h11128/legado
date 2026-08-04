@@ -252,6 +252,11 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             }
 
             R.id.menu_apply_view_to_manual_order -> {
+                val query = searchView.query?.toString().orEmpty()
+                if (query.isNotBlank()) {
+                    toastOnUi(R.string.apply_view_to_manual_order_need_clear_filter)
+                    return true
+                }
                 alert(
                     titleResource = R.string.apply_view_to_manual_order,
                     messageResource = R.string.apply_view_to_manual_order_confirm,

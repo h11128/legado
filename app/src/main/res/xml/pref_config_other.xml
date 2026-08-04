@@ -237,23 +237,6 @@
             app:iconSpaceReserved="false" />
 
         <io.legado.app.lib.prefs.SwitchPreference
-            android:defaultValue="false"
-            android:key="changeSourceEarlyStop"
-            android:summary="@string/change_source_early_stop_summary"
-            android:title="@string/change_source_early_stop"
-            app:iconSpaceReserved="false" />
-
-        <io.legado.app.lib.prefs.Preference
-            android:key="changeSourceEarlyStopCount"
-            android:title="@string/change_source_early_stop_count"
-            app:iconSpaceReserved="false" />
-
-        <io.legado.app.lib.prefs.Preference
-            android:key="changeSourceEarlyStopBudgetMs"
-            android:title="@string/change_source_early_stop_budget"
-            app:iconSpaceReserved="false" />
-
-        <io.legado.app.lib.prefs.SwitchPreference
             android:defaultValue="true"
             android:key="process_text"
             android:summary="@string/add_to_text_context_menu_s"

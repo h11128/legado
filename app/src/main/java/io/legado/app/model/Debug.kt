@@ -9,7 +9,6 @@ import io.legado.app.help.book.isWebFile
 import io.legado.app.help.coroutine.CompositeCoroutine
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.sortUrls
-import io.legado.app.model.checkalgo.RespondTimeRank
 import io.legado.app.model.rss.Rss
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.HtmlFormatter
@@ -307,30 +306,6 @@ object Debug {
     @Synchronized
     fun finishChecking() {
         activeCheckSessionId?.let { finishChecking(it) }
-    }
-
-    @Synchronized
-    fun clearSourceCheckState(sourceUrl: String) {
-        debugTimeMap.remove(sourceUrl)
-        debugMessageMap.remove(sourceUrl)
-    }
-
-    @Synchronized
-    fun getRespondTime(sessionId: Long, sourceUrl: String, succeeded: Boolean): Long {
-        if (activeCheckSessionId != sessionId) {
-            return if (succeeded) {
-                RespondTimeRank.encodeSuccess(0)
-            } else {
-                RespondTimeRank.encodeFailure(CheckSource.timeout, 0)
-            }
-        }
-        val startTime = debugTimeMap[sourceUrl] ?: return if (succeeded) {
-            RespondTimeRank.encodeSuccess(0)
-        } else {
-            RespondTimeRank.encodeFailure(CheckSource.timeout, 0)
-        }
-        val spendingTime = System.currentTimeMillis() - startTime
-        return RespondTimeRank.encode(succeeded, spendingTime, CheckSource.timeout)
     }
 
     @Synchronized

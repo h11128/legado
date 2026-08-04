@@ -363,7 +363,7 @@
     <string name="set_charset">設置編碼</string>
     <string name="swap_sort">倒序-順序</string>
     <string name="sort">排序</string>
-    <string name="sort_auto">智能排序</string>
+    <string name="sort_auto">按權重</string>
     <string name="sort_default">默認排序</string>
     <string name="sort_manual">手動排序</string>
     <string name="sort_by_name">名稱排序</string>
@@ -1281,5 +1281,6 @@
     <!-- from local ask-order -->
     <string name="apply_view_to_manual_order">把目前列表寫入手動順序</string>
     <string name="apply_view_to_manual_order_confirm">將目前列表順序寫入手動順序（customOrder）？這不會單獨改變換源詢問順序；換源按響應時間與置頂排序。</string>
+    <string name="apply_view_to_manual_order_need_clear_filter">請先清空搜尋過濾，再寫入手動順序（避免只重排目前篩選子集）。</string>
 
 </resources>

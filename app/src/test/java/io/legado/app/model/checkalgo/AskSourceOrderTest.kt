@@ -168,6 +168,17 @@ class BookSourceTypeMapperTest {
         val audio = BookSourceTypeMapper.filterSameType(sources, BookType.audio)
         assertEquals(listOf("a"), audio.map { it.bookSourceUrl })
     }
+
+    @Test
+    fun filterSameTypeFallsBackWhenEmpty() {
+        val sources = listOf(
+            BookSourcePart(bookSourceUrl = "t", bookSourceType = BookSourceType.default),
+            BookSourcePart(bookSourceUrl = "a", bookSourceType = BookSourceType.audio),
+        )
+        // image bit with only text/audio sources → empty filter → fall back
+        val fallback = BookSourceTypeMapper.filterSameType(sources, BookType.image)
+        assertEquals(listOf("t", "a"), fallback.map { it.bookSourceUrl })
+    }
 }
 
 class CheckPriorityOrderTest {

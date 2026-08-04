@@ -11,19 +11,15 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.book.releaseHtmlData
 import io.legado.app.model.RespondTimeUpdater
-import io.legado.app.model.checkalgo.AskFailCooldown
 import io.legado.app.model.checkalgo.AskSourcePrefetch
 import io.legado.app.model.checkalgo.AskTimeout
-import io.legado.app.model.checkalgo.CheckHostTokenBucket
 import io.legado.app.ui.book.search.SearchScope
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.mapParallelSafe
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -54,18 +50,15 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private var searchBooks = arrayListOf<SearchBook>()
     private var searchJob: Job? = null
     private var workingState = MutableStateFlow(true)
-    private val activeProgress = AtomicReference<SearchProgressReporter?>()
+    private var activeProgress = AtomicReference<SearchProgressReporter?>()
     /** URLs already noted for the current [mSearchId] (once per source per run). */
     private val notedRespondTimeUrls = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-    private var hostBucket: CheckHostTokenBucket? = null
-    private var failCooldown = AskFailCooldown()
 
 
     private fun initSearchPool() {
         searchPool?.close()
         searchPool = Executors
             .newFixedThreadPool(min(threadCount, AppConst.MAX_THREAD)).asCoroutineDispatcher()
-        hostBucket = CheckHostTokenBucket()
     }
 
     fun search(searchId: Long, key: String) {
@@ -86,7 +79,6 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
             mSearchId = searchId
             searchPage = 1
             notedRespondTimeUrls.clear()
-            failCooldown = AskFailCooldown()
             initSearchPool()
         } else {
             searchPage++
@@ -101,8 +93,6 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
         val key = searchKey
         val page = searchPage
         val progress = SearchProgressReporter(sourceParts.size, callBack::onSearchProgress)
-        val tokens = hostBucket ?: CheckHostTokenBucket().also { hostBucket = it }
-        val cooldown = failCooldown
         activeProgress.getAndSet(progress)?.cancel()
         searchJob = scope.launch(searchPool!!) {
             flow {
@@ -111,18 +101,12 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                     val byUrl = resolved.associateBy { it.bookSourceUrl }
                     for (part in chunk) {
                         val source = byUrl[part.bookSourceUrl]
-                        when {
-                            source == null -> {
-                                if (currentCoroutineContext().isActive) {
-                                    progress.completeOne()
-                                }
+                        if (source == null) {
+                            if (currentCoroutineContext().isActive) {
+                                progress.completeOne()
                             }
-                            cooldown.shouldSkip(source.bookSourceUrl) -> {
-                                if (currentCoroutineContext().isActive) {
-                                    progress.completeOne()
-                                }
-                            }
-                            else -> emit(source)
+                        } else {
+                            emit(source)
                         }
                         workingState.first { it }
                     }
@@ -131,13 +115,8 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                 progress.start(callBack::onSearchStart)
             }.mapParallelSafe(threadCount) {
                 try {
-                    val host = AskSourcePrefetch.hostOf(it.bookSourceUrl)
-                    if (host.isNotEmpty()) {
-                        // Host-only pacing; per-source concurrentRate stays in AnalyzeUrl.
-                        tokens.acquire(host)
-                    }
                     val startTime = System.currentTimeMillis()
-                    withTimeout(AskTimeout.timeoutMs(it.respondTime)) {
+                    withTimeout(AskTimeout.SEARCH_MS) {
                         val items = WebBook.searchBookAwait(
                             it, key, page,
                             filter = { name, author, kind ->
@@ -145,7 +124,6 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                                         author.contains(key) ||
                                         kind?.contains(key) == true
                             })
-                        cooldown.noteSuccess(it.bookSourceUrl)
                         if (items.isNotEmpty() && notedRespondTimeUrls.add(it.bookSourceUrl)) {
                             RespondTimeUpdater.noteSuccess(
                                 it.bookSourceUrl,
@@ -155,14 +133,6 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                         }
                         items
                     }
-                } catch (e: TimeoutCancellationException) {
-                    cooldown.noteFail(it.bookSourceUrl)
-                    throw e
-                } catch (e: Throwable) {
-                    if (e !is CancellationException) {
-                        cooldown.noteFail(it.bookSourceUrl)
-                    }
-                    throw e
                 } finally {
                     if (currentCoroutineContext().isActive) {
                         progress.completeOne()

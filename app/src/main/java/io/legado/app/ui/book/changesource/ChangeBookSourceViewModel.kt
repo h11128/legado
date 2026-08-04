@@ -26,12 +26,9 @@ import io.legado.app.help.config.SourceConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.RespondTimeUpdater
-import io.legado.app.model.checkalgo.AskEarlyStop
-import io.legado.app.model.checkalgo.AskFailCooldown
 import io.legado.app.model.checkalgo.AskSourceOrder
 import io.legado.app.model.checkalgo.AskSourcePrefetch
 import io.legado.app.model.checkalgo.AskTimeout
-import io.legado.app.model.checkalgo.CheckHostTokenBucket
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
@@ -44,9 +41,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -290,33 +285,13 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     private fun search() {
         val parts = bookSourceParts.toList()
-        val totalSources = parts.size
-        val searchStartedAt = System.currentTimeMillis()
-        val hostBucket = CheckHostTokenBucket()
-        val cooldown = AskFailCooldown()
-        val matchCount = java.util.concurrent.atomic.AtomicInteger(0)
-        val earlyStopped = java.util.concurrent.atomic.AtomicBoolean(false)
         task = viewModelScope.launch(searchPool!!) {
             AskSourcePrefetch.emitSources(parts).onStart {
                 searchStateData.postValue(true)
             }.mapParallel(threadCount) { source ->
-                if (cooldown.shouldSkip(source.bookSourceUrl)) {
-                    return@mapParallel source
-                }
-                val host = AskSourcePrefetch.hostOf(source.bookSourceUrl)
-                if (host.isNotEmpty()) {
-                    // Host-only pacing; per-source concurrentRate stays in AnalyzeUrl.
-                    hostBucket.acquire(host)
-                }
                 try {
-                    search(source, cooldown, matchCount)
-                } catch (e: TimeoutCancellationException) {
-                    cooldown.noteFail(source.bookSourceUrl)
-                    currentCoroutineContext().ensureActive()
-                } catch (e: Throwable) {
-                    if (e !is CancellationException) {
-                        cooldown.noteFail(source.bookSourceUrl)
-                    }
+                    search(source)
+                } catch (_: Exception) {
                     currentCoroutineContext().ensureActive()
                 }
                 source
@@ -324,26 +299,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 _changeSourceProgress.update { _ ->
                     index + 1 to value.bookSourceName
                 }
-                if (AskEarlyStop.shouldStop(
-                        enabled = AppConfig.changeSourceEarlyStop,
-                        resultCount = matchCount.get(),
-                        resultThreshold = AppConfig.changeSourceEarlyStopCount,
-                        completedCount = index + 1,
-                        totalSources = totalSources,
-                        threadCount = threadCount,
-                        elapsedMs = System.currentTimeMillis() - searchStartedAt,
-                        budgetMs = AppConfig.changeSourceEarlyStopBudgetMs,
-                    )
-                ) {
-                    earlyStopped.set(true)
-                    currentCoroutineContext().cancel()
-                }
             }.onCompletion { cause ->
                 withContext(NonCancellable + IO) {
                     RespondTimeUpdater.flush()
                     searchStateData.postValue(false)
                     // User cancel / restart: do not invoke finish callback (avoids false empty toast).
-                    if (cause == null || earlyStopped.get()) {
+                    if (cause == null) {
                         onSearchTaskFinished(searchBooks.isEmpty())
                     }
                 }
@@ -353,44 +314,37 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }
 
-    private suspend fun search(
-        source: BookSource,
-        cooldown: AskFailCooldown,
-        matchCount: java.util.concurrent.atomic.AtomicInteger,
-    ) {
+    private suspend fun search(source: BookSource) {
         val checkAuthor = AppConfig.changeSourceCheckAuthor
         val loadInfo = AppConfig.changeSourceLoadInfo
         val loadToc = AppConfig.changeSourceLoadToc
         val loadWordCount = AppConfig.changeSourceLoadWordCount
         val startTime = System.currentTimeMillis()
-        val resultBooks = withTimeout(AskTimeout.timeoutMs(source.respondTime)) {
-            WebBook.searchBookAwait(
+        // Single total timeout for the whole probe (search + optional info/toc/wordCount).
+        withTimeout(AskTimeout.CHANGE_SOURCE_MS) {
+            val resultBooks = WebBook.searchBookAwait(
                 source, name,
                 filter = { fName, fAuthor, _ ->
                     fName == name && (!checkAuthor || fAuthor.contains(author))
                 })
-        }
-        val searchElapsed = System.currentTimeMillis() - startTime
-        if (resultBooks.isNotEmpty()) {
-            matchCount.incrementAndGet()
-            RespondTimeUpdater.noteSuccessAndMaybeFlush(
-                source.bookSourceUrl,
-                searchElapsed,
-                source.respondTime,
-            )
-        }
-        if (loadInfo || loadToc || loadWordCount) {
-            withTimeout(AskTimeout.SUCCESS_MS) {
+            val searchElapsed = System.currentTimeMillis() - startTime
+            if (resultBooks.isNotEmpty()) {
+                RespondTimeUpdater.noteSuccessAndMaybeFlush(
+                    source.bookSourceUrl,
+                    searchElapsed,
+                    source.respondTime,
+                )
+            }
+            if (loadInfo || loadToc || loadWordCount) {
                 resultBooks.forEach { searchBook ->
                     loadBookInfo(source, searchBook.toBook())
                 }
-            }
-        } else {
-            resultBooks.forEach { searchBook ->
-                searchCallback?.searchSuccess(searchBook)
+            } else {
+                resultBooks.forEach { searchBook ->
+                    searchCallback?.searchSuccess(searchBook)
+                }
             }
         }
-        cooldown.noteSuccess(source.bookSourceUrl)
     }
 
     private suspend fun loadBookInfo(source: BookSource, book: Book) {
@@ -427,6 +381,14 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         book: Book,
         chapters: List<BookChapter>
     ) = coroutineScope {
+        if (chapters.isEmpty()) {
+            val searchBook = book.toSearchBook().apply {
+                chapterWordCountText = "目录为空"
+                chapterWordCount = -1
+            }
+            searchCallback?.searchSuccess(searchBook)
+            return@coroutineScope
+        }
         val chapterIndex = wordCountChapterIndex(chapters).coerceIn(0, chapters.lastIndex)
         val bookChapter = chapters[chapterIndex]
         var title = bookChapter.title.trim()
@@ -491,7 +453,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 searchStateData.postValue(true)
             }.mapParallelSafe(threadCount) {
                 val source = appDb.bookSourceDao.getBookSource(it.origin)!!
-                withTimeout(AskTimeout.SUCCESS_MS) {
+                withTimeout(AskTimeout.CHANGE_SOURCE_MS) {
                     loadBookInfo(source, it.toBook())
                 }
             }.onCompletion {
@@ -550,7 +512,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     fun stopSearch() {
         task?.cancel()
-        // Do not close searchPool here: onCompletion may still flush on it; initSearchPool/onCleared close.
+        // Do not close searchPool here: onCompletion may still flush on it;
+        // initSearchPool only creates when null, onCleared() closes the pool.
         searchStateData.postValue(false)
     }
 

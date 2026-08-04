@@ -552,24 +552,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.changeSourceLoadWordCount, value)
         }
 
-    var changeSourceEarlyStop: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.changeSourceEarlyStop)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.changeSourceEarlyStop, value)
-        }
-
-    var changeSourceEarlyStopCount: Int
-        get() = appCtx.getPrefInt(PreferKey.changeSourceEarlyStopCount, 5).coerceIn(1, 100)
-        set(value) {
-            appCtx.putPrefInt(PreferKey.changeSourceEarlyStopCount, value.coerceIn(1, 100))
-        }
-
-    var changeSourceEarlyStopBudgetMs: Int
-        get() = appCtx.getPrefInt(PreferKey.changeSourceEarlyStopBudgetMs, 0).coerceAtLeast(0)
-        set(value) {
-            appCtx.putPrefInt(PreferKey.changeSourceEarlyStopBudgetMs, value.coerceAtLeast(0))
-        }
-
     var openBookInfoByClickTitle: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.openBookInfoByClickTitle, true)
         set(value) {

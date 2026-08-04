@@ -22,15 +22,26 @@ object BookSourceTypeMapper {
     /**
      * Keep sources whose [BookSourcePart.bookSourceType] matches the book's type.
      * Logs how many were filtered out.
+     * If the filter empties the pool (mis-tagged community sources / odd BookType bits),
+     * fall back to the unfiltered list so 换源 still runs.
      */
     fun filterSameType(
         sources: List<BookSourcePart>,
         bookType: Int,
         logTag: String = "换源",
     ): List<BookSourcePart> {
+        if (sources.isEmpty()) return sources
         val target = bookTypeToSourceType(bookType)
         val filtered = sources.filter { it.bookSourceType == target }
         val dropped = sources.size - filtered.size
+        if (filtered.isEmpty()) {
+            runCatching {
+                AppLog.put(
+                    "${logTag}类型过滤: 目标bookSourceType=$target, 过滤后为空，回退到未过滤列表(${sources.size})"
+                )
+            }
+            return sources
+        }
         if (dropped > 0) {
             runCatching {
                 AppLog.put("${logTag}类型过滤: 目标bookSourceType=$target, 过滤掉${dropped}个书源")

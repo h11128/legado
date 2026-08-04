@@ -14,16 +14,23 @@ class Rfc001AskOrderContractTest {
     fun runnerEncodesViaRespondTimeRank() {
         val runner = projectFile("app/src/main/java/io/legado/app/model/BookSourceCheckRunner.kt")
         assertTrue(runner.contains("RespondTimeRank.encode("))
-        assertFalse(runner.contains("Debug.startChecking(source)"))
         assertFalse(
             runner.contains("source.respondTime = System.currentTimeMillis() - startTime")
         )
     }
 
     @Test
+    fun mcpStartsPerSourceDebugTiming() {
+        val mcp = projectFile("app/src/main/java/io/legado/app/web/mcp/McpSourceCheckJob.kt")
+        assertTrue(mcp.contains("Debug.startChecking(sessionId, source)"))
+        assertTrue(mcp.contains("tryStartCheckSession()"))
+    }
+
+    @Test
     fun checkSourceServiceDoesNotOverwriteRespondTime() {
         val service = projectFile("app/src/main/java/io/legado/app/service/CheckSourceService.kt")
         assertFalse(service.contains("Debug.getRespondTime("))
+        assertTrue(service.contains("Debug.startChecking(sessionId, source)"))
     }
 
     @Test
@@ -34,6 +41,10 @@ class Rfc001AskOrderContractTest {
         assertTrue(change.contains("AskSourceOrder.order("))
         assertTrue(change.contains("BookSourceTypeMapper.filterSameType("))
         assertTrue(change.contains("RespondTimeUpdater.noteSuccessAndMaybeFlush("))
+        assertTrue(change.contains("AskTimeout.CHANGE_SOURCE_MS"))
+        assertFalse(change.contains("CheckHostTokenBucket("))
+        assertFalse(change.contains("AskFailCooldown("))
+        assertFalse(change.contains("AskEarlyStop."))
 
         val scope = projectFile("app/src/main/java/io/legado/app/ui/book/search/SearchScope.kt")
         assertTrue(scope.contains("AskSourceOrder.order("))
@@ -42,6 +53,14 @@ class Rfc001AskOrderContractTest {
         val read = projectFile("app/src/main/java/io/legado/app/ui/book/read/ReadBookViewModel.kt")
         assertTrue(read.contains("AskSourceOrder.order("))
         assertTrue(read.contains("RespondTimeUpdater.noteSuccess("))
+        assertTrue(read.contains("AskTimeout.AUTO_CHANGE_MS"))
+        assertFalse(read.contains("CheckHostTokenBucket("))
+        assertFalse(read.contains("AskFailCooldown("))
+
+        val search = projectFile("app/src/main/java/io/legado/app/model/webBook/SearchModel.kt")
+        assertTrue(search.contains("AskTimeout.SEARCH_MS"))
+        assertFalse(search.contains("CheckHostTokenBucket("))
+        assertFalse(search.contains("AskFailCooldown("))
     }
 
     @Test
@@ -62,6 +81,7 @@ class Rfc001AskOrderContractTest {
         assertTrue(debug.contains("fun tryAcquireRespondTimeFlush("))
         assertTrue(debug.contains("RespondTimeUpdater.flush()"))
         assertTrue(debug.contains("respondTimeFlushHeld"))
+        assertFalse(debug.contains("fun getRespondTime("))
         val search = projectFile("app/src/main/java/io/legado/app/model/webBook/SearchModel.kt")
         assertTrue(search.contains("notedRespondTimeUrls"))
         val change = projectFile(
@@ -79,6 +99,19 @@ class Rfc001AskOrderContractTest {
         val dao = projectFile("app/src/main/java/io/legado/app/data/dao/BookSourceDao.kt")
         assertTrue(dao.contains("fun updateRespondTime("))
         assertTrue(dao.contains("fun getPartsWithRespondTimeBelow("))
+    }
+
+    @Test
+    fun applyViewToManualOrderRewritesFullTable() {
+        val vm = projectFile(
+            "app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceViewModel.kt"
+        )
+        assertTrue(vm.contains("fun applyViewToManualOrder("))
+        assertTrue(vm.contains("appDb.bookSourceDao.allPart"))
+        val activity = projectFile(
+            "app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt"
+        )
+        assertTrue(activity.contains("apply_view_to_manual_order_need_clear_filter"))
     }
 
     private fun projectFile(path: String): String {
