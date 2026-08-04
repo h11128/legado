@@ -27,8 +27,15 @@ This is **not** a wrong `--tests` class name.
 
 ## Fix (Android Studio)
 
-Settings → Build → Gradle → Gradle user home → `E:\Projects\legado\.gradle-home`
-(or your clone’s `.gradle-home`).
+**Project only** — do not change the IDE global “Gradle user home” (that affects every project).
+
+When this repo is open, `.idea/gradle.xml` sets:
+
+`serviceDirectoryPath` → `$PROJECT_DIR$/.gradle-home`
+
+(`.idea/` is gitignored; recreate locally if missing.)
+
+Confirm under **Settings → Build Tools → Gradle** while this project is focused; other projects should still use the default `%USERPROFILE%\.gradle`.
 
 ## Enforcement
 
