@@ -60,10 +60,18 @@ Fill after each run:
 
 | Step | Result | Evidence |
 |---|---|---|
-| A Unit | | |
-| B Install | | |
-| C UI | | |
-| D Logs | | |
+| A Unit | PASS (2026-08-04) | `./gradlew …ChangeChapterVerifyTest :app:installAppDebug` → `BUILD SUCCESSFUL`; `:app:testAppDebugUnitTest` green |
+| B Install | PASS (2026-08-04) | `Installed on 1 device` SM-A366U1; package `com.legado.app.debug` |
+| C UI | BLOCKED (2026-08-04) | Device lock screen (数字密码). App process reached `MainActivity` behind keyguard; UI dump cannot interact until unlocked. |
+| D Logs | SKIPPED | Waiting on unlock for interactive C |
+
+### Unblock C/D
+
+Unlock the phone (PIN), then re-run from step C, or:
+
+```bash
+adb shell am start -n com.legado.app.debug/io.legado.app.ui.main.MainActivity
+```
 
 ## Out of scope
 
