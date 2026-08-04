@@ -64,6 +64,17 @@ case "`uname`" in
     ;;
 esac
 
+# Windows (Git Bash/MSYS/Cygwin): keep Gradle cache on the project drive.
+# Avoids KSP "different roots" (project on E:, default GRADLE_USER_HOME on
+# C:\Users\...\.gradle). Directory is gitignored; create if missing.
+if [ -z "$GRADLE_USER_HOME" ]; then
+    if [ "$cygwin" = "true" ] || [ "$msys" = "true" ]; then
+        GRADLE_USER_HOME="$APP_HOME/.gradle-home"
+        mkdir -p "$GRADLE_USER_HOME"
+        export GRADLE_USER_HOME
+    fi
+fi
+
 CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
 
 # Determine the Java command to use to start the JVM.

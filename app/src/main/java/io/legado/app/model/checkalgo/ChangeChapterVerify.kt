@@ -197,7 +197,7 @@ object ChangeChapterVerify {
                 members.size * 2.0 - stitchRatio * 8.0 +
                     kotlin.math.ln(1.0 + medianLen) / 4.0
             }
-            Triple(members, score)
+            members to score
         }
         val authority = scored.maxByOrNull { it.second } ?: return emptySet()
         val authMembers = authority.first

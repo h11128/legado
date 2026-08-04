@@ -247,13 +247,18 @@ class ChangeChapterVerifyTest {
                 mapOf("s1" to spam, "s2" to spamB, "s3" to spamC, "g" to good)
             ).isEmpty()
         )
-        // Padded spam longer than a short real chapter — still must not demote without ref.
-        val shortGood = "罗峰站在黑洞边缘，感受宇宙之力缓缓汇入。" + "修炼".repeat(8)
-        assertTrue(shortGood.length >= ChangeChapterVerify.MIN_CONTENT_CHARS)
+        // Padded spam longer than a shorter real chapter — still must not demote without ref.
+        val shortGood = "罗峰站在黑洞边缘，感受宇宙之力缓缓汇入。" + "修炼".repeat(55)
+        val paddedSpam = spam + "水".repeat(200)
+        assertTrue(
+            "shortGood=${shortGood.length}",
+            shortGood.length >= ChangeChapterVerify.MIN_CONTENT_CHARS,
+        )
+        assertTrue(shortGood.length < paddedSpam.length)
         assertTrue(
             ChangeChapterVerify.multiSourceOutlierOrigins(
                 mapOf(
-                    "s1" to spam + "水".repeat(200),
+                    "s1" to paddedSpam,
                     "s2" to spamB + "水".repeat(200),
                     "s3" to spamC + "水".repeat(200),
                     "g" to shortGood,
