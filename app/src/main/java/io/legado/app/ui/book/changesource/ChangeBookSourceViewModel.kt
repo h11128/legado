@@ -73,27 +73,27 @@ import kotlin.math.min
 @Suppress("MemberVisibilityCanBePrivate")
 open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(application) {
     private val threadCount = AppConfig.threadCount
-    private var searchPool: ExecutorCoroutineDispatcher? = null
+    protected var searchPool: ExecutorCoroutineDispatcher? = null
     val searchStateData = MutableLiveData<Boolean>()
     var searchFinishCallback: ((isEmpty: Boolean) -> Unit)? = null
     var name: String = ""
     var author: String = ""
     private var fromReadBookActivity = false
-    private var oldBook: Book? = null
+    protected var oldBook: Book? = null
     private var screenKey: String = ""
     private var bookSourceParts = arrayListOf<BookSourcePart>()
     val totalSourceCount: Int
         get() = bookSourceParts.size
     private var searchBookList = arrayListOf<SearchBook>()
-    private val searchBooks = Collections.synchronizedList(arrayListOf<SearchBook>())
-    private val tocMap = ConcurrentHashMap<String, List<BookChapter>>()
-    private val _changeSourceProgress = MutableStateFlow(0 to "")
+    protected val searchBooks = Collections.synchronizedList(arrayListOf<SearchBook>())
+    protected val tocMap = ConcurrentHashMap<String, List<BookChapter>>()
+    protected val _changeSourceProgress = MutableStateFlow(0 to "")
     val changeSourceProgress = _changeSourceProgress.asStateFlow()
     private var tocMapChapterCount = 0
-    private val contentProcessor by lazy {
+    protected val contentProcessor by lazy {
         ContentProcessor.get(oldBook!!)
     }
-    private var searchCallback: SourceCallback? = null
+    protected var searchCallback: SourceCallback? = null
     private val chapterNumRegex = "^\\[(\\d+)]".toRegex()
     private val comparatorBase by lazy {
         compareByDescending<SearchBook> { getBookScore(it) }
@@ -108,7 +108,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             .thenByDescending { it.chapterWordCount }
             .thenBy { it.originOrder }
     }
-    private var task: Job? = null
+    protected var task: Job? = null
     val bookMap = ConcurrentHashMap<String, Book>()
     val searchDataFlow = callbackFlow {
 
@@ -139,6 +139,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
         if (searchBooks.isEmpty()) {
             startSearch()
+        } else {
+            onCachedSearchReady()
         }
 
         awaitClose {
@@ -146,16 +148,53 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }.map {
         kotlin.runCatching {
-            val comparator = if (AppConfig.changeSourceLoadWordCount) {
-                wordCountComparator
-            } else {
-                defaultComparator
-            }
-            searchBooks.sortedWith(comparator)
+            sortSearchBooks(searchBooks.toList())
         }.onFailure {
             AppLog.put("换源排序出错\n${it.localizedMessage}", it)
         }.getOrDefault(searchBooks)
     }.flowOn(IO)
+
+    /** Called when DB already has searchBooks — book mode keeps list; chapter mode verifies. */
+    protected open fun onCachedSearchReady() = Unit
+
+    protected open fun sortSearchBooks(books: List<SearchBook>): List<SearchBook> {
+        val comparator = if (AppConfig.changeSourceLoadWordCount) {
+            wordCountComparator
+        } else {
+            defaultComparator
+        }
+        return books.sortedWith(comparator)
+    }
+
+    /** Chapter used for word-count / content probe alignment. */
+    protected open fun wordCountChapterIndex(chapters: List<BookChapter>): Int {
+        return if (fromReadBookActivity) {
+            BookHelp.getDurChapter(oldBook!!, chapters)
+        } else {
+            chapters.lastIndex
+        }
+    }
+
+    protected open fun onSearchTaskFinished(isEmpty: Boolean) {
+        searchFinishCallback?.invoke(isEmpty)
+    }
+
+    protected fun notifySearchAdapter() {
+        searchCallback?.upAdapter()
+    }
+
+    protected fun putToc(book: Book, chapters: List<BookChapter>) {
+        if (tocMapChapterCount < 30000) {
+            tocMapChapterCount += chapters.size
+            tocMap[book.primaryStr()] = chapters
+        }
+    }
+
+    protected fun initSearchPoolProtected() = initSearchPool()
+
+    protected fun updateChangeSourceProgress(index: Int, label: String) {
+        _changeSourceProgress.update { index to label }
+    }
 
     override fun onCleared() {
         super.onCleared()
@@ -186,7 +225,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }
 
-    fun refresh(): Boolean {
+    open fun refresh(): Boolean {
         getDbSearchBooks().let {
             searchBooks.clear()
             searchBooks.addAll(it)
@@ -198,7 +237,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     /**
      * 搜索书籍
      */
-    fun startSearch() {
+    open fun startSearch() {
         execute {
             stopSearch()
             if (searchBooks.isNotEmpty()) {
@@ -305,7 +344,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     searchStateData.postValue(false)
                     // User cancel / restart: do not invoke finish callback (avoids false empty toast).
                     if (cause == null || earlyStopped.get()) {
-                        searchFinishCallback?.invoke(searchBooks.isEmpty())
+                        onSearchTaskFinished(searchBooks.isEmpty())
                     }
                 }
             }.catch {
@@ -372,10 +411,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         for (chapter in chapters) {
             chapter.internString()
         }
-        if (tocMapChapterCount < 30000) {
-            tocMapChapterCount += chapters.size
-            tocMap[book.primaryStr()] = chapters
-        }
+        putToc(book, chapters)
         bookMap[book.primaryStr()] = book
         book.releaseHtmlData()
         if (AppConfig.changeSourceLoadWordCount) {
@@ -391,11 +427,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         book: Book,
         chapters: List<BookChapter>
     ) = coroutineScope {
-        val chapterIndex = if (fromReadBookActivity) {
-            BookHelp.getDurChapter(oldBook!!, chapters)
-        } else {
-            chapters.lastIndex
-        }
+        val chapterIndex = wordCountChapterIndex(chapters).coerceIn(0, chapters.lastIndex)
         val bookChapter = chapters[chapterIndex]
         var title = bookChapter.title.trim()
         if (title.length > 20) {

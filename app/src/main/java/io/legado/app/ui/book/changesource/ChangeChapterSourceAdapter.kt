@@ -36,6 +36,8 @@ class ChangeChapterSourceAdapter(
         override fun areContentsTheSame(oldItem: SearchBook, newItem: SearchBook): Boolean {
             return oldItem.originName == newItem.originName
                     && oldItem.getDisplayLastChapterTitle() == newItem.getDisplayLastChapterTitle()
+                    && oldItem.chapterWordCountText == newItem.chapterWordCountText
+                    && oldItem.chapterWordCount == newItem.chapterWordCount
         }
 
     }
@@ -108,7 +110,7 @@ class ChangeChapterSourceAdapter(
                 )
             }
 
-            if (AppConfig.changeSourceLoadWordCount && !item.chapterWordCountText.isNullOrBlank()) {
+            if (!item.chapterWordCountText.isNullOrBlank()) {
                 tvCurrentChapterWordCount.visible()
             } else {
                 tvCurrentChapterWordCount.gone()

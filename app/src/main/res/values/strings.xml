@@ -1321,6 +1321,13 @@
     <string name="export_md">Export(MD)</string>
     <string name="change_source_delay">Change source delay</string>
     <string name="change_source_progress">Result %1$d, Progress %2$d / %3$d: %4$s</string>
+    <string name="change_source_verify_chapter">Verifying chapter</string>
+    <string name="change_source_verify_done">Chapter verify done</string>
+    <string name="change_source_verify_progress">Verify %1$d / %2$d: %3$s</string>
+    <string name="change_source_chapter_ok">Chapter OK · %1$d chars</string>
+    <string name="change_source_chapter_toc_ok">Chapter matched</string>
+    <string name="change_source_chapter_missing">Chapter not found</string>
+    <string name="change_source_chapter_content_fail">Content failed</string>
     <string name="change_source_early_stop">Stop change-source early</string>
     <string name="change_source_early_stop_summary">Stop after enough matches (and one parallel wave), or when the time budget below elapses. Thresholds below.</string>
     <string name="change_source_early_stop_count">Early-stop result count</string>

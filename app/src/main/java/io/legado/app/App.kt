@@ -114,6 +114,7 @@ class App : Application() {
             if (getPrefBoolean(PreferKey.autoClearExpired, true)) {
                 val clearTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)
                 appDb.searchBookDao.clearExpired(clearTime)
+                appDb.changeSourceChapterProbeDao.clearExpired(clearTime)
             }
             RuleBigDataHelp.clearInvalid()
             BookHelp.clearInvalidCache()

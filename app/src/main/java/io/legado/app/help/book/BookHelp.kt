@@ -613,4 +613,12 @@ object BookHelp {
             .replace(regexOther, "")
     }
 
+    /** Stable key for chapter-scoped change-source probes. */
+    fun chapterProbeKey(chapterIndex: Int, chapterTitle: String?): String {
+        return io.legado.app.model.checkalgo.ChangeChapterVerify.chapterKey(
+            chapterIndex,
+            chapterTitle
+        )
+    }
+
 }

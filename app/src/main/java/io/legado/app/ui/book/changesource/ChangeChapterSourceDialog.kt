@@ -12,6 +12,7 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle.State.STARTED
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
@@ -47,6 +48,7 @@ import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -237,6 +239,31 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             viewModel.searchDataFlow.conflate().collect {
                 searchBookAdapter.setItems(it)
                 delay(1000)
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(STARTED) {
+                viewModel.changeSourceProgress
+                    .drop(1)
+                    .collect { (count, name) ->
+                        binding.tvDur.text = if (viewModel.isChapterVerifying) {
+                            getString(
+                                R.string.change_source_verify_progress,
+                                count,
+                                searchBookAdapter.itemCount.coerceAtLeast(1),
+                                name
+                            )
+                        } else {
+                            getString(
+                                R.string.change_source_progress,
+                                searchBookAdapter.itemCount,
+                                count,
+                                viewModel.totalSourceCount,
+                                name
+                            )
+                        }
+                        delay(500)
+                    }
             }
         }
         lifecycleScope.launch {

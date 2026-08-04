@@ -1311,6 +1311,13 @@
     <string name="export_md">导出(MD)</string>
     <string name="change_source_delay">换源间隔</string>
     <string name="change_source_progress">结果 %1$d, 当前进度 %2$d / %3$d: %4$s</string>
+    <string name="change_source_verify_chapter">校验章节</string>
+    <string name="change_source_verify_done">章节校验完成</string>
+    <string name="change_source_verify_progress">校验章节 %1$d / %2$d: %3$s</string>
+    <string name="change_source_chapter_ok">本章可读 · %1$d 字</string>
+    <string name="change_source_chapter_toc_ok">已对齐章节</string>
+    <string name="change_source_chapter_missing">无此章</string>
+    <string name="change_source_chapter_content_fail">正文获取失败</string>
     <string name="change_source_early_stop">换源结果足够后提前结束</string>
     <string name="change_source_early_stop_summary">有足够匹配且至少跑完一轮并行后提前结束；若设置了下方时间预算，到期也会结束（即使结果很少）。</string>
     <string name="change_source_early_stop_count">提前结束所需结果数</string>
