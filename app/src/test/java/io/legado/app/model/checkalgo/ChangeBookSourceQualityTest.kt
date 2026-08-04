@@ -70,12 +70,32 @@ class ChangeBookSourceQualityTest {
 
     @Test
     fun sortTierPutsContentBadBelowOk() {
-        val ok = ChangeBookSourceQuality.sortTier(3800, "字数：3800")
-        val bad = ChangeBookSourceQuality.sortTier(-1, "疑似错书/广告劫持")
-        val unknown = ChangeBookSourceQuality.sortTier(-1, null)
+        val ok = ChangeBookSourceQuality.contentSortTier(3800, "字数：3800")
+        val bad = ChangeBookSourceQuality.contentSortTier(-1, "疑似错书/广告劫持")
+        val unknown = ChangeBookSourceQuality.contentSortTier(-1, null)
         assertTrue(ok < bad)
         assertTrue(ok < unknown)
         assertEquals(ChangeBookSourceQuality.TIER_UNKNOWN, unknown)
+    }
+
+    @Test
+    fun contentOkIgnoresLatestMetaInHardTier() {
+        val ok = ChangeBookSourceQuality.sortTier(
+            chapterWordCount = 3800,
+            wordCountText = "字数：3800",
+            metaTiers = ChangeBookSourceQuality.TIER_LATEST_BAD,
+        )
+        assertEquals(ChangeBookSourceQuality.TIER_OK, ok)
+        assertEquals(1, ChangeBookSourceQuality.softMetaPenalty(ChangeBookSourceQuality.TIER_LATEST_BAD))
+        assertEquals(0, ChangeBookSourceQuality.softMetaPenalty(ChangeBookSourceQuality.TIER_OK))
+    }
+
+    @Test
+    fun respondTimeSortKeyPutsUnknownLast() {
+        assertTrue(
+            ChangeBookSourceQuality.respondTimeSortKey(500)
+                    < ChangeBookSourceQuality.respondTimeSortKey(-1)
+        )
     }
 
     @Test

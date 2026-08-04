@@ -4,7 +4,7 @@ import kotlin.math.abs
 
 /**
  * Book-level (整书) change-source quality: latest-title affinity, TOC size,
- * sort tiers, early-stop on enough quality-OK hits.
+ * content-first sort, early-stop on enough quality-OK hits.
  *
  * Content digram / stitch / multi-source consensus stay in [ChangeChapterVerify].
  */
@@ -104,7 +104,6 @@ object ChangeBookSourceQuality {
         minSamples: Int = ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES,
     ): Set<String> {
         if (titlesByOrigin.size < minSamples) {
-            // Still demote vs local when possible.
             return titlesByOrigin.mapNotNull { (origin, title) ->
                 origin.takeIf { latestMatchesLocal(localLatest, title) == false }
             }.toSet()
@@ -136,9 +135,7 @@ object ChangeBookSourceQuality {
             Triple(members, score, avgLocal)
         }
         val best = scored.maxByOrNull { it.second } ?: return emptySet()
-        // Without local tip, only demote when majority is large and candidate is far.
         if (local != null && (best.third ?: 0.0) < LATEST_REF_SIM_MIN) {
-            // Majority does not look like our book — demote only local mismatches.
             return titlesByOrigin.mapNotNull { (origin, title) ->
                 origin.takeIf { latestMatchesLocal(local, title) == false }
             }.toSet()
@@ -158,21 +155,17 @@ object ChangeBookSourceQuality {
         return outliers
     }
 
-    /**
-     * Merge tier codes; worse (higher) wins.
-     */
+    /** Merge tier codes; worse (higher) wins. */
     fun worseTier(a: Int, b: Int): Int = maxOf(a, b)
 
     /**
-     * Sort rank from word-count probe + optional meta tiers.
-     * Unprobed (-1 with blank text) stays UNKNOWN so meta-only ranking still works.
-     * [TIER_UNKNOWN] meta does not demote an OK content probe.
-     * Content-bad / soft-fail always sink; raw length must not outrank them.
+     * Hard sort rank from **content probe only**.
+     * Latest-chapter / TOC meta must not veto a body that already passed content gates —
+     * those stay as [softMetaPenalty] after respondTime.
      */
-    fun sortTier(
+    fun contentSortTier(
         chapterWordCount: Int,
         wordCountText: String? = null,
-        metaTier: Int = TIER_UNKNOWN,
         softFailed: Boolean = false,
     ): Int {
         val contentTier = when {
@@ -181,13 +174,38 @@ object ChangeBookSourceQuality {
             chapterWordCount == -1 && !wordCountText.isNullOrBlank() -> TIER_CONTENT_BAD
             else -> TIER_UNKNOWN
         }
-        val merged = when {
-            contentTier == TIER_UNKNOWN && metaTier == TIER_UNKNOWN -> TIER_UNKNOWN
-            contentTier == TIER_UNKNOWN -> metaTier
-            metaTier == TIER_UNKNOWN -> contentTier
-            else -> worseTier(contentTier, metaTier)
-        }
-        return if (softFailed) worseTier(merged, TIER_SOFT_FAIL) else merged
+        return if (softFailed) worseTier(contentTier, TIER_SOFT_FAIL) else contentTier
+    }
+
+    /**
+     * Light penalty for latest/TOC mismatch badges. Applied after content + respondTime.
+     */
+    fun softMetaPenalty(metaTiers: Int): Int = when (metaTiers) {
+        TIER_LATEST_BAD, TIER_TOC_BAD -> 1
+        else -> 0
+    }
+
+    /**
+     * Probe respondTime for result-list sort: unknown/negative sink within the same
+     * content tier (does not outrank content quality).
+     */
+    fun respondTimeSortKey(respondTimeMs: Int): Int =
+        if (respondTimeMs < 0) Int.MAX_VALUE else respondTimeMs
+
+    /**
+     * Legacy helper: OK/WEAK content ignores latest/TOC meta hard-merge.
+     */
+    fun sortTier(
+        chapterWordCount: Int,
+        wordCountText: String? = null,
+        metaTiers: Int = TIER_UNKNOWN,
+        softFailed: Boolean = false,
+    ): Int {
+        val content = contentSortTier(chapterWordCount, wordCountText, softFailed)
+        if (content == TIER_OK || content == TIER_WEAK) return content
+        if (metaTiers == TIER_UNKNOWN) return content
+        if (content == TIER_UNKNOWN) return metaTiers
+        return worseTier(content, metaTiers)
     }
 
     /**

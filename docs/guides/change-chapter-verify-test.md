@@ -73,6 +73,7 @@ Fill after each run:
 - RFC-001 ask-order works, but almost all sources are SUCCESS-class (`respondTime < 180000`); only ~3 FAILURE rows → rank band barely helps; rest is ascending respondTime. RFC forbids writing failure on empty/timeout ask probes — dead hosts stay SUCCESS until a proper check encodes failure.
 - Follow-up in tree: 整书换源 word-count path runs `ChangeChapterVerify.evaluateContent` (align local chapter by title; one-shot fetch from current origin if disk cache empty; session-cached context). Device re-test of 「疑似错书」badges on PO18 shells still pending.
 - Book-quality pack (2026-08-04): multi-source content consensus + latest-title outliers + TOC size band + quality-first sort + session soft-fail (timeout/hijack, no respondTime write) + early-stop (`changeSourceEarlyStop`, default 20 OK). Menu: 「足够好源后提前停止」.
+- Sort refined: **content tier → length band → likes → probe respondTime → soft latest/TOC hint**. Latest/TOC stay badges + soft penalty only; they do not veto content-OK.
 
 ## Out of scope
 
