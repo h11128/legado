@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.min
 
@@ -145,17 +146,35 @@ class ChangeChapterSourceViewModel(application: Application) :
 
                 val hostBucket = CheckHostTokenBucket()
                 val parallelism = min(AppConfig.threadCount, 8).coerceAtLeast(1)
+                val candidateOrigins = candidates.map { it.origin }.toHashSet()
+                val toAlign = ChangeChapterVerify.prioritizeForTocAlign(
+                    books = candidates,
+                    probeByOrigin = probeByOrigin,
+                    bookScore = { getBookScore(it) },
+                    sourceScore = { SourceConfig.getSourceScore(it) },
+                )
+                val tocStop = AtomicBoolean(false)
                 var alignedCount = 0
                 flow {
-                    candidates.forEach { emit(it) }
+                    toAlign.forEach { emit(it) }
                 }.mapParallel(parallelism) { searchBook ->
+                    if (tocStop.get()) return@mapParallel searchBook
                     alignOne(searchBook, chapterKey, hostBucket)
+                    if (ChangeChapterVerify.shouldStopTocAlign(
+                            ChangeChapterVerify.countUsableAlignments(
+                                probeByOrigin,
+                                candidateOrigins
+                            )
+                        )
+                    ) {
+                        tocStop.set(true)
+                    }
                     searchBook
                 }.catch {
                     AppLog.put("单章换源目录校验出错\n${it.localizedMessage}", it)
                 }.collect {
                     alignedCount++
-                    if (alignedCount % 4 == 0 || alignedCount == candidates.size) {
+                    if (alignedCount % 4 == 0 || alignedCount == toAlign.size) {
                         updateChangeSourceProgress(
                             alignedCount,
                             getApplication<Application>().getString(R.string.change_source_verify_chapter)
@@ -169,17 +188,41 @@ class ChangeChapterSourceViewModel(application: Application) :
                 val ordered = sortSearchBooks(searchBooks.toList())
                 val toProbe = ChangeChapterVerify.pickContentProbeOrigins(ordered, probeByOrigin)
                     .filterNot { reuseWordCountAsOk(it, chapterKey) }
-                toProbe.forEachIndexed { index, searchBook ->
-                    currentCoroutineContext().ensureActive()
-                    updateChangeSourceProgress(
-                        index + 1,
-                        searchBook.originName.ifEmpty { searchBook.origin },
+                val contentParallel = min(
+                    ChangeChapterVerify.CONTENT_PARALLEL,
+                    AppConfig.threadCount.coerceAtLeast(1),
+                )
+                val contentStop = AtomicBoolean(
+                    ChangeChapterVerify.shouldStopContentProbe(
+                        ChangeChapterVerify.countOk(probeByOrigin, candidateOrigins)
                     )
-                    contentProbeOne(searchBook, chapterKey, hostBucket)
+                )
+                val contentDone = AtomicInteger(0)
+                flow {
+                    toProbe.forEach { emit(it) }
+                }.mapParallel(contentParallel) { searchBook ->
+                    if (contentStop.get()) return@mapParallel null
+                    contentProbeOne(searchBook, chapterKey, hostBucket, contentStop)
+                    if (ChangeChapterVerify.shouldStopContentProbe(
+                            ChangeChapterVerify.countOk(probeByOrigin, candidateOrigins)
+                        )
+                    ) {
+                        contentStop.set(true)
+                    }
+                    searchBook
+                }.catch {
+                    AppLog.put("单章换源正文探测出错\n${it.localizedMessage}", it)
+                }.collect { probed ->
+                    if (probed == null) return@collect
+                    val n = contentDone.incrementAndGet()
+                    updateChangeSourceProgress(
+                        n,
+                        probed.originName.ifEmpty { probed.origin },
+                    )
                     notifySearchAdapter()
                 }
                 updateChangeSourceProgress(
-                    toProbe.size.coerceAtLeast(1),
+                    contentDone.get().coerceAtLeast(1),
                     getApplication<Application>().getString(R.string.change_source_verify_done)
                 )
                 if (afterSearch) {
@@ -280,7 +323,7 @@ class ChangeChapterSourceViewModel(application: Application) :
             return
         }
 
-        val aligned = ChangeChapterVerify.alignIndex(chapterIndex, chapterTitle, chapters)
+        val aligned = ChangeChapterVerify.alignResult(chapterIndex, chapterTitle, chapters)
         if (aligned == null) {
             upsertProbe(
                 origin = searchBook.origin,
@@ -295,7 +338,7 @@ class ChangeChapterSourceViewModel(application: Application) :
                 origin = searchBook.origin,
                 chapterKey = chapterKey,
                 status = ChangeSourceChapterProbe.STATUS_TOC_OK,
-                score = 0.0,
+                score = aligned.quality,
             )
             searchBook.chapterWordCountText =
                 getApplication<Application>().getString(R.string.change_source_chapter_toc_ok)
@@ -334,6 +377,7 @@ class ChangeChapterSourceViewModel(application: Application) :
         searchBook: SearchBook,
         chapterKey: String,
         hostBucket: CheckHostTokenBucket,
+        contentStop: AtomicBoolean,
     ) {
         val book = bookMap[searchBook.toBook().primaryStr()] ?: searchBook.toBook().also {
             bookMap[it.primaryStr()] = it
@@ -341,40 +385,27 @@ class ChangeChapterSourceViewModel(application: Application) :
         val chapters = try {
             ensureToc(book, searchBook.origin, hostBucket) ?: return
         } catch (e: TimeoutCancellationException) {
-            upsertProbe(
-                origin = searchBook.origin,
-                chapterKey = chapterKey,
-                status = ChangeSourceChapterProbe.STATUS_CONTENT_FAIL,
-                score = 0.0,
-            )
-            searchBook.chapterWordCountText =
-                getApplication<Application>().getString(R.string.change_source_chapter_content_fail)
-            searchBook.chapterWordCount = -1
+            markContentFailUnlessStopped(searchBook, chapterKey, contentStop)
             return
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            upsertProbe(
-                origin = searchBook.origin,
-                chapterKey = chapterKey,
-                status = ChangeSourceChapterProbe.STATUS_CONTENT_FAIL,
-                score = 0.0,
-            )
-            searchBook.chapterWordCountText =
-                getApplication<Application>().getString(R.string.change_source_chapter_content_fail)
-            searchBook.chapterWordCount = -1
+            markContentFailUnlessStopped(searchBook, chapterKey, contentStop)
             return
         }
-        val aligned = ChangeChapterVerify.alignIndex(chapterIndex, chapterTitle, chapters) ?: return
-        val chapter = chapters[aligned]
+        if (contentStop.get()) return
+        val aligned = ChangeChapterVerify.alignResult(chapterIndex, chapterTitle, chapters) ?: return
+        val chapter = chapters[aligned.index]
         val source = appDb.bookSourceDao.getBookSource(searchBook.origin) ?: return
         val host = AskSourcePrefetch.hostOf(searchBook.origin)
         if (host.isNotEmpty()) hostBucket.acquire(host)
+        if (contentStop.get()) return
         try {
-            val nextUrl = chapters.getOrNull(aligned + 1)?.url
+            val nextUrl = chapters.getOrNull(aligned.index + 1)?.url
             val content = withTimeout(AskTimeout.SUCCESS_MS) {
                 WebBook.getContentAwait(source, book, chapter, nextUrl, false)
             }
+            if (contentStop.get()) return
             val processed = oldBook?.let {
                 contentProcessor.getContent(it, chapter, content, false).toString()
             } ?: content
@@ -391,28 +422,35 @@ class ChangeChapterSourceViewModel(application: Application) :
                 len
             )
         } catch (e: TimeoutCancellationException) {
-            upsertProbe(
-                origin = searchBook.origin,
-                chapterKey = chapterKey,
-                status = ChangeSourceChapterProbe.STATUS_CONTENT_FAIL,
-                score = 0.0,
-            )
-            searchBook.chapterWordCountText =
-                getApplication<Application>().getString(R.string.change_source_chapter_content_fail)
-            searchBook.chapterWordCount = -1
+            markContentFailUnlessStopped(searchBook, chapterKey, contentStop)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            upsertProbe(
-                origin = searchBook.origin,
-                chapterKey = chapterKey,
-                status = ChangeSourceChapterProbe.STATUS_CONTENT_FAIL,
-                score = 0.0,
-            )
+            markContentFailUnlessStopped(searchBook, chapterKey, contentStop)
+        }
+    }
+
+    /** After early-stop, in-flight failures stay session-only (do not poison probe TTL). */
+    private fun markContentFailUnlessStopped(
+        searchBook: SearchBook,
+        chapterKey: String,
+        contentStop: AtomicBoolean,
+    ) {
+        if (contentStop.get()) {
             searchBook.chapterWordCountText =
                 getApplication<Application>().getString(R.string.change_source_chapter_content_fail)
             searchBook.chapterWordCount = -1
+            return
         }
+        upsertProbe(
+            origin = searchBook.origin,
+            chapterKey = chapterKey,
+            status = ChangeSourceChapterProbe.STATUS_CONTENT_FAIL,
+            score = 0.0,
+        )
+        searchBook.chapterWordCountText =
+            getApplication<Application>().getString(R.string.change_source_chapter_content_fail)
+        searchBook.chapterWordCount = -1
     }
 
     private suspend fun ensureToc(

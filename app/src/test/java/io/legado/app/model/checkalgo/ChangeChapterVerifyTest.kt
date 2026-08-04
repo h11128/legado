@@ -117,6 +117,86 @@ class ChangeChapterVerifyTest {
         assertEquals(2, ChangeChapterVerify.alignIndex(2, "第十二章 试炼", toc))
     }
 
+    @Test
+    fun alignResultExactQualityIsOne() {
+        val toc = listOf(chapter(0, "第一章 开始"), chapter(1, "第二章 成长"))
+        val r = ChangeChapterVerify.alignResult(1, "第二章 成长", toc)
+        assertEquals(1, r?.index)
+        assertEquals(1.0, r?.quality ?: -1.0, 0.001)
+    }
+
+    @Test
+    fun prioritizeForTocAlignCapsAndOrders() {
+        val books = (0 until 30).map { i ->
+            search("o$i", order = i).apply {
+                respondTime = 1000 - i // higher i = faster
+            }
+        }
+        val picked = ChangeChapterVerify.prioritizeForTocAlign(
+            books = books,
+            probeByOrigin = emptyMap(),
+            bookScore = { 0 },
+            sourceScore = { 0 },
+            cap = ChangeChapterVerify.TOC_ALIGN_CAP,
+        )
+        assertEquals(ChangeChapterVerify.TOC_ALIGN_CAP, picked.size)
+        // Faster respondTime first when scores equal
+        assertEquals("o29", picked.first().origin)
+        assertTrue(picked.none { it.origin == "o0" })
+    }
+
+    @Test
+    fun prioritizeSkipsAlreadyAligned() {
+        val books = listOf(search("a", 0), search("b", 1), search("c", 2))
+        val probes = mapOf(
+            "a" to probe("a", ChangeSourceChapterProbe.STATUS_TOC_OK, 1.0),
+            "b" to probe("b", ChangeSourceChapterProbe.STATUS_OK, 100.0),
+        )
+        val picked = ChangeChapterVerify.prioritizeForTocAlign(
+            books = books,
+            probeByOrigin = probes,
+            bookScore = { 0 },
+            sourceScore = { 0 },
+        )
+        assertEquals(listOf("c"), picked.map { it.origin })
+    }
+
+    @Test
+    fun tocAndContentEarlyStopPredicates() {
+        assertTrue(ChangeChapterVerify.shouldStopTocAlign(12))
+        assertTrue(!ChangeChapterVerify.shouldStopTocAlign(11))
+        assertTrue(ChangeChapterVerify.shouldStopContentProbe(2))
+        assertTrue(!ChangeChapterVerify.shouldStopContentProbe(1))
+    }
+
+    @Test
+    fun countOkScopedToOrigins() {
+        val probes = mapOf(
+            "a" to probe("a", ChangeSourceChapterProbe.STATUS_OK, 10.0),
+            "b" to probe("b", ChangeSourceChapterProbe.STATUS_OK, 20.0),
+            "c" to probe("c", ChangeSourceChapterProbe.STATUS_TOC_OK, 1.0),
+        )
+        assertEquals(2, ChangeChapterVerify.countOk(probes))
+        assertEquals(1, ChangeChapterVerify.countOk(probes, setOf("a", "c")))
+        assertEquals(2, ChangeChapterVerify.countUsableAlignments(probes, setOf("a", "c")))
+    }
+
+    @Test
+    fun sortPrefersHigherTocQuality() {
+        val books = listOf(search("low", 0), search("high", 1))
+        val probes = mapOf(
+            "low" to probe("low", ChangeSourceChapterProbe.STATUS_TOC_OK, 0.4),
+            "high" to probe("high", ChangeSourceChapterProbe.STATUS_TOC_OK, 1.0),
+        )
+        val sorted = ChangeChapterVerify.sortSearchBooks(
+            books = books,
+            probeByOrigin = probes,
+            bookScore = { 0 },
+            sourceScore = { 0 },
+        )
+        assertEquals(listOf("high", "low"), sorted.map { it.origin })
+    }
+
     private fun chapter(index: Int, title: String) = BookChapter().apply {
         this.index = index
         this.title = title

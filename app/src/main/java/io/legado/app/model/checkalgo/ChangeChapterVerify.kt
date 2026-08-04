@@ -7,12 +7,20 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Pure helpers for chapter-scoped change-source verify / ranking.
+ * Pure helpers for chapter-scoped change-source verify / ranking / scheduling.
  * Kept Android-free so unit tests can run on the JVM.
  */
 object ChangeChapterVerify {
 
     const val TOP_K_CONTENT = 8
+    /** Max candidates to TOC-align in one verify pass (priority queue head). */
+    const val TOC_ALIGN_CAP = 24
+    /** Stop fetching more TOC once this many usable alignments exist (ok + toc_ok). */
+    const val TOC_OK_TARGET = 12
+    /** Stop content probes once this many STATUS_OK exist. */
+    const val CONTENT_OK_EARLY_STOP = 2
+    /** Parallelism for content probes (host bucket still paces per host). */
+    const val CONTENT_PARALLEL = 4
 
     private val whitespace = "\\s".toRegex()
     private val pureStrip =
@@ -30,46 +38,61 @@ object ChangeChapterVerify {
         '佰' to 100, '仟' to 1000,
     )
 
+    data class AlignResult(val index: Int, val quality: Double)
+
     fun chapterKey(chapterIndex: Int, chapterTitle: String?): String {
         val pure = pureChapterName(chapterTitle)
         val num = chapterNum(chapterTitle)
         return "$num|$pure|${chapterIndex.coerceAtLeast(0)}"
     }
 
-    /**
-     * Align [chapterIndex]/[chapterTitle] against [toc].
-     * Returns null when the chapter cannot be confidently found
-     * (→ [ChangeSourceChapterProbe.STATUS_NO_CHAPTER]).
-     */
     fun alignIndex(chapterIndex: Int, chapterTitle: String, toc: List<BookChapter>): Int? {
+        return alignResult(chapterIndex, chapterTitle, toc)?.index
+    }
+
+    /**
+     * Align with a quality score: exact pure=1.0, chapter-num=0.7, containment=0.4.
+     */
+    fun alignResult(
+        chapterIndex: Int,
+        chapterTitle: String,
+        toc: List<BookChapter>,
+    ): AlignResult? {
         if (toc.isEmpty()) return null
         if (chapterTitle.isBlank()) {
-            return chapterIndex.takeIf { it in toc.indices }
+            return chapterIndex.takeIf { it in toc.indices }?.let { AlignResult(it, 0.5) }
         }
         val expected = parseProbeKey(chapterKey(chapterIndex, chapterTitle))
         val windowMin = max(0, chapterIndex - 10)
         val windowMax = min(toc.lastIndex, max(chapterIndex, 0) + 10)
-        var numMatch: Int? = null
+        var numMatch: AlignResult? = null
         for (i in windowMin..windowMax) {
             val actual = parseProbeKey(chapterKey(i, toc[i].title))
-            if (expected.pure.isNotEmpty() && expected.pure == actual.pure) return i
-            if (expected.num > 0 && expected.num == actual.num) numMatch = i
+            if (expected.pure.isNotEmpty() && expected.pure == actual.pure) {
+                return AlignResult(i, 1.0)
+            }
+            if (expected.num > 0 && expected.num == actual.num) {
+                numMatch = AlignResult(i, 0.7)
+            }
         }
         if (numMatch != null) return numMatch
         for (i in toc.indices) {
             if (i in windowMin..windowMax) continue
             val actual = parseProbeKey(chapterKey(i, toc[i].title))
-            if (expected.pure.isNotEmpty() && expected.pure == actual.pure) return i
-            if (expected.num > 0 && expected.num == actual.num) return i
+            if (expected.pure.isNotEmpty() && expected.pure == actual.pure) {
+                return AlignResult(i, 0.95)
+            }
+            if (expected.num > 0 && expected.num == actual.num) {
+                return AlignResult(i, 0.65)
+            }
         }
-        // Containment only for longer titles to avoid short false positives (e.g. "一"/"二").
         if (expected.pure.length >= 4) {
             for (i in windowMin..windowMax) {
                 val actual = parseProbeKey(chapterKey(i, toc[i].title))
                 if (actual.pure.length >= 4 &&
                     (expected.pure.contains(actual.pure) || actual.pure.contains(expected.pure))
                 ) {
-                    return i
+                    return AlignResult(i, 0.4)
                 }
             }
         }
@@ -99,6 +122,70 @@ object ChangeChapterVerify {
                 .thenBy { it.originOrder }
         )
     }
+
+    fun needsTocAlign(status: String?): Boolean = when (status) {
+        ChangeSourceChapterProbe.STATUS_OK,
+        ChangeSourceChapterProbe.STATUS_NO_CHAPTER,
+        ChangeSourceChapterProbe.STATUS_TOC_OK -> false
+        else -> true
+    }
+
+    /**
+     * Priority queue for TOC work: liked / fast / early ask-order first.
+     * Caps to [TOC_ALIGN_CAP]. Already-aligned origins are excluded.
+     */
+    fun prioritizeForTocAlign(
+        books: List<SearchBook>,
+        probeByOrigin: Map<String, ChangeSourceChapterProbe>,
+        bookScore: (SearchBook) -> Int,
+        sourceScore: (String) -> Int,
+        cap: Int = TOC_ALIGN_CAP,
+    ): List<SearchBook> {
+        return books.asSequence()
+            .filter { needsTocAlign(probeByOrigin[it.origin]?.status) }
+            .sortedWith(
+                compareByDescending<SearchBook> { bookScore(it) }
+                    .thenByDescending { sourceScore(it.origin) }
+                    .thenBy {
+                        val rt = it.respondTime
+                        if (rt < 0) Int.MAX_VALUE else rt
+                    }
+                    .thenBy { it.originOrder }
+            )
+            .take(cap)
+            .toList()
+    }
+
+    fun countUsableAlignments(
+        probeByOrigin: Map<String, ChangeSourceChapterProbe>,
+        origins: Set<String>? = null,
+    ): Int {
+        return probeByOrigin.values.count {
+            (origins == null || it.origin in origins) &&
+                    (it.status == ChangeSourceChapterProbe.STATUS_OK ||
+                            it.status == ChangeSourceChapterProbe.STATUS_TOC_OK)
+        }
+    }
+
+    fun countOk(
+        probeByOrigin: Map<String, ChangeSourceChapterProbe>,
+        origins: Set<String>? = null,
+    ): Int {
+        return probeByOrigin.values.count {
+            (origins == null || it.origin in origins) &&
+                    it.status == ChangeSourceChapterProbe.STATUS_OK
+        }
+    }
+
+    fun shouldStopTocAlign(
+        usableAlignments: Int,
+        target: Int = TOC_OK_TARGET,
+    ): Boolean = usableAlignments >= target
+
+    fun shouldStopContentProbe(
+        okCount: Int,
+        target: Int = CONTENT_OK_EARLY_STOP,
+    ): Boolean = okCount >= target
 
     fun pickContentProbeOrigins(
         books: List<SearchBook>,
@@ -159,7 +246,6 @@ object ChangeChapterVerify {
     private fun chineseOrArabicToInt(raw: String): Int {
         raw.toIntOrNull()?.let { return it }
         if (raw.isEmpty()) return -1
-        // simple 十/百 forms: 十二, 二十, 一百零二
         var result = 0
         var tmp = 0
         for (ch in raw) {
