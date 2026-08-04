@@ -60,18 +60,15 @@ Fill after each run:
 
 | Step | Result | Evidence |
 |---|---|---|
-| A Unit | PASS (2026-08-04) | `./gradlew …ChangeChapterVerifyTest :app:installAppDebug` → `BUILD SUCCESSFUL`; `:app:testAppDebugUnitTest` green |
+| A Unit | PASS (2026-08-04) | `./gradlew …ChangeChapterVerifyTest :app:installAppDebug` → `BUILD SUCCESSFUL` |
 | B Install | PASS (2026-08-04) | `Installed on 1 device` SM-A366U1; package `com.legado.app.debug` |
-| C UI | BLOCKED (2026-08-04) | Device lock screen (数字密码). App process reached `MainActivity` behind keyguard; UI dump cannot interact until unlocked. |
-| D Logs | SKIPPED | Waiting on unlock for interactive C |
+| C UI | PASS (2026-08-04, 未分组) | Book **学霸也开挂** (未分组). Long-press 换源 → **单章换源**. Progress `校验章节 …` then `章节校验完成`. Badges seen: `已对齐章节`, `字数：2565`, `字数：37`, `无此章`, earlier `获取字数失败：内容为空`. Log: `ChangeChapterSourceDialog` + `换源类型过滤`. |
+| D Logs | PASS (partial) | `AppLog 换源类型过滤…`; LiveEventBus on `ChangeChapterSourceDialog` / `sourceChanged`. |
 
-### Unblock C/D
+### Notes
 
-Unlock the phone (PIN), then re-run from step C, or:
-
-```bash
-adb shell am start -n com.legado.app.debug/io.legado.app.ui.main.MainActivity
-```
+- Short tap 换源 = 整书换源; **long-press** 换源 = menu with 单章换源 / 整书换源.
+- First attempt on 「在追」 book hit auto-换源 / lock; switched to **未分组** as requested.
 
 ## Out of scope
 
