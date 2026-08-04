@@ -208,7 +208,7 @@
         "afterShellExecution"
       ],
       "action": "ask",
-      "agent_message": "ASK: build hit KSP/Gradle 'different roots' (cross-drive). This is NOT a bad test class path. Fix: unset C: GRADLE_USER_HOME; use ./gradlew so <repo>/.gradle-home on E: is used; then rerun the same tests. Do not invent unrelated root causes.",
+      "agent_message": "ASK: build hit KSP/Gradle 'different roots' (cross-drive). This is NOT a bad test class path. Fix: set GRADLE_USER_HOME=E:\\.gradle (not C:\\Users\\…\\.gradle), then rerun the same tests.",
       "user_message": null,
       "plugin": null
     },
