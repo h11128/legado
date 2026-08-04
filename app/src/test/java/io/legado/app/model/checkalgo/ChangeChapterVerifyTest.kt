@@ -221,13 +221,94 @@ class ChangeChapterVerifyTest {
         val goodB = "罗峰站在黑洞边缘，感受宇宙之力不断汇入体内。" + "修炼".repeat(38)
         val goodC = "罗峰立于黑洞之侧，宇宙之力自四面八方汇来。" + "修炼".repeat(36)
         val bad = "萧炎看向药老，异火在体内疯狂咆哮。" + "焚决".repeat(40)
+        val reference = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(120)
         val outliers = ChangeChapterVerify.multiSourceOutlierOrigins(
-            mapOf(
+            samples = mapOf(
                 "a" to goodA,
                 "b" to goodB,
                 "c" to goodC,
                 "x" to bad,
-            )
+            ),
+            referenceContent = reference,
+        )
+        assertEquals(setOf("x"), outliers)
+    }
+
+    @Test
+    fun multiSourceConsensusDoesNotDemoteMinorityWhenMajorityIsCoherentSpam() {
+        // Same injected fanfic on many mirrors; only one real chapter body.
+        val spam = "恭喜宿主收徒气运之子，奖励帝品传承，万倍返还已到账。" + "系统".repeat(50)
+        val spamB = "恭喜宿主收徒气运之子，奖励帝品传承，万倍返还已经到账。" + "系统".repeat(48)
+        val spamC = "恭喜宿主收徒气运之子并奖励帝品传承，万倍返还已到账。" + "系统".repeat(46)
+        val good = "罗峰站在黑洞边缘，感受宇宙之力缓缓汇入体内。" + "修炼".repeat(50)
+        // No local reference: must not treat the real chapter as the outlier.
+        assertTrue(
+            ChangeChapterVerify.multiSourceOutlierOrigins(
+                mapOf("s1" to spam, "s2" to spamB, "s3" to spamC, "g" to good)
+            ).isEmpty()
+        )
+        // Padded spam longer than a short real chapter — still must not demote without ref.
+        val shortGood = "罗峰站在黑洞边缘，感受宇宙之力缓缓汇入。" + "修炼".repeat(8)
+        assertTrue(shortGood.length >= ChangeChapterVerify.MIN_CONTENT_CHARS)
+        assertTrue(
+            ChangeChapterVerify.multiSourceOutlierOrigins(
+                mapOf(
+                    "s1" to spam + "水".repeat(200),
+                    "s2" to spamB + "水".repeat(200),
+                    "s3" to spamC + "水".repeat(200),
+                    "g" to shortGood,
+                )
+            ).isEmpty()
+        )
+        // With reference: need ≥2 real bodies to form a trustworthy authority cluster.
+        val good2 = "罗峰站在黑洞边缘，感受宇宙之力不断汇入体内。" + "修炼".repeat(48)
+        val reference = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(120)
+        val withRef = ChangeChapterVerify.multiSourceOutlierOrigins(
+            samples = mapOf(
+                "s1" to spam,
+                "s2" to spamB,
+                "s3" to spamC,
+                "g" to good,
+                "g2" to good2,
+            ),
+            referenceContent = reference,
+        )
+        assertEquals(setOf("s1", "s2", "s3"), withRef)
+        // Single real body + spam below AUTH_REF_MIN ⇒ no trustworthy authority ⇒ empty.
+        assertTrue(
+            ChangeChapterVerify.multiSourceOutlierOrigins(
+                samples = mapOf("s1" to spam, "s2" to spamB, "s3" to spamC, "g" to good),
+                referenceContent = reference,
+            ).isEmpty()
+        )
+        // Like reference but shorter than padded authority — keep.
+        val shortLikeRef = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(40)
+        assertTrue(
+            !ChangeChapterVerify.multiSourceOutlierOrigins(
+                samples = mapOf(
+                    "a" to good,
+                    "b" to good2,
+                    "c" to good + "忽然。",
+                    "short" to shortLikeRef,
+                ),
+                referenceContent = reference,
+            ).contains("short")
+        )
+    }
+
+    @Test
+    fun multiSourceConsensusDemotesStitchedOutlierWithoutReference() {
+        val goodA = "罗峰站在黑洞边缘，感受宇宙之力缓缓汇入体内。" + "修炼".repeat(40)
+        val goodB = "罗峰站在黑洞边缘，感受宇宙之力不断汇入体内。" + "修炼".repeat(38)
+        val goodC = "罗峰立于黑洞之侧，宇宙之力自四面八方汇来。" + "修炼".repeat(36)
+        val stitched = listOf(
+            "萧炎看向药老，异火在体内疯狂咆哮，焚决运转不止一刻。",
+            "叶凡盘坐虚空，圣体符文亮起，帝兵虚影笼罩周身四周。",
+            "韩立掐诀吐纳，周围灵气潮水般涌入，丹田灵力暴涨难抑。",
+        ).joinToString("\n\n")
+        assertTrue(ChangeChapterVerify.looksLikeStitchedParagraphs(stitched))
+        val outliers = ChangeChapterVerify.multiSourceOutlierOrigins(
+            mapOf("a" to goodA, "b" to goodB, "c" to goodC, "x" to stitched)
         )
         assertEquals(setOf("x"), outliers)
     }

@@ -267,11 +267,14 @@ class ChangeChapterSourceViewModel(application: Application) :
     }
 
     /**
-     * After Top-K bodies are collected: demote origins that disagree with every peer
-     * while at least one agreeing cluster exists.
+     * After Top-K bodies are collected: demote origins that disagree with a trustworthy
+     * agreeing cluster (reference-aware; see [ChangeChapterVerify.multiSourceOutlierOrigins]).
      */
     private fun applyMultiSourceConsensus(chapterKey: String) {
-        val outliers = ChangeChapterVerify.multiSourceOutlierOrigins(probeContentSamples.toMap())
+        val outliers = ChangeChapterVerify.multiSourceOutlierOrigins(
+            samples = probeContentSamples.toMap(),
+            referenceContent = referenceChapterContent(),
+        )
         if (outliers.isEmpty()) return
         val app = getApplication<Application>()
         val msg = app.getString(R.string.change_source_chapter_hijack)

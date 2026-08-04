@@ -48,10 +48,15 @@ object ChangeChapterVerify {
     const val STITCH_CUT_RATIO = 0.5
     /** Multi-source: need this many body samples before consensus. */
     const val MULTI_SOURCE_MIN_SAMPLES = 3
-    /** Multi-source: evidence that at least two sources agree. */
+    /** Multi-source: edge threshold for clustering agreeing bodies. */
     const val MULTI_SOURCE_CLUSTER_MIN_SIM = 0.10
-    /** Multi-source: max similarity to any peer below this ⇒ outlier. */
+    /** Multi-source: max similarity to authority cluster below this ⇒ candidate outlier. */
     const val MULTI_SOURCE_OUTLIER_MAX_SIM = 0.045
+    /**
+     * When a local reference chapter exists, an authority cluster must average at least
+     * this digram Jaccard vs it — blocks “majority same anti-theft” from becoming authority.
+     */
+    const val MULTI_SOURCE_AUTH_REF_MIN = 0.12
 
     data class ContentEvalContext(
         /** Typical chapter length from peer OK probes / current chapter; null = skip relative. */
@@ -154,29 +159,97 @@ object ChangeChapterVerify {
     }
 
     /**
-     * Among probed bodies for the same chapter, drop origins that do not agree with
-     * any peer while at least one agreeing cluster exists.
+     * Among probed bodies for the same chapter, demote origins that disagree with a
+     * *trustworthy* agreeing cluster.
+     *
+     * Pure majority peer-similarity is unsafe: many pirate mirrors share the same
+     * anti-theft / injected fanfic, so the rare real chapter becomes the “outlier”.
+     * Authority must be majority non-stitched; with a local reference it must also
+     * resemble that chapter. Without a trustworthy authority, return empty (no demotion).
+     * Without reference, only demote stitched outliers — never demote a coherent minority
+     * solely because the majority agrees or is longer (padded spam is often longer).
      */
     fun multiSourceOutlierOrigins(
         samples: Map<String, String>,
+        referenceContent: String? = null,
         minSamples: Int = MULTI_SOURCE_MIN_SAMPLES,
     ): Set<String> {
         if (samples.size < minSamples) return emptySet()
         val origins = samples.keys.toList()
-        var bestPairSim = 0.0
-        val maxPeerSim = HashMap<String, Double>(origins.size)
-        for (i in origins.indices) {
-            var best = 0.0
-            for (j in origins.indices) {
-                if (i == j) continue
-                val sim = digramJaccard(samples.getValue(origins[i]), samples.getValue(origins[j]))
-                if (sim > best) best = sim
-                if (sim > bestPairSim) bestPairSim = sim
+        val clusters = connectedClusters(origins) { a, b ->
+            digramJaccard(samples.getValue(a), samples.getValue(b)) >= MULTI_SOURCE_CLUSTER_MIN_SIM
+        }.filter { it.size >= 2 }
+        if (clusters.isEmpty()) return emptySet()
+
+        val ref = referenceContent?.takeIf { it.length >= REFERENCE_MIN_CHARS }
+        val scored = clusters.mapNotNull { members ->
+            val texts = members.map { samples.getValue(it) }
+            val stitchRatio = texts.count { looksLikeStitchedParagraphs(it) }.toDouble() / texts.size
+            if (stitchRatio >= STITCH_CUT_RATIO) return@mapNotNull null
+            val avgRef = ref?.let { r -> texts.map { digramJaccard(it, r) }.average() }
+            if (ref != null && (avgRef ?: 0.0) < MULTI_SOURCE_AUTH_REF_MIN) return@mapNotNull null
+            val medianLen = texts.map { it.length }.sorted()[texts.size / 2]
+            // With reference, similarity dominates size so padded majority spam cannot win.
+            val score = if (ref != null) {
+                (avgRef ?: 0.0) * 40.0 + members.size +
+                    kotlin.math.ln(1.0 + medianLen) / 4.0 - stitchRatio * 8.0
+            } else {
+                members.size * 2.0 - stitchRatio * 8.0 +
+                    kotlin.math.ln(1.0 + medianLen) / 4.0
             }
-            maxPeerSim[origins[i]] = best
+            Triple(members, score)
         }
-        if (bestPairSim < MULTI_SOURCE_CLUSTER_MIN_SIM) return emptySet()
-        return maxPeerSim.filterValues { it < MULTI_SOURCE_OUTLIER_MAX_SIM }.keys
+        val authority = scored.maxByOrNull { it.second } ?: return emptySet()
+        val authMembers = authority.first
+        val authSet = authMembers.toSet()
+
+        val outliers = LinkedHashSet<String>()
+        for (origin in origins) {
+            if (origin in authSet) continue
+            val text = samples.getValue(origin)
+            val maxSimToAuth = authMembers.maxOf { digramJaccard(text, samples.getValue(it)) }
+            if (maxSimToAuth >= MULTI_SOURCE_OUTLIER_MAX_SIM) continue
+            val stitched = looksLikeStitchedParagraphs(text)
+            if (ref != null) {
+                val refSim = digramJaccard(text, ref)
+                // Like the local chapter ⇒ keep, even if shorter than padded spam authority.
+                if (refSim >= MULTI_SOURCE_AUTH_REF_MIN) continue
+                val unlikeRef = refSim < REFERENCE_SIM_HIJACK_MAX
+                if (unlikeRef || stitched) {
+                    outliers.add(origin)
+                }
+            } else if (stitched) {
+                outliers.add(origin)
+            }
+        }
+        return outliers
+    }
+
+    /** Union-find clusters over [nodes] where [sameCluster] is true for an edge. */
+    internal fun connectedClusters(
+        nodes: List<String>,
+        sameCluster: (String, String) -> Boolean,
+    ): List<List<String>> {
+        val parent = IntArray(nodes.size) { it }
+        fun find(i: Int): Int {
+            var x = i
+            while (parent[x] != x) {
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            }
+            return x
+        }
+        fun union(a: Int, b: Int) {
+            val ra = find(a)
+            val rb = find(b)
+            if (ra != rb) parent[ra] = rb
+        }
+        for (i in nodes.indices) {
+            for (j in i + 1 until nodes.size) {
+                if (sameCluster(nodes[i], nodes[j])) union(i, j)
+            }
+        }
+        return nodes.indices.groupBy { find(it) }.values.map { idxs -> idxs.map { nodes[it] } }
     }
 
     /** Character digram Jaccard; Android-free structural similarity. */
