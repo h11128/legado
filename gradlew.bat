@@ -13,11 +13,15 @@ if "%DIRNAME%" == "" set DIRNAME=.
 set APP_BASE_NAME=%~n0
 set APP_HOME=%DIRNAME%
 
-@rem Windows: keep Gradle cache on the project drive when .gradle-home exists.
-@rem Avoids KSP "different roots" when the project is not on C: (gitignored dir).
+@rem Windows: Gradle/KSP need cache on same drive as sources (projects on E:).
+@rem Prefer shared E:\.gradle; else <repo>\.gradle-home.
 if not defined GRADLE_USER_HOME (
-  if not exist "%APP_HOME%.gradle-home" mkdir "%APP_HOME%.gradle-home"
-  set "GRADLE_USER_HOME=%APP_HOME%.gradle-home"
+  if exist "E:\.gradle\" (
+    set "GRADLE_USER_HOME=E:\.gradle"
+  ) else (
+    if not exist "%APP_HOME%.gradle-home" mkdir "%APP_HOME%.gradle-home"
+    set "GRADLE_USER_HOME=%APP_HOME%.gradle-home"
+  )
 )
 
 @rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.

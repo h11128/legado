@@ -64,13 +64,16 @@ case "`uname`" in
     ;;
 esac
 
-# Windows (Git Bash/MSYS/Cygwin): keep Gradle cache on the project drive.
-# Avoids KSP "different roots" (project on E:, default GRADLE_USER_HOME on
-# C:\Users\...\.gradle). Directory is gitignored; create if missing.
+# Windows (Git Bash/MSYS/Cygwin): Gradle/KSP need cache on same drive as sources.
+# Prefer shared E:/.gradle (all local projects live on E:); else <repo>/.gradle-home.
 if [ -z "$GRADLE_USER_HOME" ]; then
     if [ "$cygwin" = "true" ] || [ "$msys" = "true" ]; then
-        GRADLE_USER_HOME="$APP_HOME/.gradle-home"
-        mkdir -p "$GRADLE_USER_HOME"
+        if [ -d "/e/.gradle" ]; then
+            GRADLE_USER_HOME="/e/.gradle"
+        else
+            GRADLE_USER_HOME="$APP_HOME/.gradle-home"
+            mkdir -p "$GRADLE_USER_HOME"
+        fi
         export GRADLE_USER_HOME
     fi
 fi
