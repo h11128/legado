@@ -58,12 +58,13 @@ jobs:
         run: |
           git checkout master
           BEFORE=$(git rev-parse HEAD)
-          git merge --no-edit "${{ steps.check.outputs.upstream_ref }}"
-          # GITHUB_TOKEN cannot push commits that modify workflow files.
-          # Keep this fork's workflows; sync app/code only.
+          # Commit only after restoring workflows so the pushed merge never
+          # creates/updates .github/workflows (GITHUB_TOKEN lacks `workflows` scope).
+          git merge --no-commit --no-ff "${{ steps.check.outputs.upstream_ref }}"
+          rm -rf .github/workflows
           git checkout "$BEFORE" -- .github/workflows/
-          git add .github/workflows/
-          git diff --cached --quiet || git commit -m "chore(ci): keep fork workflows after upstream sync"
+          git add -A .github/workflows/
+          git commit -m "chore: sync upstream from LegadoTeam/legado"
 
       - name: Push to origin
         if: steps.check.outputs.up_to_date == 'false'
