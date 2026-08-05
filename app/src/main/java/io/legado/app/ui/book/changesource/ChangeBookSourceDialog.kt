@@ -219,13 +219,18 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
 
     private fun initLiveData() {
         viewModel.searchStateData.observe(viewLifecycleOwner) {
-            binding.refreshProgressBar.isAutoLoading = it
             if (it) {
+                // Determinate LTR like SearchActivity — never isAutoLoading (bouncing).
+                binding.refreshProgressBar.bindChangeSourceProgress(
+                    completed = 0,
+                    total = viewModel.totalSourceCount.coerceAtLeast(1),
+                )
                 startStopMenuItem?.let { item ->
                     item.setIcon(R.drawable.ic_stop_black_24dp)
                     item.setTitle(R.string.stop)
                 }
             } else {
+                binding.refreshProgressBar.setDurProgress(0)
                 startStopMenuItem?.let { item ->
                     item.setIcon(R.drawable.ic_refresh_black_24dp)
                     item.setTitle(R.string.refresh)
@@ -245,11 +250,17 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
             repeatOnLifecycle(STARTED) {
                 viewModel.changeSourceProgress
                     .drop(1)
+                    .conflate()
                     .collect { progress ->
+                        val total = viewModel.totalSourceCount.coerceAtLeast(1)
+                        binding.refreshProgressBar.bindChangeSourceProgress(
+                            completed = progress.completed,
+                            total = total,
+                        )
                         binding.tvDur.text = requireContext().formatChangeSourceProgress(
                             resultCount = adapter.itemCount,
                             progress = progress,
-                            total = viewModel.totalSourceCount,
+                            total = total,
                         )
                         // Short yield so parallel inFlight updates are not starved by a 500ms lag.
                         delay(100)

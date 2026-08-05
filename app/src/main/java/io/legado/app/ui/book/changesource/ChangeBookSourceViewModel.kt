@@ -42,12 +42,13 @@ import io.legado.app.utils.onEachIndexed
 import io.legado.app.utils.runCatchingCancellable
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.ExecutorCoroutineDispatcher
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
@@ -66,17 +67,24 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.Closeable
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.min
+import java.util.concurrent.atomic.AtomicLong
 
 @Suppress("MemberVisibilityCanBePrivate")
 open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(application) {
-    private val threadCount = AppConfig.threadCount
-    protected var searchPool: ExecutorCoroutineDispatcher? = null
+    /**
+     * Live 「更新和搜索线程数」— never cache at ViewModel init (prefs may change).
+     */
+    protected fun threadCount(): Int =
+        AppConfig.threadCount.coerceIn(1, AppConst.MAX_THREAD)
+
+    protected var searchPool: CoroutineDispatcher? = null
+    private var searchPoolSize: Int = 0
+    private val lastProgressPublishMs = AtomicLong(0L)
     val searchStateData = MutableLiveData<Boolean>()
     var searchFinishCallback: ((isEmpty: Boolean) -> Unit)? = null
     var name: String = ""
@@ -217,7 +225,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         _changeSourceProgress.value = ChangeSourceProgressUi(
             completed = index,
             inFlight = 0,
-            concurrency = threadCount,
+            concurrency = threadCount(),
             label = label,
             qualityOk = qualityOkCount.get(),
             earlyStopped = earlyStopped.get(),
@@ -227,7 +235,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     override fun onCleared() {
         super.onCleared()
-        searchPool?.close()
+        (searchPool as? Closeable)?.close()
+        searchPool = null
+        searchPoolSize = 0
     }
 
     @CallSuper
@@ -244,14 +254,16 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun initSearchPool() {
-        // Reuse for ViewModel lifetime; closing/recreating each search leaked pools
-        // after stopSearch stopped calling close(). onCleared() shuts it down.
-        if (searchPool == null) {
-            searchPool = Executors
-                .newFixedThreadPool(min(threadCount, AppConst.MAX_THREAD))
-                .asCoroutineDispatcher()
-        }
+        // Reuse while threadCount unchanged. Prefer IO.limitedParallelism over
+        // FixedThreadPool(N): creating dozens/hundreds of OS threads at dialog open
+        // was a main cause of first-open jank when 「更新和搜索线程数」is high (e.g. 100).
+        val n = threadCount()
+        if (searchPool != null && searchPoolSize == n) return
+        (searchPool as? Closeable)?.close()
+        searchPoolSize = n
+        searchPool = Dispatchers.IO.limitedParallelism(n)
     }
 
     open fun refresh(): Boolean {
@@ -286,7 +298,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             completedProbeCount.set(0)
             qualityOkCount.set(0)
             earlyStopped.set(false)
+            lastProgressPublishMs.set(0L)
             _changeSourceProgress.value = ChangeSourceProgressUi()
+            val t0 = System.currentTimeMillis()
             val searchGroup = AppConfig.searchGroup
             val loaded = if (searchGroup.isBlank()) {
                 appDb.bookSourceDao.allEnabledPart
@@ -299,27 +313,34 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     sources
                 }
             }
+            val tLoad = System.currentTimeMillis()
             SourceHelp.ensureRespondTimeHealed()
+            val tHeal = System.currentTimeMillis()
+            val threads = threadCount()
             val typed = oldBook?.let {
                 BookSourceTypeMapper.filterSameType(loaded, it.type)
             } ?: loaded
             bookSourceParts.addAll(
                 AskSourceOrder.order(
                     typed,
-                    threadCount = threadCount,
+                    threadCount = threads,
                     demoteUrls = ChangeSourceAskMemory.snapshot(),
                 )
             )
+            val tOrder = System.currentTimeMillis()
             if (!AppConfig.changeSourceEarlyStop) {
                 ChangeSourceLog.i("early-stop pref off; will ask all ${bookSourceParts.size} sources")
             }
+            initSearchPool()
+            val tPool = System.currentTimeMillis()
             ChangeSourceLog.i(
-                "start book=$name sources=${bookSourceParts.size} " +
+                "start book=$name sources=${bookSourceParts.size} threads=$threads " +
                     "demoted=${ChangeSourceAskMemory.snapshot().size} " +
                     "loadWordCount=${AppConfig.changeSourceLoadWordCount} " +
-                    "earlyStop=${AppConfig.changeSourceEarlyStop}"
+                    "earlyStop=${AppConfig.changeSourceEarlyStop} " +
+                    "timing load=${tLoad - t0}ms heal=${tHeal - tLoad}ms " +
+                    "order=${tOrder - tHeal}ms pool=${tPool - tOrder}ms total=${tPool - t0}ms"
             )
-            initSearchPool()
             search()
         }
     }
@@ -364,7 +385,18 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         completed: Int = completedProbeCount.get(),
         early: Boolean = earlyStopped.get(),
         finished: Boolean = false,
+        force: Boolean = false,
     ) {
+        // High threadCount floods StateFlow → Main subtitle/bar jank; coalesce ~12.5fps.
+        // early-stop wind-down still throttles; only finished / explicit force skips.
+        val nowMs = System.currentTimeMillis()
+        if (!force && !finished) {
+            val prev = lastProgressPublishMs.get()
+            if (nowMs - prev < 80L) return
+            if (!lastProgressPublishMs.compareAndSet(prev, nowMs)) return
+        } else {
+            lastProgressPublishMs.set(nowMs)
+        }
         val inFlightUrls = probingNames.toList()
         val inFlight = inFlightUrls.size
         // Show several in-flight names so parallel work is visible (not just one serial name).
@@ -384,7 +416,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         _changeSourceProgress.value = ChangeSourceProgressUi(
             completed = completed,
             inFlight = inFlight,
-            concurrency = threadCount,
+            concurrency = threadCount(),
             label = label,
             qualityOk = qualityOkCount.get(),
             earlyStopped = early,
@@ -394,11 +426,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     private fun search() {
         val parts = bookSourceParts.toList()
+        val parallelism = threadCount()
         task = viewModelScope.launch(searchPool!!) {
             AskSourcePrefetch.emitSources(parts).onStart {
                 searchStateData.postValue(true)
-                publishProgress()
-            }.mapParallel(threadCount) { source ->
+                publishProgress(force = true)
+            }.mapParallel(parallelism) { source ->
                 if (earlyStopped.get()) return@mapParallel source
                 if (source.bookSourceUrl in sessionSoftFail) return@mapParallel source
                 probingNames.add(source.bookSourceUrl)
@@ -417,7 +450,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 } finally {
                     probingNames.remove(source.bookSourceUrl)
                     completedProbeCount.incrementAndGet()
-                    // After early-stop, keep the early-stop subtitle stable (no probing flicker).
+                    // After early-stop, keep subtitle stable; still throttle (do not force).
                     if (earlyStopped.get()) {
                         publishProgress(early = true)
                     } else {
@@ -437,7 +470,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                             "early-stop qualityOk=${qualityOkCount.get()} " +
                                 "target=${AppConfig.changeSourceEarlyStopCount}"
                         )
-                        publishProgress(early = true)
+                        publishProgress(early = true, force = true)
                         currentCoroutineContext().cancel()
                     }
                 }
@@ -449,6 +482,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     publishProgress(
                         early = earlyStopped.get(),
                         finished = true,
+                        force = true,
                     )
                     searchStateData.postValue(false)
                     // User cancel / restart: do not invoke finish callback (avoids false empty toast).
@@ -779,7 +813,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 }
             }.onStart {
                 searchStateData.postValue(true)
-            }.mapParallelSafe(threadCount) {
+            }.mapParallelSafe(threadCount()) {
                 val source = appDb.bookSourceDao.getBookSource(it.origin)!!
                 // Align with search(): return promptly even if nested Cronet/WebView cleanup lags.
                 val ok = withTimeoutOrNull(AskTimeout.CHANGE_SOURCE_MS) {
@@ -846,7 +880,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     fun stopSearch() {
         task?.cancel()
         // Do not close searchPool here: onCompletion may still flush on it;
-        // initSearchPool only creates when null, onCleared() closes the pool.
+        // Pool is reused while threadCount() is unchanged; resized in initSearchPool().
+        // onCleared() attempts Closeable.close() (Executor pools); limitedParallelism is a no-op.
         searchStateData.postValue(false)
     }
 

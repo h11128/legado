@@ -220,13 +220,23 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
 
     private fun initLiveData() {
         viewModel.searchStateData.observe(viewLifecycleOwner) {
-            binding.refreshProgressBar.isAutoLoading = it
             if (it) {
+                // Determinate LTR like SearchActivity — never isAutoLoading (bouncing).
+                val total = if (viewModel.isChapterVerifying) {
+                    searchBookAdapter.itemCount.coerceAtLeast(1)
+                } else {
+                    viewModel.totalSourceCount.coerceAtLeast(1)
+                }
+                binding.refreshProgressBar.bindChangeSourceProgress(
+                    completed = 0,
+                    total = total,
+                )
                 startStopMenuItem?.let { item ->
                     item.setIcon(R.drawable.ic_stop_black_24dp)
                     item.setTitle(R.string.stop)
                 }
             } else {
+                binding.refreshProgressBar.setDurProgress(0)
                 startStopMenuItem?.let { item ->
                     item.setIcon(R.drawable.ic_refresh_black_24dp)
                     item.setTitle(R.string.refresh)
@@ -245,7 +255,17 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             repeatOnLifecycle(STARTED) {
                 viewModel.changeSourceProgress
                     .drop(1)
+                    .conflate()
                     .collect { progress ->
+                        val total = when {
+                            viewModel.isChapterVerifying ->
+                                searchBookAdapter.itemCount.coerceAtLeast(1)
+                            else -> viewModel.totalSourceCount.coerceAtLeast(1)
+                        }
+                        binding.refreshProgressBar.bindChangeSourceProgress(
+                            completed = progress.completed,
+                            total = total,
+                        )
                         binding.tvDur.text = when {
                             // Search early-stop wind-down only — not during 单章校验.
                             progress.earlyStopped && !viewModel.isChapterVerifying ->
