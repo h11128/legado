@@ -107,8 +107,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     protected val contentProcessor by lazy {
         ContentProcessor.get(oldBook!!)
     }
-    /** Cached once per 整书换源 search; cleared in [startSearch]. */
+    /** Cached once per 整书换源 search; cleared in [startSearch]. Prefer dur-chapter ref. */
     private var wordCountEvalContext: ChangeChapterVerify.ContentEvalContext? = null
+    /** Reference keyed by aligned local chapter index (do not lock first wrong hit). */
+    private val wordCountEvalByLocalIndex =
+        ConcurrentHashMap<Int, ChangeChapterVerify.ContentEvalContext>()
     /** OK chapter bodies for multi-source consensus (origin → text). */
     private val probeContentSamples = ConcurrentHashMap<String, String>()
     /** Meta quality tiers (latest / toc); worse wins via [ChangeBookSourceQuality.worseTier]. */
@@ -355,6 +358,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             bookMap.clear()
             tocMapChapterCount = 0
             wordCountEvalContext = null
+            wordCountEvalByLocalIndex.clear()
             probeContentSamples.clear()
             qualityTiers.clear()
             sessionSoftFail.clear()
@@ -436,6 +440,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             bookMap.clear()
             tocMapChapterCount = 0
             wordCountEvalContext = null
+            wordCountEvalByLocalIndex.clear()
             probeContentSamples.clear()
             qualityTiers.clear()
             sessionSoftFail.clear()
@@ -792,11 +797,16 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             var content = WebBook.getContentAwait(source, book, bookChapter, nextChapterUrl, false)
             content = contentProcessor.getContent(oldBook!!, bookChapter, content, false).toString()
             processedContent = content
-            // Same structural gates as 单章换源: length / stitch / optional local reference.
-            when (val quality = ChangeChapterVerify.evaluateContent(
-                content,
-                bookChangeContentEvalContext(chapterIndex, bookChapter.title),
-            )) {
+            val evalCtx = bookChangeContentEvalContext(chapterIndex, bookChapter.title)
+            val diag = ChangeChapterVerify.evaluateContentDiag(content, evalCtx)
+            ChangeSourceLog.i(
+                "phase word-eval origin=${source.bookSourceUrl} reason=${diag.reason} " +
+                    "len=${diag.contentLen} stitch=${diag.stitch} " +
+                    "refSim=${diag.refSim?.let { "%.4f".format(it) } ?: "-"} " +
+                    "expected=${diag.expectedChars ?: "-"} " +
+                    "chapter=[$chapterIndex] ${title.take(24)}"
+            )
+            when (val quality = diag.quality) {
                 is ChangeChapterVerify.ContentQuality.Ok -> {
                     quality.length to "[${chapterIndex + 1}] ${title}\n字数：${quality.length}"
                 }
@@ -815,6 +825,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             }
         } catch (t: Throwable) {
             if (t is CancellationException) throw t
+            ChangeSourceLog.i(
+                "phase word-eval origin=${source.bookSourceUrl} reason=fetch_error " +
+                    "err=${t.javaClass.simpleName}:${t.localizedMessage?.take(80)}"
+            )
             -1 to "[${chapterIndex + 1}] ${title}\n获取字数失败：${t.localizedMessage}"
         }
         val endTime = System.currentTimeMillis()
@@ -838,7 +852,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             probeContentSamples[searchBook.origin] = processedContent
             qualityOkCount.incrementAndGet()
         } else if (pair.first < 0) {
-            noteAskMiss(searchBook.origin, "content-bad", processDemote = true)
+            // Session soft-fail only — TOC/VIP/stitch false positives must not poison ask-order.
+            noteAskMiss(searchBook.origin, "content-bad", processDemote = false)
             mergeTier(searchBook.origin, ChangeBookSourceQuality.TIER_CONTENT_BAD)
         }
         publishSearchBook(searchBook, tocSize = chapters.size)
@@ -950,14 +965,14 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     /**
      * Local chapter body aligned to the candidate chapter being probed.
-     * Cached for the search session (same logical chapter for from-read probes).
+     * Cached **per aligned local chapter index** (not once for the whole search —
+     * a wrong first hit must not lock the reference for every later source).
      * If disk cache is empty, one-shot fetch from the book's current origin.
      */
     private suspend fun bookChangeContentEvalContext(
         candidateChapterIndex: Int,
         candidateTitle: String,
     ): ChangeChapterVerify.ContentEvalContext {
-        wordCountEvalContext?.let { return it }
         val book = oldBook ?: return ChangeChapterVerify.ContentEvalContext()
             .also { wordCountEvalContext = it }
         val localChapters = appDb.bookChapterDao.getChapterList(book.bookUrl)
@@ -969,6 +984,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             candidateTitle,
             localChapters,
         ) ?: wordCountChapterIndex(localChapters).coerceIn(0, localChapters.lastIndex)
+        wordCountEvalByLocalIndex[idx]?.let { return it }
         val localChapter = localChapters[idx]
         var reference = BookHelp.getContent(book, localChapter)?.trim()?.takeIf { it.isNotEmpty() }
         if (reference == null) {
@@ -981,12 +997,22 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
             }
         }
-        return ChangeChapterVerify.ContentEvalContext(
+        val ctx = ChangeChapterVerify.ContentEvalContext(
             expectedChars = reference?.length?.takeIf {
                 it >= ChangeChapterVerify.MIN_CONTENT_CHARS
             },
             referenceContent = reference,
-        ).also { wordCountEvalContext = it }
+        )
+        wordCountEvalByLocalIndex[idx] = ctx
+        val durIdx = wordCountChapterIndex(localChapters).coerceIn(0, localChapters.lastIndex)
+        if (wordCountEvalContext == null || idx == durIdx) {
+            wordCountEvalContext = ctx
+        }
+        ChangeSourceLog.i(
+            "ref-cache localIdx=$idx title=${localChapter.title.take(24)} " +
+                "refLen=${reference?.length ?: 0} expected=${ctx.expectedChars ?: "-"}"
+        )
+        return ctx
     }
 
     fun onLoadWordCountChecked(isChecked: Boolean) {

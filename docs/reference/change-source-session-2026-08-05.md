@@ -93,7 +93,60 @@ mapParallel(threadCount) {
 4. **ChangeSourceLog** — logcat always; AppLog only for milestones. **Done.**
 5. Follow-up: investigate why content quality almost always fails for this book (wrong chapter index / gate too strict / hijack true).
 
-## Session numbers (finish)
+## Content-bad deep dive (same session DB)
+
+Pulled `legado.db` via `adb exec-out` → `temp/ld3.db` (134 `searchBooks` rows for
+《吞噬星空：收徒万倍返还》 / 新乙). Local bookshelf: `durChapterIndex=411`
+(第410章…), `totalChapterNum=877`, origin 饿狼小说.
+
+### Failure mix (from `chapterWordCountText`)
+
+| Reason | Count | Notes |
+|---|---|---|
+| **疑似错书/广告劫持** (`ContentQuality.Hijack`) | **93** | Dominant |
+| **正文过短** | 27 | Shell / VIP / relative floor |
+| 获取字数失败 | 3 | empty / JS errors |
+| Other empty text | 11 | |
+| **OK (`chapterWordCount≥1`)** | **0** in DB now | Finish log had 1× `小说(w=3675)` earlier; not in current table |
+
+Probed TOC index peaks at **412** (67×), then 410/411 — around reading position.
+118 rows also have **最新章疑似不一致** badge (meta), 14 have TOC-size badge.
+
+### What Hijack means in code
+
+`evaluateContent` order:
+
+1. absolute TooShort (`<120`)
+2. relative TooShort vs cached local reference length (`<22%` when expected≥400)
+3. **`looksLikeStitchedParagraphs` → Hijack**
+4. **digram Jaccard vs local reference `<0.04` → Hijack**
+5. anti-theft shell markers → AntiTheft
+6. else Ok
+
+Session log only stored `chars=-1` — **did not record which branch**. Samples show both:
+
+- **True wrong-book hits** (search name match, body/latest unrelated), e.g. 讲课通知 / 钓鱼刀斩不朽 while reading 第410章秘法.
+- **Same-looking chapter titles still Hijack** (e.g. `第410章 四十万年，宇宙霸主巅峰秘法`) → likely **stitch false-positive** and/or **bad/locked reference**, not “empty body”.
+
+### Amplifiers (bugs / design)
+
+1. **`wordCountEvalContext` cached once per search**  
+   First deep probe’s aligned local chapter becomes the **only** reference for everyone. A wrong first hit can poison similarity for the whole run.
+
+2. **`content-bad` → `processDemote=true`**  
+   Ask-memory demotes the source globally after one bad chapter probe (alignment/VIP/stitch), same bucket as timeout — too harsh.
+
+3. **`qualityOk` needs `chapterWordCount≥1000`**  
+   Even legitimate `Ok` bodies of 120–999 chars never trip early-stop (`QUALITY_OK_MIN_CHARS`).
+
+4. **Search accepts same title from wrong novels**  
+   Exact name filter still returns fanfic / wrong shelves; content gate then correctly Hijacks many — but they still enter the list as `words=-1`.
+
+### Not the parallel bug
+
+`inFlight≈100` / ask-slot holding is separate (already fixed). Content-bad volume is **quality-gate + reference/stitch + wrong-book search**, proven by DB text labels.
+
+## Session numbers (finish log)
 
 | Metric | Value |
 |---|---|
@@ -105,3 +158,4 @@ mapParallel(threadCount) {
 | timeout | 224 |
 | error | 106 |
 | content-bad | 140 |
+

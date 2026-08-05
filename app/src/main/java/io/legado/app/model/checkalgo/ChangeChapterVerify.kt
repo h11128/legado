@@ -101,34 +101,96 @@ object ChangeChapterVerify {
     fun evaluateContent(
         content: String,
         context: ContentEvalContext = ContentEvalContext(),
-    ): ContentQuality {
-        val text = content.trim()
-        if (text.length < MIN_CONTENT_CHARS) return ContentQuality.TooShort
+    ): ContentQuality = evaluateContentDiag(content, context).quality
 
+    /**
+     * Same gates as [evaluateContent] plus fields for 换源 forensics / logcat.
+     */
+    data class ContentEvalDiag(
+        val quality: ContentQuality,
+        val contentLen: Int,
+        val stitch: Boolean,
+        val refSim: Double?,
+        val expectedChars: Int?,
+        val reason: String,
+    )
+
+    fun evaluateContentDiag(
+        content: String,
+        context: ContentEvalContext = ContentEvalContext(),
+    ): ContentEvalDiag {
+        val text = content.trim()
         val expected = context.expectedChars
+        if (text.length < MIN_CONTENT_CHARS) {
+            return ContentEvalDiag(
+                quality = ContentQuality.TooShort,
+                contentLen = text.length,
+                stitch = false,
+                refSim = null,
+                expectedChars = expected,
+                reason = "too_short_abs",
+            )
+        }
         if (expected != null && expected >= RELATIVE_MIN_EXPECTED) {
             val floor = max(MIN_CONTENT_CHARS, (expected * RELATIVE_MIN_RATIO).toInt())
-            if (text.length < floor) return ContentQuality.TooShort
-        }
-
-        if (looksLikeStitchedParagraphs(text)) {
-            return ContentQuality.Hijack
-        }
-
-        val reference = context.referenceContent?.trim().orEmpty()
-        if (reference.length >= REFERENCE_MIN_CHARS && text.length >= MIN_CONTENT_CHARS) {
-            val sim = digramJaccard(text, reference)
-            if (sim < REFERENCE_SIM_HIJACK_MAX) {
-                return ContentQuality.Hijack
+            if (text.length < floor) {
+                return ContentEvalDiag(
+                    quality = ContentQuality.TooShort,
+                    contentLen = text.length,
+                    stitch = false,
+                    refSim = null,
+                    expectedChars = expected,
+                    reason = "too_short_rel(floor=$floor)",
+                )
             }
         }
-
+        val stitch = looksLikeStitchedParagraphs(text)
+        if (stitch) {
+            return ContentEvalDiag(
+                quality = ContentQuality.Hijack,
+                contentLen = text.length,
+                stitch = true,
+                refSim = null,
+                expectedChars = expected,
+                reason = "stitch",
+            )
+        }
+        val reference = context.referenceContent?.trim().orEmpty()
+        val refSim = if (reference.length >= REFERENCE_MIN_CHARS && text.length >= MIN_CONTENT_CHARS) {
+            digramJaccard(text, reference)
+        } else {
+            null
+        }
+        if (refSim != null && refSim < REFERENCE_SIM_HIJACK_MAX) {
+            return ContentEvalDiag(
+                quality = ContentQuality.Hijack,
+                contentLen = text.length,
+                stitch = false,
+                refSim = refSim,
+                expectedChars = expected,
+                reason = "ref_sim",
+            )
+        }
         if (highPrecisionShellMarkers.any { text.contains(it) } &&
             text.length < RELATIVE_MIN_EXPECTED * 2
         ) {
-            return ContentQuality.AntiTheft
+            return ContentEvalDiag(
+                quality = ContentQuality.AntiTheft,
+                contentLen = text.length,
+                stitch = false,
+                refSim = refSim,
+                expectedChars = expected,
+                reason = "shell",
+            )
         }
-        return ContentQuality.Ok(text.length)
+        return ContentEvalDiag(
+            quality = ContentQuality.Ok(text.length),
+            contentLen = text.length,
+            stitch = false,
+            refSim = refSim,
+            expectedChars = expected,
+            reason = "ok",
+        )
     }
 
     /**

@@ -319,6 +319,30 @@ class ChangeChapterVerifyTest {
     }
 
     @Test
+    fun evaluateContentDiagReportsStitchAndRefSimReasons() {
+        val reference = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(120)
+        val hijack = """
+            吞噬星空：收徒万倍返还
+            恭喜宿主收徒气运之子，奖励帝品传承！
+            万倍返还已到账，请继续观看广告小说……
+        """.trimIndent() + "水".repeat(120)
+        val diag = ChangeChapterVerify.evaluateContentDiag(
+            hijack,
+            ChangeChapterVerify.ContentEvalContext(
+                expectedChars = reference.length,
+                referenceContent = reference,
+            ),
+        )
+        assertTrue(diag.quality is ChangeChapterVerify.ContentQuality.Hijack)
+        assertTrue(diag.reason == "ref_sim" || diag.reason == "stitch")
+        assertTrue(diag.contentLen >= ChangeChapterVerify.MIN_CONTENT_CHARS)
+
+        val shortDiag = ChangeChapterVerify.evaluateContentDiag("太短")
+        assertEquals("too_short_abs", shortDiag.reason)
+        assertTrue(shortDiag.quality is ChangeChapterVerify.ContentQuality.TooShort)
+    }
+
+    @Test
     fun evaluateContentDetectsHijackViaLowReferenceSimilarity() {
         val reference = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(120)
         val hijack = """
