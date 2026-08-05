@@ -6,6 +6,10 @@ import io.legado.app.constant.AppLog
 /**
  * Always-on logcat tag for 换源 smoke / agent filters (`adb logcat -s LegadoChangeSource`).
  * Also mirrors into [AppLog] for the in-app log page.
+ *
+ * Keep messages single-line and keyword-stable for rg:
+ * `start` / `hit` / `deep` / `phase` / `list+` / `progress` / `early-stop` / `miss` / `finish` /
+ * `verify-start` / `verify-finish`.
  */
 object ChangeSourceLog {
 

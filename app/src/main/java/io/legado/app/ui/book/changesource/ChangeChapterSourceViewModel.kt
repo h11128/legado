@@ -17,6 +17,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.SourceConfig
 import io.legado.app.model.checkalgo.AskTimeout
 import io.legado.app.model.checkalgo.ChangeChapterVerify
+import io.legado.app.model.checkalgo.ChangeSourceLog
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
@@ -143,7 +144,13 @@ class ChangeChapterSourceViewModel(application: Application) :
                 notifySearchAdapter()
 
                 val candidates = searchBooks.toList()
+                ChangeSourceLog.i(
+                    "verify-start afterSearch=$afterSearch chapter=$chapterKey " +
+                        "candidates=${candidates.size} cachedProbes=${probeByOrigin.size} " +
+                        "threads=${AppConfig.threadCount}"
+                )
                 if (candidates.isEmpty()) {
+                    ChangeSourceLog.i("verify-finish empty candidates")
                     if (afterSearch) searchFinishCallback?.invoke(true)
                     return@launch
                 }
@@ -230,12 +237,18 @@ class ChangeChapterSourceViewModel(application: Application) :
                     contentDone.get().coerceAtLeast(1),
                     getApplication<Application>().getString(R.string.change_source_verify_done)
                 )
+                val okN = ChangeChapterVerify.countOk(probeByOrigin, candidateOrigins)
+                ChangeSourceLog.i(
+                    "verify-finish chapter=$chapterKey list=${searchBooks.size} " +
+                        "aligned=$alignedCount contentProbed=${contentDone.get()} ok=$okN"
+                )
                 if (afterSearch) {
                     searchFinishCallback?.invoke(searchBooks.isEmpty())
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                ChangeSourceLog.w("verify error ${e.localizedMessage}", e)
                 AppLog.put("单章换源校验出错\n${e.localizedMessage}", e)
                 if (afterSearch) searchFinishCallback?.invoke(searchBooks.isEmpty())
             } finally {

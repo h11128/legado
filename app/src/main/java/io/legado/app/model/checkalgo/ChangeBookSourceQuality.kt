@@ -32,11 +32,13 @@ object ChangeBookSourceQuality {
     /** Sort tiers: lower ranks first. */
     const val TIER_OK = 0
     const val TIER_WEAK = 1
-    const val TIER_LATEST_BAD = 2
-    const val TIER_TOC_BAD = 3
-    const val TIER_CONTENT_BAD = 4
-    const val TIER_SOFT_FAIL = 5
-    const val TIER_UNKNOWN = 6
+    /** Search hit published; content/word-count still loading — keep near top. */
+    const val TIER_PENDING = 2
+    const val TIER_LATEST_BAD = 3
+    const val TIER_TOC_BAD = 4
+    const val TIER_CONTENT_BAD = 5
+    const val TIER_SOFT_FAIL = 6
+    const val TIER_UNKNOWN = 7
 
     fun shouldEarlyStop(
         qualityOkCount: Int,
@@ -162,6 +164,9 @@ object ChangeBookSourceQuality {
      * Hard sort rank from **content probe only**.
      * Latest-chapter / TOC meta must not veto a body that already passed content gates —
      * those stay as [softMetaPenalty] after respondTime.
+     *
+     * [TIER_PENDING] (chapterWordCount == 0): search already matched; keep above
+     * content-bad / soft-fail so parallel hits appear near the top while word-count loads.
      */
     fun contentSortTier(
         chapterWordCount: Int,
@@ -171,11 +176,14 @@ object ChangeBookSourceQuality {
         val contentTier = when {
             chapterWordCount >= QUALITY_OK_MIN_CHARS -> TIER_OK
             chapterWordCount > 0 -> TIER_WEAK
+            chapterWordCount == 0 -> TIER_PENDING
             chapterWordCount == -1 && !wordCountText.isNullOrBlank() -> TIER_CONTENT_BAD
             else -> TIER_UNKNOWN
         }
         // Content-first: session soft-fail must not bury probes that already got OK/WEAK body.
         if (contentTier == TIER_OK || contentTier == TIER_WEAK) return contentTier
+        // Pending search hits stay visible — do not demote them to soft-fail while loading.
+        if (contentTier == TIER_PENDING) return TIER_PENDING
         return if (softFailed) worseTier(contentTier, TIER_SOFT_FAIL) else contentTier
     }
 

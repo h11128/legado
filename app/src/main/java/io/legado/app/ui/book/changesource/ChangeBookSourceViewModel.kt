@@ -117,6 +117,14 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private val completedProbeCount = AtomicInteger(0)
     private val qualityOkCount = AtomicInteger(0)
     private val earlyStopped = AtomicBoolean(false)
+    /** Session counters for finish summary (logcat / AppLog). */
+    private val searchHitCount = AtomicInteger(0)
+    private val listPublishCount = AtomicInteger(0)
+    private val missEmptyCount = AtomicInteger(0)
+    private val missTimeoutCount = AtomicInteger(0)
+    private val missErrorCount = AtomicInteger(0)
+    private val missContentBadCount = AtomicInteger(0)
+    private val lastProgressLogCompleted = AtomicInteger(-1)
     protected var searchCallback: SourceCallback? = null
     protected var task: Job? = null
     val bookMap = ConcurrentHashMap<String, Book>()
@@ -132,6 +140,19 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     searchBook.name.contains(screenKey) -> searchBooks.add(searchBook)
                     else -> return
                 }
+                val size = searchBooks.size
+                listPublishCount.incrementAndGet()
+                val tier = ChangeBookSourceQuality.contentSortTier(
+                    chapterWordCount = searchBook.chapterWordCount,
+                    wordCountText = searchBook.chapterWordCountText,
+                    softFailed = searchBook.origin in sessionSoftFail,
+                )
+                ChangeSourceLog.i(
+                    "list+ size=$size origin=${searchBook.origin} " +
+                        "name=${searchBook.originName} words=${searchBook.chapterWordCount} " +
+                        "tier=$tier respondMs=${searchBook.respondTime} " +
+                        "latest=${searchBook.latestChapterTitle?.take(24) ?: ""}"
+                )
                 trySend(arrayOf(searchBooks))
             }
 
@@ -298,6 +319,13 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             completedProbeCount.set(0)
             qualityOkCount.set(0)
             earlyStopped.set(false)
+            searchHitCount.set(0)
+            listPublishCount.set(0)
+            missEmptyCount.set(0)
+            missTimeoutCount.set(0)
+            missErrorCount.set(0)
+            missContentBadCount.set(0)
+            lastProgressLogCompleted.set(-1)
             lastProgressPublishMs.set(0L)
             _changeSourceProgress.value = ChangeSourceProgressUi()
             val t0 = System.currentTimeMillis()
@@ -333,13 +361,21 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             }
             initSearchPool()
             val tPool = System.currentTimeMillis()
+            val headSample = bookSourceParts.take(5).joinToString(" | ") {
+                "${it.bookSourceName}(${it.respondTime})"
+            }
             ChangeSourceLog.i(
-                "start book=$name sources=${bookSourceParts.size} threads=$threads " +
-                    "demoted=${ChangeSourceAskMemory.snapshot().size} " +
+                "start book=$name author=$author sources=${bookSourceParts.size} " +
+                    "threads=$threads demoted=${ChangeSourceAskMemory.snapshot().size} " +
+                    "loadInfo=${AppConfig.changeSourceLoadInfo} " +
+                    "loadToc=${AppConfig.changeSourceLoadToc} " +
                     "loadWordCount=${AppConfig.changeSourceLoadWordCount} " +
                     "earlyStop=${AppConfig.changeSourceEarlyStop} " +
+                    "earlyStopTarget=${AppConfig.changeSourceEarlyStopCount} " +
+                    "group=${searchGroup.ifBlank { "(all)" }} " +
                     "timing load=${tLoad - t0}ms heal=${tHeal - tLoad}ms " +
-                    "order=${tOrder - tHeal}ms pool=${tPool - tOrder}ms total=${tPool - t0}ms"
+                    "order=${tOrder - tHeal}ms pool=${tPool - tOrder}ms total=${tPool - t0}ms " +
+                    "askHead=[$headSample]"
             )
             search()
         }
@@ -378,7 +414,17 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         if (processDemote) {
             ChangeSourceAskMemory.noteMiss(bookSourceUrl)
         }
-        ChangeSourceLog.i("miss $reason $bookSourceUrl processDemote=$processDemote")
+        when (reason) {
+            "empty" -> missEmptyCount.incrementAndGet()
+            "timeout" -> missTimeoutCount.incrementAndGet()
+            "error" -> missErrorCount.incrementAndGet()
+            "content-bad" -> missContentBadCount.incrementAndGet()
+        }
+        ChangeSourceLog.i(
+            "miss $reason $bookSourceUrl processDemote=$processDemote " +
+                "done=${completedProbeCount.get()} list=${searchBooks.size} " +
+                "inFlight=${probingNames.size}"
+        )
     }
 
     private fun publishProgress(
@@ -422,6 +468,19 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             earlyStopped = early,
             finished = finished,
         )
+        // Milestone progress for analysis (avoid per-probe AppLog flood).
+        if (finished || early || completed == 0 ||
+            completed - lastProgressLogCompleted.get() >= 10
+        ) {
+            lastProgressLogCompleted.set(completed)
+            ChangeSourceLog.i(
+                "progress done=$completed/${bookSourceParts.size} " +
+                    "inFlight=$inFlight/${threadCount()} list=${searchBooks.size} " +
+                    "qualityOk=${qualityOkCount.get()} hits=${searchHitCount.get()} " +
+                    "published=${listPublishCount.get()} early=$early finished=$finished " +
+                    "label=${label.take(80)}"
+            )
+        }
     }
 
     private fun search() {
@@ -484,6 +543,26 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                         finished = true,
                         force = true,
                     )
+                    val sorted = runCatching { sortSearchBooks(searchBooks.toList()) }
+                        .getOrDefault(searchBooks.toList())
+                    val top = sorted.take(8).joinToString(" | ") { b ->
+                        val tier = ChangeBookSourceQuality.contentSortTier(
+                            b.chapterWordCount,
+                            b.chapterWordCountText,
+                            b.origin in sessionSoftFail,
+                        )
+                        "${b.originName}(w=${b.chapterWordCount},t=$tier,ms=${b.respondTime})"
+                    }
+                    ChangeSourceLog.i(
+                        "finish cause=${cause?.javaClass?.simpleName ?: "ok"} " +
+                            "early=${earlyStopped.get()} " +
+                            "completed=${completedProbeCount.get()}/${bookSourceParts.size} " +
+                            "list=${searchBooks.size} qualityOk=${qualityOkCount.get()} " +
+                            "hits=${searchHitCount.get()} published=${listPublishCount.get()} " +
+                            "missEmpty=${missEmptyCount.get()} missTimeout=${missTimeoutCount.get()} " +
+                            "missError=${missErrorCount.get()} missContentBad=${missContentBadCount.get()} " +
+                            "top=[$top]"
+                    )
                     searchStateData.postValue(false)
                     // User cancel / restart: do not invoke finish callback (avoids false empty toast).
                     if (cause == null || earlyStopped.get()) {
@@ -516,18 +595,30 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 noteAskMiss(source.bookSourceUrl, "empty", processDemote = false)
                 return@withTimeoutOrNull true
             }
+            searchHitCount.incrementAndGet()
             RespondTimeUpdater.noteSuccessAndMaybeFlush(
                 source.bookSourceUrl,
                 searchElapsed,
                 source.respondTime,
             )
-            if (loadInfo || loadToc || loadWordCount) {
+            val deep = loadInfo || loadToc || loadWordCount
+            ChangeSourceLog.i(
+                "hit origin=${source.bookSourceUrl} name=${source.bookSourceName} " +
+                    "searchMs=$searchElapsed results=${resultBooks.size} deep=$deep " +
+                    "list=${searchBooks.size} inFlight=${probingNames.size}"
+            )
+            if (deep) {
+                ChangeSourceLog.i(
+                    "deep origin=${source.bookSourceUrl} " +
+                        "loadInfo=$loadInfo loadToc=$loadToc loadWordCount=$loadWordCount"
+                )
                 resultBooks.forEach { searchBook ->
                     currentCoroutineContext().ensureActive()
                     loadBookInfo(source, searchBook.toBook())
                 }
             } else {
                 resultBooks.forEach { searchBook ->
+                    searchBook.respondTime = searchElapsed.toInt()
                     publishSearchBook(searchBook)
                 }
             }
@@ -539,8 +630,13 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     private suspend fun loadBookInfo(source: BookSource, book: Book) {
+        val t0 = System.currentTimeMillis()
         if (book.tocUrl.isEmpty()) {
             WebBook.getBookInfoAwait(source, book)
+            ChangeSourceLog.i(
+                "phase info origin=${source.bookSourceUrl} ms=${System.currentTimeMillis() - t0} " +
+                    "tocUrlEmpty=${book.tocUrl.isEmpty()} latest=${book.latestChapterTitle?.take(24) ?: ""}"
+            )
         }
         if (AppConfig.changeSourceLoadToc || AppConfig.changeSourceLoadWordCount) {
             loadBookToc(source, book)
@@ -551,6 +647,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     private suspend fun loadBookToc(source: BookSource, book: Book) {
+        val t0 = System.currentTimeMillis()
         val chapters = WebBook.getChapterListAwait(source, book).getOrThrow()
         for (chapter in chapters) {
             chapter.internString()
@@ -558,6 +655,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         putToc(book, chapters)
         bookMap[book.primaryStr()] = book
         book.releaseHtmlData()
+        ChangeSourceLog.i(
+            "phase toc origin=${source.bookSourceUrl} chapters=${chapters.size} " +
+                "ms=${System.currentTimeMillis() - t0}"
+        )
         if (AppConfig.changeSourceLoadWordCount) {
             loadBookWordCount(source, book, chapters)
         } else {
@@ -622,6 +723,17 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             chapterWordCount = pair.first
             respondTime = (endTime - startTime).toInt()
         }
+        val tier = ChangeBookSourceQuality.contentSortTier(
+            chapterWordCount = pair.first,
+            wordCountText = pair.second,
+            softFailed = false,
+        )
+        ChangeSourceLog.i(
+            "phase word origin=${source.bookSourceUrl} chars=${pair.first} " +
+                "tier=$tier ms=${endTime - startTime} " +
+                "ok=${ChangeBookSourceQuality.isQualityOkWordCount(pair.first)} " +
+                "list=${searchBooks.size}"
+        )
         if (ChangeBookSourceQuality.isQualityOkWordCount(pair.first) && processedContent != null) {
             probeContentSamples[searchBook.origin] = processedContent
             qualityOkCount.incrementAndGet()
@@ -878,10 +990,18 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     fun stopSearch() {
+        val wasActive = task?.isActive == true
         task?.cancel()
         // Do not close searchPool here: onCompletion may still flush on it;
         // Pool is reused while threadCount() is unchanged; resized in initSearchPool().
         // onCleared() attempts Closeable.close() (Executor pools); limitedParallelism is a no-op.
+        if (wasActive) {
+            ChangeSourceLog.i(
+                "stop completed=${completedProbeCount.get()}/${bookSourceParts.size} " +
+                    "list=${searchBooks.size} qualityOk=${qualityOkCount.get()} " +
+                    "hits=${searchHitCount.get()} published=${listPublishCount.get()}"
+            )
+        }
         searchStateData.postValue(false)
     }
 
