@@ -49,6 +49,7 @@ Gestures: **短按**换源 = 整书；**长按** = 选单章/整书。
 |---|---|---|
 | 2026-08-05 | PASS (partial: earlyStop=false) | pre-fix device run; motivated the 7 fixes below |
 | 2026-08-05b | code fix | hard-cancel Cronet + ask memory demotion + loadWordCount default + early-stop UI + LegadoChangeSource log + prefs deep link/MCP |
+| 2026-08-05c | PASS | Agent self-test on SM-A366U1, book《吞噬星空：收徒万倍返还》, APK `3.26080601debug`. Log: `temp/legado_change_source_selftest_2026-08-05.txt`. `start` threads=100 deepParallel=16; `inFlight`→100; early `list+` pending; `list- drop` content-bad×21; `ok_stitch_override`×19 keeps good stitch; `early-stop qualityOk=20`; finish `list=65 qualityOk=20 hits=89` (~2m20s). UI: `已足够好源（20）· 已停止 779/1113`, top rows `字数：3xxx`, no hijack badges in viewport. Note: progress `deep=N/16` can overshoot N (cosmetic). |
 
 ## Fixes landed (was improvement backlog)
 
