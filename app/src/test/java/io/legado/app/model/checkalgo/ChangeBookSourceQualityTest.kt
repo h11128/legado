@@ -110,7 +110,13 @@ class ChangeBookSourceQualityTest {
     @Test
     fun suppressLatestBadgeWhenContentOkAndStrongRef() {
         assertFalse(
-            ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+            ChangeBookSourceQuality.shouldShowSoftMetaBadge(
+                chapterWordCount = 3800,
+                contentRefSim = 0.90,
+            )
+        )
+        assertFalse(
+            ChangeBookSourceQuality.shouldShowTocMismatchBadge(
                 chapterWordCount = 3800,
                 contentRefSim = 0.90,
             )

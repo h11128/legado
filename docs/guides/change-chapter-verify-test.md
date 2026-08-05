@@ -74,6 +74,8 @@ Toolbar **换源** opens 整书 dialog; long-press still offers 单章/整书 wh
 | 2026-08-05d | harness + deep Semaphore | device-session script + analyzer; deep `Semaphore` so `--expect-deep-cap` can PASS on re-run |
 | 2026-08-05e | PASS (all gates) | Automated `--device-session`; log `temp/legado_change_source_session_2026-08-05_112211.txt`; max deep=16/16; qualityOk=20 early-stop |
 | 2026-08-05f | PASS | UX/perf on device; log `temp/legado_change_source_session_2026-08-05_114404.txt`; finish list=20=qualityOk; UI no latest/pending badges; max deep=16/16; label 好源 k/20 |
+| 2026-08-05g | PASS | RFC-002 + host pace + title-empty TTL + TOC badge; log `temp/legado_change_source_session_2026-08-05_131638.txt`; `ask-budget` present; list=20; UI latest/toc=0 |
+
 
 ## Fixes landed (was improvement backlog)
 
@@ -95,3 +97,6 @@ Open backlog after 2026-08-05e: further perf/UX ideas in
 
 Landed 2026-08-05f: latest-badge suppress on strong content; title-scoped empty
 skip; locale progress strings; `好源 k/n` progress hint; drop pending on early-stop.
+
+Landed 2026-08-05g: [RFC-002](../design/rfc-002-adaptive-ask-timeout.md) adaptive
+ask budget; host ask pacing; title-empty 7d persist; TOC soft-badge suppress.

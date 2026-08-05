@@ -30,10 +30,14 @@ import io.legado.app.model.RespondTimeUpdater
 import io.legado.app.model.checkalgo.AskSourceOrder
 import io.legado.app.model.checkalgo.AskSourcePrefetch
 import io.legado.app.model.checkalgo.AskTimeout
+import io.legado.app.model.checkalgo.AskTimeoutBudget
 import io.legado.app.model.checkalgo.ChangeBookSourceQuality
 import io.legado.app.model.checkalgo.ChangeChapterVerify
 import io.legado.app.model.checkalgo.ChangeSourceAskMemory
 import io.legado.app.model.checkalgo.ChangeSourceLog
+import io.legado.app.model.checkalgo.CheckAlgoRuntime
+import io.legado.app.model.checkalgo.CheckHostTokenBucket
+import io.legado.app.help.config.ChangeSourceTitleEmptyPrefs
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
@@ -147,6 +151,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
      * suspend, so deepInFlight can overshoot the labeled /N cap (self-test 2026-08-05).
      */
     private var deepGate: Semaphore? = null
+    /** Per-host ask pacing (RFC-002 companion) — same defaults as bulk check. */
+    private var askHostBucket: CheckHostTokenBucket? = null
     val bookMap = ConcurrentHashMap<String, Book>()
     val searchDataFlow = callbackFlow {
 
@@ -392,6 +398,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             lastProgressLogCompleted.set(-1)
             lastProgressPublishMs.set(0L)
             _changeSourceProgress.value = ChangeSourceProgressUi()
+            // Disk title-empty (TTL) → memory before ask-order / skips.
+            runCatching { ChangeSourceTitleEmptyPrefs.hydrate(name, author) }
+            askHostBucket = CheckHostTokenBucket(
+                maxTokensPerHost = CheckHostTokenBucket.DEFAULT_MAX_TOKENS,
+                refillPerSecond = CheckHostTokenBucket.DEFAULT_REFILL_PER_SECOND,
+            )
             val t0 = System.currentTimeMillis()
             val searchGroup = AppConfig.searchGroup
             val loaded = if (searchGroup.isBlank()) {
@@ -467,6 +479,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             qualityOkCount.set(0)
             earlyStopped.set(false)
             _changeSourceProgress.value = ChangeSourceProgressUi()
+            askHostBucket = CheckHostTokenBucket(
+                maxTokensPerHost = CheckHostTokenBucket.DEFAULT_MAX_TOKENS,
+                refillPerSecond = CheckHostTokenBucket.DEFAULT_REFILL_PER_SECOND,
+            )
             bookSourceParts.add(appDb.bookSourceDao.getBookSourcePart(origin)!!)
             searchBooks.removeIf { it.origin == origin }
             initSearchPool()
@@ -692,8 +708,21 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         val loadInfo = AppConfig.changeSourceLoadInfo
         val loadToc = AppConfig.changeSourceLoadToc
         val loadWordCount = AppConfig.changeSourceLoadWordCount
+        val host = CheckAlgoRuntime.hostOf(source.bookSourceUrl)
+        askHostBucket?.acquire(host, source.concurrentRate)
+        val budgetMs = AskTimeoutBudget.forChangeSourceAsk(
+            respondTime = source.respondTime,
+            sessionDemoted = ChangeSourceAskMemory.isDemoted(source.bookSourceUrl),
+        )
+        if (budgetMs < AskTimeout.CHANGE_SOURCE_MS) {
+            ChangeSourceLog.i(
+                "ask-budget ms=$budgetMs rank=${AskTimeoutBudget.rankName(source.respondTime)} " +
+                    "demoted=${ChangeSourceAskMemory.isDemoted(source.bookSourceUrl)} " +
+                    "origin=${source.bookSourceUrl}"
+            )
+        }
         val startTime = System.currentTimeMillis()
-        val ok = withTimeoutOrNull(AskTimeout.CHANGE_SOURCE_MS) {
+        val ok = withTimeoutOrNull(budgetMs) {
             val resultBooks = WebBook.searchBookAwait(
                 source, name,
                 filter = { fName, fAuthor, _ ->
@@ -704,6 +733,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             if (resultBooks.isEmpty()) {
                 noteAskMiss(source.bookSourceUrl, "empty", processDemote = false)
                 ChangeSourceAskMemory.noteTitleEmpty(name, author, source.bookSourceUrl)
+                runCatching { ChangeSourceTitleEmptyPrefs.persistCurrent(name, author) }
                 return@withTimeoutOrNull true
             }
             searchHitCount.incrementAndGet()
@@ -947,11 +977,17 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             local != null &&
             !ChangeBookSourceQuality.tocConsistent(local.totalChapterNum, tocSize)
         ) {
-            mergeTier(origin, ChangeBookSourceQuality.TIER_TOC_BAD)
-            searchBook.chapterWordCountText = appendBadge(
-                searchBook.chapterWordCountText,
-                getApplication<Application>().getString(R.string.change_source_toc_mismatch),
-            )
+            if (ChangeBookSourceQuality.shouldShowTocMismatchBadge(
+                    searchBook.chapterWordCount,
+                    contentRefSimByOrigin[origin],
+                )
+            ) {
+                mergeTier(origin, ChangeBookSourceQuality.TIER_TOC_BAD)
+                searchBook.chapterWordCountText = appendBadge(
+                    searchBook.chapterWordCountText,
+                    getApplication<Application>().getString(R.string.change_source_toc_mismatch),
+                )
+            }
         }
         when (ChangeBookSourceQuality.latestMatchesLocal(
             local?.latestChapterTitle,

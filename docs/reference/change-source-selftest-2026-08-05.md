@@ -105,14 +105,15 @@ zh-HK/TW / JA / ES / PT / VI progress copy aligned to asked/asking semantics.
 - Progress label shows `好源 k/target` while asking (early-stop armed).
 - Early-stop drops unfinished pending (`chapterWordCount==0`) rows so list is not full of「校验中」.
 
-### Further perf / UX ideas (not in this pass)
+### Further perf / UX ideas (status)
 
-| Idea | Why | Risk |
-|---|---|---|
-| Host-level ask pacing | Some hosts time out in batches under threadCount=100 | Needs token bucket; may slow good hosts |
-| Shorter ask timeout for demoted/tail | Tail sources burn AskTimeout | Can false-timeout flaky good sources |
-| Persist title-empty across process | Second open of same book is instant for empties | Disk / wrong after site recovers |
-| Hide TOC-mismatch when content OK | Same clutter as latest tip | TOC gap can still mean wrong edition |
+| Idea | Status |
+|---|---|
+| Host-level ask pacing | **Done** RFC-002 companion — `CheckHostTokenBucket` on ask |
+| Adaptive ask timeout | **Done** — [RFC-002](../design/rfc-002-adaptive-ask-timeout.md) grace 20s |
+| Title-empty persist + TTL | **Done** — 7d `ChangeSourceTitleEmptyPrefs` |
+| Hide TOC-mismatch when content OK | **Done** — `shouldShowTocMismatchBadge` |
+| 「好源/询问中/深探」i18n | Still open |
 
 ## How to re-run
 

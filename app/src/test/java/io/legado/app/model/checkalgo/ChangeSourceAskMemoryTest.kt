@@ -26,4 +26,13 @@ class ChangeSourceAskMemoryTest {
         assertTrue(ChangeSourceAskMemory.isDemoted("https://b.com"))
         assertFalse(ChangeSourceAskMemory.isTitleEmpty("书A", "作者", "https://b.com"))
     }
+
+    @Test
+    fun importTitleEmptyHydratesMemory() {
+        ChangeSourceAskMemory.importTitleEmpty(
+            ChangeSourceAskMemory.titleKey("书A", "作者"),
+            mapOf("https://c.com" to System.currentTimeMillis()),
+        )
+        assertTrue(ChangeSourceAskMemory.isTitleEmpty("书A", "作者", "https://c.com"))
+    }
 }

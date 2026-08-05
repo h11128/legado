@@ -209,12 +209,12 @@ object ChangeBookSourceQuality {
     }
 
     /**
-     * Whether to show / apply 「最新章疑似不一致」 for this row.
-     * - Pending (`chapterWordCount==0`): never — tip text is noise while deep runs.
+     * Soft meta badges (latest tip / TOC size) for list rows.
+     * - Pending (`chapterWordCount==0`): never — noise while deep runs.
      * - Quality-OK: suppress when body refSim is strong (or unknown / no local cache).
      * - Otherwise: show.
      */
-    fun shouldShowLatestMismatchBadge(
+    fun shouldShowSoftMetaBadge(
         chapterWordCount: Int,
         contentRefSim: Double?,
     ): Boolean {
@@ -223,6 +223,17 @@ object ChangeBookSourceQuality {
         val sim = contentRefSim ?: return false
         return sim < LATEST_BADGE_SUPPRESS_REF_SIM
     }
+
+    /** @deprecated Use [shouldShowSoftMetaBadge]; kept as alias for call-site clarity. */
+    fun shouldShowLatestMismatchBadge(
+        chapterWordCount: Int,
+        contentRefSim: Double?,
+    ): Boolean = shouldShowSoftMetaBadge(chapterWordCount, contentRefSim)
+
+    fun shouldShowTocMismatchBadge(
+        chapterWordCount: Int,
+        contentRefSim: Double?,
+    ): Boolean = shouldShowSoftMetaBadge(chapterWordCount, contentRefSim)
 
     /**
      * Probe respondTime for result-list sort: unknown/negative sink within the same
