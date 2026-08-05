@@ -55,7 +55,9 @@ Gestures: **短按**换源 = 整书；**长按** = 选单章/整书。
 1. Cronet **production** path (`CronetInterceptor`/`NewCallBack`): always timed (≤90s) + cancel UrlRequest; timeout/cancel **no** OkHttp fallback. Probe uses `withTimeoutOrNull`; progress shows in-flight names
 2. `ChangeSourceAskMemory` demotes **timeout/error/content-bad** for later asks; **empty** is session-only (does not poison global search). No failure RT write (RFC-safe)
 3. `changeSourceLoadWordCount` default **true**
-4. Early-stop subtitle strings + `ChangeSourceProgressUi`
+4. Early-stop subtitle strings + `ChangeSourceProgressUi` (no probing flicker after early-stop; 单章校验 mid-stop also shows early-stop copy)
 5. Ask-order uses `RespondTimeRank.classify` + demote tail
 6. `ChangeSourceLog` → `adb logcat -s LegadoChangeSource`
 7. Broadcast `io.legado.app.action.SET_CHANGE_SOURCE_PREFS` + deep link + MCP `set_change_source_prefs` + script `--apply-prefs`
+
+Follow-up Warning fixes: `refreshList` uses `withTimeoutOrNull`; both Cronet interceptors share `CronetHardStop` (no OkHttp stack on timeout).

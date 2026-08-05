@@ -246,15 +246,21 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                 viewModel.changeSourceProgress
                     .drop(1)
                     .collect { progress ->
-                        binding.tvDur.text = if (viewModel.isChapterVerifying) {
-                            getString(
+                        binding.tvDur.text = when {
+                            // Search early-stop wind-down only — not during 单章校验.
+                            progress.earlyStopped && !viewModel.isChapterVerifying ->
+                                requireContext().formatChangeSourceProgress(
+                                    resultCount = searchBookAdapter.itemCount,
+                                    progress = progress,
+                                    total = viewModel.totalSourceCount,
+                                )
+                            viewModel.isChapterVerifying -> getString(
                                 R.string.change_source_verify_progress,
                                 progress.completed,
                                 searchBookAdapter.itemCount.coerceAtLeast(1),
                                 progress.label
                             )
-                        } else {
-                            requireContext().formatChangeSourceProgress(
+                            else -> requireContext().formatChangeSourceProgress(
                                 resultCount = searchBookAdapter.itemCount,
                                 progress = progress,
                                 total = viewModel.totalSourceCount,

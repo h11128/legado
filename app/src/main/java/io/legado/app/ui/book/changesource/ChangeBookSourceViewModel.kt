@@ -65,7 +65,6 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
@@ -346,6 +345,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }
 
+    protected fun clearEarlyStopped() {
+        earlyStopped.set(false)
+    }
+
     private fun noteAskMiss(bookSourceUrl: String, reason: String, processDemote: Boolean) {
         sessionSoftFail.add(bookSourceUrl)
         // Empty search for this book ≠ dead source — do not poison global ask-order.
@@ -364,7 +367,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             bookSourceParts.find { it.bookSourceUrl == url }?.bookSourceName ?: url
         }
         val label = when {
-            finished && early -> ""
+            early -> "" // freeze subtitle during early-stop wind-down (no probing flicker)
             probing.isNotEmpty() -> "探测中 $probing"
             else -> ""
         }
@@ -402,7 +405,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 } finally {
                     probingNames.remove(source.bookSourceUrl)
                     completedProbeCount.incrementAndGet()
-                    publishProgress()
+                    // After early-stop, keep the early-stop subtitle stable (no probing flicker).
+                    if (earlyStopped.get()) {
+                        publishProgress(early = true)
+                    } else {
+                        publishProgress()
+                    }
                 }
                 source
             }.onEachIndexed { _, _ ->
@@ -761,8 +769,13 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 searchStateData.postValue(true)
             }.mapParallelSafe(threadCount) {
                 val source = appDb.bookSourceDao.getBookSource(it.origin)!!
-                withTimeout(AskTimeout.CHANGE_SOURCE_MS) {
+                // Align with search(): return promptly even if nested Cronet/WebView cleanup lags.
+                val ok = withTimeoutOrNull(AskTimeout.CHANGE_SOURCE_MS) {
                     loadBookInfo(source, it.toBook())
+                    true
+                }
+                if (ok != true) {
+                    noteAskMiss(it.origin, "timeout", processDemote = true)
                 }
             }.onCompletion {
                 searchStateData.postValue(false)

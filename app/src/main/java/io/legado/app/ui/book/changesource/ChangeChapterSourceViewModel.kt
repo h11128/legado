@@ -130,6 +130,7 @@ class ChangeChapterSourceViewModel(application: Application) :
         val pool = searchPoolOrIo()
         val generation = verifyGeneration.incrementAndGet()
         verifyJob = viewModelScope.launch(pool) {
+            clearEarlyStopped()
             isChapterVerifying = true
             try {
                 searchStateData.postValue(true)
