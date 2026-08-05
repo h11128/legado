@@ -106,6 +106,28 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
+    fun softFailedDoesNotVetoOkOrWeakContent() {
+        val okSoft = ChangeBookSourceQuality.contentSortTier(
+            chapterWordCount = 3800,
+            wordCountText = "字数：3800",
+            softFailed = true,
+        )
+        val weakSoft = ChangeBookSourceQuality.contentSortTier(
+            chapterWordCount = 200,
+            softFailed = true,
+        )
+        val badSoft = ChangeBookSourceQuality.contentSortTier(
+            chapterWordCount = -1,
+            wordCountText = "获取失败",
+            softFailed = true,
+        )
+        assertEquals(ChangeBookSourceQuality.TIER_OK, okSoft)
+        assertEquals(ChangeBookSourceQuality.TIER_WEAK, weakSoft)
+        assertEquals(ChangeBookSourceQuality.TIER_SOFT_FAIL, badSoft)
+        assertTrue(okSoft < badSoft)
+    }
+
+    @Test
     fun earlyStopUsesThreshold() {
         assertFalse(ChangeBookSourceQuality.shouldEarlyStop(19, enabled = true, target = 20))
         assertTrue(ChangeBookSourceQuality.shouldEarlyStop(20, enabled = true, target = 20))

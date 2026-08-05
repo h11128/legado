@@ -291,6 +291,8 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
         searchJob?.cancel()
         searchPool?.close()
         searchPool = null
+        reloadPartsOnStart = false
+        pendingScopeSnapshot = null
         mSearchId = 0L
     }
 

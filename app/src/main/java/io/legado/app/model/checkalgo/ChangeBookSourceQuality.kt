@@ -174,6 +174,8 @@ object ChangeBookSourceQuality {
             chapterWordCount == -1 && !wordCountText.isNullOrBlank() -> TIER_CONTENT_BAD
             else -> TIER_UNKNOWN
         }
+        // Content-first: session soft-fail must not bury probes that already got OK/WEAK body.
+        if (contentTier == TIER_OK || contentTier == TIER_WEAK) return contentTier
         return if (softFailed) worseTier(contentTier, TIER_SOFT_FAIL) else contentTier
     }
 
