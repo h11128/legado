@@ -32,6 +32,30 @@ class CheckHttpLimitsContractTest {
         assertTrue(service.contains("Debug.startChecking(sessionId, source)"))
     }
 
+    @Test
+    fun `change-source raises and restores shared OkHttp limits`() {
+        val vm = projectFile(
+            "app/src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceViewModel.kt"
+        )
+        assertTrue(vm.contains("configureCheckHttpLimits"))
+        assertTrue(vm.contains("restoreDefaultHttpLimits"))
+        assertTrue(vm.contains("raiseHttpLimitsForSearch"))
+        assertTrue(vm.contains("restoreHttpLimitsIfNeeded"))
+        assertTrue(vm.contains("httpLimitsEpoch"))
+        assertTrue(vm.contains("http-limits raised"))
+        assertTrue(vm.contains("contentMs="))
+        // Must not restore in stopSearch (deep-wait still needs raised caps).
+        val stopIdx = vm.indexOf("fun stopSearch()")
+        assertTrue(stopIdx >= 0)
+        val stopBlock = vm.substring(stopIdx, stopIdx + 800)
+        assertFalse(stopBlock.contains("restoreHttpLimitsIfNeeded"))
+        assertFalse(stopBlock.contains("restoreDefaultHttpLimits"))
+        // Restore after deep-wait, in finally, with generation check.
+        assertTrue(vm.contains("pending.joinAll()"))
+        assertTrue(vm.contains("restoreHttpLimitsIfNeeded(httpLimitsEpoch)"))
+        assertTrue(vm.contains("http-limits skip restore"))
+    }
+
     private fun projectFile(path: String): String {
         var root = File(requireNotNull(System.getProperty("user.dir")))
         repeat(6) {

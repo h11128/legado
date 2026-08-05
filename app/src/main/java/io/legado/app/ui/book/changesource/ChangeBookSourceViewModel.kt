@@ -38,6 +38,9 @@ import io.legado.app.model.checkalgo.ChangeSourceLog
 import io.legado.app.model.checkalgo.CheckAlgoRuntime
 import io.legado.app.model.checkalgo.CheckHostTokenBucket
 import io.legado.app.help.config.ChangeSourceTitleEmptyPrefs
+import io.legado.app.help.http.configureCheckHttpLimits
+import io.legado.app.help.http.okHttpClient
+import io.legado.app.help.http.restoreDefaultHttpLimits
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
@@ -151,6 +154,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
      * suspend, so deepInFlight can overshoot the labeled /N cap (self-test 2026-08-05).
      */
     private var deepGate: Semaphore? = null
+    /**
+     * Generation for shared OkHttp dispatcher raise/restore.
+     * Old search onCompletion must not restore after a newer [raiseHttpLimitsForSearch].
+     */
+    private val httpLimitsEpoch = AtomicInteger(0)
     /** Per-host ask pacing (RFC-002 companion) — same defaults as bulk check. */
     private var askHostBucket: CheckHostTokenBucket? = null
     val bookMap = ConcurrentHashMap<String, Book>()
@@ -296,6 +304,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     override fun onCleared() {
         super.onCleared()
+        // Force restore: no further search owns the raised caps.
+        if (httpLimitsEpoch.get() > 0) {
+            restoreDefaultHttpLimits()
+            ChangeSourceLog.i("http-limits restored onCleared")
+        }
         (searchPool as? Closeable)?.close()
         searchPool = null
         searchPoolSize = 0
@@ -303,6 +316,39 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         deepPool = null
         deepPoolSize = 0
         deepGate = null
+    }
+
+    /**
+     * Match [io.legado.app.service.CheckSourceService]: with threadCount≈100, default
+     * OkHttp maxRequests=64 makes deep getContent sit in the dispatcher queue behind asks,
+     * so UI「响应时间」shows 40–60s even when the chapter body itself is a 2–5s fetch.
+     * @return epoch that must be passed to [restoreHttpLimitsIfNeeded]
+     */
+    private fun raiseHttpLimitsForSearch(): Int {
+        val threads = threadCount()
+        val epoch = httpLimitsEpoch.incrementAndGet()
+        configureCheckHttpLimits(
+            maxRequests = (threads * 2).coerceAtMost(256),
+            maxRequestsPerHost = 8,
+        )
+        val d = okHttpClient.dispatcher
+        ChangeSourceLog.i(
+            "http-limits raised epoch=$epoch maxRequests=${d.maxRequests} " +
+                "perHost=${d.maxRequestsPerHost} threads=$threads"
+        )
+        return epoch
+    }
+
+    private fun restoreHttpLimitsIfNeeded(epoch: Int) {
+        if (epoch <= 0) return
+        if (httpLimitsEpoch.get() != epoch) {
+            ChangeSourceLog.i(
+                "http-limits skip restore epoch=$epoch current=${httpLimitsEpoch.get()}"
+            )
+            return
+        }
+        restoreDefaultHttpLimits()
+        ChangeSourceLog.i("http-limits restored defaults epoch=$epoch")
     }
 
     @CallSuper
@@ -437,6 +483,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             }
             initSearchPool()
             initDeepPool()
+            val httpEpoch = raiseHttpLimitsForSearch()
             val tPool = System.currentTimeMillis()
             val headSample = bookSourceParts.take(5).joinToString(" | ") {
                 "${it.bookSourceName}(${it.respondTime})"
@@ -455,7 +502,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     "order=${tOrder - tHeal}ms pool=${tPool - tOrder}ms total=${tPool - t0}ms " +
                     "askHead=[$headSample]"
             )
-            search()
+            search(httpLimitsEpoch = httpEpoch)
         }
     }
 
@@ -487,7 +534,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             searchBooks.removeIf { it.origin == origin }
             initSearchPool()
             initDeepPool()
-            search()
+            search(httpLimitsEpoch = raiseHttpLimitsForSearch())
         }
     }
 
@@ -581,7 +628,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }
 
-    private fun search() {
+    private fun search(httpLimitsEpoch: Int) {
         val parts = bookSourceParts.toList()
         val parallelism = threadCount()
         task = viewModelScope.launch(searchPool!!) {
@@ -642,53 +689,57 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     }
                 }.onCompletion { cause ->
                     withContext(NonCancellable + IO) {
-                        // Ask wave done — wait remaining deep probes (unless cancelled/early-stop).
-                        if (cause == null || earlyStopped.get()) {
-                            val pending = deepJobs.toList()
-                            if (pending.isNotEmpty()) {
-                                ChangeSourceLog.i(
-                                    "deep-wait jobs=${pending.size} deepInFlight=${deepInFlightNames.size}"
-                                )
-                                pending.joinAll()
+                        try {
+                            // Ask wave done — wait remaining deep probes (unless cancelled/early-stop).
+                            if (cause == null || earlyStopped.get()) {
+                                val pending = deepJobs.toList()
+                                if (pending.isNotEmpty()) {
+                                    ChangeSourceLog.i(
+                                        "deep-wait jobs=${pending.size} deepInFlight=${deepInFlightNames.size}"
+                                    )
+                                    pending.joinAll()
+                                }
+                            } else {
+                                deepJobs.forEach { it.cancel() }
                             }
-                        } else {
-                            deepJobs.forEach { it.cancel() }
-                        }
-                        applyBookQualityGates(force = true)
-                        if (earlyStopped.get()) {
-                            dropPendingWordCountRows()
-                        }
-                        RespondTimeUpdater.flush()
-                        probingNames.clear()
-                        deepInFlightNames.clear()
-                        publishProgress(
-                            early = earlyStopped.get(),
-                            finished = true,
-                            force = true,
-                        )
-                        val sorted = runCatching { sortSearchBooks(searchBooks.toList()) }
-                            .getOrDefault(searchBooks.toList())
-                        val top = sorted.take(8).joinToString(" | ") { b ->
-                            val tier = ChangeBookSourceQuality.contentSortTier(
-                                b.chapterWordCount,
-                                b.chapterWordCountText,
-                                b.origin in sessionSoftFail,
+                            applyBookQualityGates(force = true)
+                            if (earlyStopped.get()) {
+                                dropPendingWordCountRows()
+                            }
+                            RespondTimeUpdater.flush()
+                            probingNames.clear()
+                            deepInFlightNames.clear()
+                            publishProgress(
+                                early = earlyStopped.get(),
+                                finished = true,
+                                force = true,
                             )
-                            "${b.originName}(w=${b.chapterWordCount},t=$tier,ms=${b.respondTime})"
-                        }
-                        ChangeSourceLog.i(
-                            "finish cause=${cause?.javaClass?.simpleName ?: "ok"} " +
-                                "early=${earlyStopped.get()} " +
-                                "completed=${completedProbeCount.get()}/${bookSourceParts.size} " +
-                                "list=${searchBooks.size} qualityOk=${qualityOkCount.get()} " +
-                                "hits=${searchHitCount.get()} published=${listPublishCount.get()} " +
-                                "missEmpty=${missEmptyCount.get()} missTimeout=${missTimeoutCount.get()} " +
-                                "missError=${missErrorCount.get()} missContentBad=${missContentBadCount.get()} " +
-                                "top=[$top]"
-                        )
-                        searchStateData.postValue(false)
-                        if (cause == null || earlyStopped.get()) {
-                            onSearchTaskFinished(searchBooks.isEmpty())
+                            val sorted = runCatching { sortSearchBooks(searchBooks.toList()) }
+                                .getOrDefault(searchBooks.toList())
+                            val top = sorted.take(8).joinToString(" | ") { b ->
+                                val tier = ChangeBookSourceQuality.contentSortTier(
+                                    b.chapterWordCount,
+                                    b.chapterWordCountText,
+                                    b.origin in sessionSoftFail,
+                                )
+                                "${b.originName}(w=${b.chapterWordCount},t=$tier,ms=${b.respondTime})"
+                            }
+                            ChangeSourceLog.i(
+                                "finish cause=${cause?.javaClass?.simpleName ?: "ok"} " +
+                                    "early=${earlyStopped.get()} " +
+                                    "completed=${completedProbeCount.get()}/${bookSourceParts.size} " +
+                                    "list=${searchBooks.size} qualityOk=${qualityOkCount.get()} " +
+                                    "hits=${searchHitCount.get()} published=${listPublishCount.get()} " +
+                                    "missEmpty=${missEmptyCount.get()} missTimeout=${missTimeoutCount.get()} " +
+                                    "missError=${missErrorCount.get()} missContentBad=${missContentBadCount.get()} " +
+                                    "top=[$top]"
+                            )
+                            searchStateData.postValue(false)
+                            if (cause == null || earlyStopped.get()) {
+                                onSearchTaskFinished(searchBooks.isEmpty())
+                            }
+                        } finally {
+                            restoreHttpLimitsIfNeeded(httpLimitsEpoch)
                         }
                     }
                 }.catch {
@@ -869,20 +920,27 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             title = title.substring(0, 20) + "…"
         }
         val startTime = System.currentTimeMillis()
+        var contentMs = -1L
+        var evalMs = -1L
         var processedContent: String? = null
         val pair = try {
             val nextChapterUrl = chapters.getOrNull(chapterIndex + 1)?.url
+            val tContent0 = System.currentTimeMillis()
             var content = WebBook.getContentAwait(source, book, bookChapter, nextChapterUrl, false)
             content = contentProcessor.getContent(oldBook!!, bookChapter, content, false).toString()
+            contentMs = System.currentTimeMillis() - tContent0
             processedContent = content
+            val tEval0 = System.currentTimeMillis()
             val evalCtx = bookChangeContentEvalContext(chapterIndex, bookChapter.title)
             val diag = ChangeChapterVerify.evaluateContentDiag(content, evalCtx)
+            evalMs = System.currentTimeMillis() - tEval0
             diag.refSim?.let { contentRefSimByOrigin[source.bookSourceUrl] = it }
             ChangeSourceLog.i(
                 "phase word-eval origin=${source.bookSourceUrl} reason=${diag.reason} " +
                     "len=${diag.contentLen} stitch=${diag.stitch} " +
                     "refSim=${diag.refSim?.let { "%.4f".format(it) } ?: "-"} " +
                     "expected=${diag.expectedChars ?: "-"} " +
+                    "contentMs=$contentMs evalMs=$evalMs " +
                     "chapter=[$chapterIndex] ${title.take(24)}"
             )
             when (val quality = diag.quality) {
@@ -906,6 +964,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             if (t is CancellationException) throw t
             ChangeSourceLog.i(
                 "phase word-eval origin=${source.bookSourceUrl} reason=fetch_error " +
+                    "contentMs=$contentMs evalMs=$evalMs " +
                     "err=${t.javaClass.simpleName}:${t.localizedMessage?.take(80)}"
             )
             -1 to "[${chapterIndex + 1}] ${title}\n获取字数失败：${t.localizedMessage}"
@@ -923,7 +982,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         )
         ChangeSourceLog.i(
             "phase word origin=${source.bookSourceUrl} chars=${pair.first} " +
-                "tier=$tier ms=${endTime - startTime} " +
+                "tier=$tier ms=${endTime - startTime} contentMs=$contentMs evalMs=$evalMs " +
                 "ok=${ChangeBookSourceQuality.isQualityOkWordCount(pair.first)} " +
                 "list=${searchBooks.size}"
         )
@@ -1174,11 +1233,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             }
             searchCallback?.upAdapter()
             initSearchPool()
-            refreshList()
+            val httpEpoch = raiseHttpLimitsForSearch()
+            refreshList(httpLimitsEpoch = httpEpoch)
         }
     }
 
-    private fun refreshList() {
+    private fun refreshList(httpLimitsEpoch: Int) {
         task = viewModelScope.launch(searchPool!!) {
             flow {
                 for (searchBook in searchBookList) {
@@ -1197,7 +1257,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     noteAskMiss(it.origin, "timeout", processDemote = true)
                 }
             }.onCompletion {
-                searchStateData.postValue(false)
+                try {
+                    searchStateData.postValue(false)
+                } finally {
+                    restoreHttpLimitsIfNeeded(httpLimitsEpoch)
+                }
             }.catch {
                 AppLog.put("换源刷新列表出错\n${it.localizedMessage}", it)
             }.collect()
@@ -1259,6 +1323,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         // Do not close searchPool here: onCompletion may still flush on it;
         // Pool is reused while threadCount() is unchanged; resized in initSearchPool().
         // onCleared() attempts Closeable.close() (Executor pools); limitedParallelism is a no-op.
+        // Http limits: restored in search onCompletion / onCleared (after deep-wait), not here.
         if (wasActive) {
             ChangeSourceLog.i(
                 "stop completed=${completedProbeCount.get()}/${bookSourceParts.size} " +
