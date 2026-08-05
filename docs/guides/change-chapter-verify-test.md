@@ -1,7 +1,12 @@
 # Change-source device verify
 
 Skill: `skills/legado-change-source-test/SKILL.md`  
-Script: `scripts/change-source-smoke.sh`  
+Scripts:
+
+- `scripts/change-source-smoke.sh` — unit / install / prefs / wrappers
+- `scripts/change-source-device-session.sh` — open book → 换源 → logcat → analyze
+- `scripts/change-source-analyze-log.py` — gate report from `LegadoChangeSource` dump
+
 Package: `com.legado.app.debug`
 
 Covers **整书换源** / **单章换源** quality + ask-order + early-stop + MCP check writeback.
@@ -16,32 +21,48 @@ Covers **整书换源** / **单章换源** quality + ask-order + early-stop + MC
 
 ```bash
 export GRADLE_USER_HOME="${GRADLE_USER_HOME:-/e/.gradle}"   # or /mnt/e/.gradle on WSL
-./scripts/change-source-smoke.sh
-./scripts/change-source-smoke.sh --apply-prefs    # broadcast SET_CHANGE_SOURCE_PREFS
-./scripts/change-source-smoke.sh --assert-prefs
-# or MCP: set_change_source_prefs / get_change_source_prefs (after app/MCP warm)
-# or deep link: legado://import/changeSourcePrefs?loadWordCount=true&earlyStop=true
+./scripts/change-source-smoke.sh --unit-only
+./scripts/change-source-smoke.sh --apply-prefs
+./scripts/change-source-smoke.sh --device-session          # preferred agent path
+# or stepwise:
+./scripts/change-source-smoke.sh --install-only
+./scripts/change-source-device-session.sh --no-install --book-url 'http://…'
+./scripts/change-source-smoke.sh --analyze-log temp/legado_change_source_session_*.txt
 adb logcat -s LegadoChangeSource
 ```
 
 | Layer | Prove | How |
 |---|---|---|
 | A Unit | checkalgo + Rfc001 + demotion | `--unit-only` |
-| B Install | code on phone | script → debug package |
-| C UI | badges + sort + early-stop subtitle | 短按整书；长按→单章 |
+| B Install | code on phone | `--install-only` / `--device-session` |
+| C Device session | ask parallel + deep cap + early-stop + list-drop | `--device-session` → analyze JSON/MD in `temp/` |
 | D Prefs | quality path armed | `--apply-prefs` / MCP |
 | E MCP | check status writeback | 1 URL `start_check_sources` |
 
+## Log gates (analyzer)
+
+`change-source-analyze-log.py` (add `--expect-deep-cap` for strict deep concurrency):
+
+| Gate | Pass when |
+|---|---|
+| `has_start` / `has_finish` | session head+tail present |
+| `ask_parallel_ok` | `inFlight` reaches ≥ half of ask cap |
+| `deep_within_cap` | max `deep` ≤ `deepParallel` (requires Semaphore gate) |
+| `list_drop_on_bad` | content-bad drops and/or OK word-evals exist |
+| `quality_ok_useful` | `qualityOk≥5` or early-stop fired |
+| `early_stop_honored` | if pref on and target hit → `early=true` |
+
+Never claim PASS without the log file path + analyzer verdict.
+
 ## UI pass criteria
 
-- Progress shows **探测中 &lt;源&gt;** while probing (not only last completed name)
-- Early-stop: subtitle `已足够好源（N）· 已停止 …`
-- Bad rows: `疑似错书/广告劫持` / `正文过短` / …
-- Good rows: `字数：N`
-- After a timeout/empty miss, that URL is demoted for later asks in-process (no DB failure write)
-- Stall `探测中 X` **>70s** → fail hard-cancel
+- Progress: `结果 N · 已询问 a/b · 询问中 x/y · 询问中 … · 深探 n/cap` (not bouncing indeterminate bar)
+- Early-stop: `已足够好源（N）· 已停止 …`
+- Bad rows removed after probe (`list- drop`), not left as hijack spam
+- Good rows: `字数：N` (pending rows may show briefly while deep runs)
+- Stall single probe **>70s** → fail hard-cancel
 
-Gestures: **短按**换源 = 整书；**长按** = 选单章/整书。
+Toolbar **换源** opens 整书 dialog; long-press still offers 单章/整书 where wired.
 
 ## Agent run record
 
@@ -49,7 +70,9 @@ Gestures: **短按**换源 = 整书；**长按** = 选单章/整书。
 |---|---|---|
 | 2026-08-05 | PASS (partial: earlyStop=false) | pre-fix device run; motivated the 7 fixes below |
 | 2026-08-05b | code fix | hard-cancel Cronet + ask memory demotion + loadWordCount default + early-stop UI + LegadoChangeSource log + prefs deep link/MCP |
-| 2026-08-05c | PASS | Agent self-test on SM-A366U1, book《吞噬星空：收徒万倍返还》, APK `3.26080601debug`. Log: `temp/legado_change_source_selftest_2026-08-05.txt`. `start` threads=100 deepParallel=16; `inFlight`→100; early `list+` pending; `list- drop` content-bad×21; `ok_stitch_override`×19 keeps good stitch; `early-stop qualityOk=20`; finish `list=65 qualityOk=20 hits=89` (~2m20s). UI: `已足够好源（20）· 已停止 779/1113`, top rows `字数：3xxx`, no hijack badges in viewport. Note: progress `deep=N/16` can overshoot N (cosmetic). |
+| 2026-08-05c | PASS product / FAIL deep_cap | [self-test report](../reference/change-source-selftest-2026-08-05.md); log `temp/legado_change_source_selftest_2026-08-05.txt`; qualityOk=20 early-stop; max deep=49/16 |
+| 2026-08-05d | harness + deep Semaphore | device-session script + analyzer; deep `Semaphore` so `--expect-deep-cap` can PASS on re-run |
+| 2026-08-05e | PASS (all gates) | Automated `--device-session`; log `temp/legado_change_source_session_2026-08-05_112211.txt`; max deep=16/16; qualityOk=20 early-stop |
 
 ## Fixes landed (was improvement backlog)
 
@@ -60,5 +83,9 @@ Gestures: **短按**换源 = 整书；**长按** = 选单章/整书。
 5. Ask-order uses `RespondTimeRank.classify` + demote tail
 6. `ChangeSourceLog` → `adb logcat -s LegadoChangeSource`
 7. Broadcast `io.legado.app.action.SET_CHANGE_SOURCE_PREFS` + deep link + MCP `set_change_source_prefs` + script `--apply-prefs`
+8. Ask/deep split + early `list+` + content-bad drop + stitch override (see self-test report)
+9. Deep **Semaphore** cap (true ≤`deepParallel` including suspended IO) + automated device-session/analyze harness
 
 Follow-up Warning fixes: `refreshList` uses `withTimeoutOrNull`; both Cronet interceptors share `CronetHardStop` (no OkHttp stack on timeout).
+
+Open backlog after 2026-08-05c: soft latest-mismatch noise on OK rows; title-scoped empty skip; locale progress string drift — see self-test report.

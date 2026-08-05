@@ -67,6 +67,7 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.Closeable
@@ -138,6 +139,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     protected var task: Job? = null
     private var deepPool: CoroutineDispatcher? = null
     private var deepPoolSize: Int = 0
+    /**
+     * Hard cap on concurrent deep probes (including suspended network).
+     * [Dispatchers.IO.limitedParallelism] alone is not enough: permits release on
+     * suspend, so deepInFlight can overshoot the labeled /N cap (self-test 2026-08-05).
+     */
+    private var deepGate: Semaphore? = null
     val bookMap = ConcurrentHashMap<String, Book>()
     val searchDataFlow = callbackFlow {
 
@@ -284,6 +291,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         (deepPool as? Closeable)?.close()
         deepPool = null
         deepPoolSize = 0
+        deepGate = null
     }
 
     @CallSuper
@@ -322,10 +330,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun initDeepPool() {
         val n = deepParallel()
-        if (deepPool != null && deepPoolSize == n) return
+        if (deepPool != null && deepPoolSize == n && deepGate != null) return
         (deepPool as? Closeable)?.close()
         deepPoolSize = n
         deepPool = Dispatchers.IO.limitedParallelism(n)
+        deepGate = Semaphore(n)
     }
 
     companion object {
@@ -705,11 +714,18 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 publishSearchBook(searchBook)
             }
             val pool = deepPool ?: IO
-            val job = viewModelScope.launch(pool) {
-                deepInFlightNames.add(source.bookSourceUrl)
-                publishProgress()
+            val gate = deepGate
+            // Register before dispatch so early-stop cancel cannot miss this job.
+            val deepJob = Job()
+            deepJobs.add(deepJob)
+            viewModelScope.launch(pool + deepJob) {
+                var held = false
                 try {
+                    gate?.acquire()
+                    held = gate != null
                     if (earlyStopped.get()) return@launch
+                    deepInFlightNames.add(source.bookSourceUrl)
+                    publishProgress()
                     resultBooks.forEach { searchBook ->
                         currentCoroutineContext().ensureActive()
                         if (earlyStopped.get()) return@launch
@@ -725,11 +741,14 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     noteAskMiss(source.bookSourceUrl, "error", processDemote = true)
                 } finally {
                     deepInFlightNames.remove(source.bookSourceUrl)
+                    if (held) {
+                        gate?.release()
+                    }
+                    deepJobs.remove(deepJob)
+                    deepJob.complete()
                     publishProgress()
                 }
             }
-            deepJobs.add(job)
-            job.invokeOnCompletion { deepJobs.remove(job) }
             true
         }
         if (ok != true) {

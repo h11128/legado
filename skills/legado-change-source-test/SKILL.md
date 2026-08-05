@@ -10,7 +10,12 @@ description: >-
 
 Process SOT: `docs/guides/change-chapter-verify-test.md`  
 Repo skill: `skills/legado-change-source-test/SKILL.md`  
-Script: `scripts/change-source-smoke.sh`  
+Scripts:
+
+- `scripts/change-source-smoke.sh`
+- `scripts/change-source-device-session.sh`
+- `scripts/change-source-analyze-log.py`
+
 Debug package: `com.legado.app.debug` (override `LEGADO_DEBUG_PKG`)
 
 <!-- Mirror: E:/shared-skills/legado-change-source-test/ ; .cursor/skills/ (local exclude) -->
@@ -19,27 +24,31 @@ Debug package: `com.legado.app.debug` (override `LEGADO_DEBUG_PKG`)
 
 1. `GRADLE_USER_HOME` = `E:/.gradle` (Git Bash often `/e/.gradle`; WSL `/mnt/e/.gradle`).
 2. USB device with bookshelf **网络书** that has ≥2 alternate sources; mid-chapter with cached body preferred.
-3. Never claim PASS without evidence (gradle / UI dump / MCP JSON / `LegadoChangeSource` logcat). Partial = note which prefs/gates were off.
+3. Never claim PASS without evidence (gradle / UI dump / MCP JSON / `LegadoChangeSource` logcat **and** analyzer verdict). Partial = note which prefs/gates were off.
 
 ## One-shot
 
 ```bash
 export GRADLE_USER_HOME="${GRADLE_USER_HOME:-/e/.gradle}"
-./scripts/change-source-smoke.sh
+./scripts/change-source-smoke.sh --unit-only
 ./scripts/change-source-smoke.sh --apply-prefs
-./scripts/change-source-smoke.sh --assert-prefs
+./scripts/change-source-smoke.sh --device-session
+# Re-analyze a saved dump:
+./scripts/change-source-smoke.sh --analyze-log temp/legado_change_source_session_*.txt
 adb logcat -s LegadoChangeSource
 ```
 
-## Device checklist (≤5 min)
+`--device-session` opens last-read book (or `CHANGE_SOURCE_BOOK_URL` / `--book-url`), taps 换源, starts **once**, waits for `finish`, writes log + `temp/change_source_analyze_*.md|json`.
+
+## Device checklist (≤5 min manual fallback)
 
 | Step | Action | Pass |
 |---|---|---|
 | Prefs | `--apply-prefs` or MCP `set_change_source_prefs` | `--assert-prefs` OK |
-| 整书 | 短按「换源」 | `探测中 …`；坏源劫持徽章；好源 `字数：N`；足够好后「已足够好源」 |
-| 单章 | 长按「换源」→ 单章换源 | 同上徽章 |
-| Stall | 单源探测 >70s | fail hard-cancel |
-| MCP | `start_check_sources` 1 URL | `finished`；失败 `respondTime > 180000` 或失效分组 |
+| 整书 | toolbar「换源」 | `已询问`/`询问中`/`深探`; good `字数：N`; early-stop subtitle |
+| 单章 | long-press「换源」→ 单章换源 | same quality path |
+| Stall | single probe >70s | fail hard-cancel |
+| MCP | `start_check_sources` 1 URL | `finished`; fail RT / 失效分组 |
 
 ## Unit
 
@@ -50,4 +59,6 @@ adb logcat -s LegadoChangeSource
 
 ## Record
 
-Append one row to the guide「Agent run record」. Use `PASS` / `PASS (partial: …)` / `FAIL`.
+1. Keep the session log under `temp/legado_change_source_*.txt`.
+2. Run analyzer; paste verdict into guide「Agent run record」.
+3. For regressions worth keeping, add/update `docs/reference/change-source-selftest-*.md`.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Change-source smoke: unit tests + installAppDebug (+ optional pref assert).
+# Change-source smoke: unit tests + installAppDebug (+ optional pref assert / device session).
 # Usage:
 #   GRADLE_USER_HOME=E:/.gradle ./scripts/change-source-smoke.sh
 #   ./scripts/change-source-smoke.sh --prefs
@@ -7,6 +7,8 @@
 #   ./scripts/change-source-smoke.sh --apply-prefs
 #   ./scripts/change-source-smoke.sh --unit-only
 #   ./scripts/change-source-smoke.sh --install-only
+#   ./scripts/change-source-smoke.sh --device-session [--no-install]   # full UI + log analyze
+#   ./scripts/change-source-smoke.sh --analyze-log PATH
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -26,14 +28,25 @@ if [[ -z "${GRADLE_USER_HOME:-}" ]]; then
 fi
 
 MODE="all"
+ANALYZE_LOG=""
+DEVICE_EXTRA=()
 case "${1:-}" in
   --prefs) MODE="prefs" ;;
   --assert-prefs) MODE="assert-prefs" ;;
   --apply-prefs) MODE="apply-prefs" ;;
   --unit-only) MODE="unit" ;;
   --install-only) MODE="install" ;;
+  --device-session)
+    MODE="device-session"
+    shift
+    DEVICE_EXTRA=("$@")
+    ;;
+  --analyze-log)
+    MODE="analyze-log"
+    ANALYZE_LOG="${2:-}"
+    ;;
   -h|--help)
-    sed -n '2,12p' "$0"
+    sed -n '2,14p' "$0"
     exit 0
     ;;
 esac
@@ -113,6 +126,13 @@ case "$MODE" in
   apply-prefs) apply_prefs ;;
   unit) unit ;;
   install) install ;;
+  device-session)
+    exec "$ROOT/scripts/change-source-device-session.sh" "${DEVICE_EXTRA[@]}"
+    ;;
+  analyze-log)
+    [[ -n "$ANALYZE_LOG" ]] || { echo "usage: --analyze-log PATH" >&2; exit 2; }
+    python "$ROOT/scripts/change-source-analyze-log.py" "$ANALYZE_LOG" --expect-deep-cap
+    ;;
   all)
     unit
     install
@@ -121,6 +141,7 @@ case "$MODE" in
       dump_prefs || echo "WARN: prefs unread — run --apply-prefs or MCP set_change_source_prefs" >&2
     fi
     echo "OK: unit+install done. Device UI: docs/guides/change-chapter-verify-test.md"
+    echo "Full session: ./scripts/change-source-smoke.sh --device-session"
     echo "Logcat: adb logcat -s LegadoChangeSource"
     ;;
 esac
