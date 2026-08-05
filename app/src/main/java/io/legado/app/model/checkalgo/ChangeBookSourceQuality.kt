@@ -23,6 +23,13 @@ object ChangeBookSourceQuality {
     /** Digram Jaccard on latest titles: below this vs local ⇒ mismatch. */
     const val LATEST_REF_SIM_MIN = 0.06
 
+    /**
+     * When the probed **chapter body** already matches local ref this strongly,
+     * hide 「最新章疑似不一致」— tip titles often lag while dur-chapter text is correct
+     * (self-test 2026-08-05: OK rows still showed latest badges).
+     */
+    const val LATEST_BADGE_SUPPRESS_REF_SIM = 0.50
+
     /** Peer latest-title cluster edge. */
     const val LATEST_PEER_SIM_MIN = 0.10
 
@@ -189,10 +196,32 @@ object ChangeBookSourceQuality {
 
     /**
      * Light penalty for latest/TOC mismatch badges. Applied after content + respondTime.
+     * Quality-OK bodies skip the penalty — tip mismatch is noise once chapter text matched.
      */
-    fun softMetaPenalty(metaTiers: Int): Int = when (metaTiers) {
-        TIER_LATEST_BAD, TIER_TOC_BAD -> 1
-        else -> 0
+    fun softMetaPenalty(metaTiers: Int, chapterWordCount: Int = Int.MIN_VALUE): Int {
+        if (chapterWordCount != Int.MIN_VALUE && isQualityOkWordCount(chapterWordCount)) {
+            return 0
+        }
+        return when (metaTiers) {
+            TIER_LATEST_BAD, TIER_TOC_BAD -> 1
+            else -> 0
+        }
+    }
+
+    /**
+     * Whether to show / apply 「最新章疑似不一致」 for this row.
+     * - Pending (`chapterWordCount==0`): never — tip text is noise while deep runs.
+     * - Quality-OK: suppress when body refSim is strong (or unknown / no local cache).
+     * - Otherwise: show.
+     */
+    fun shouldShowLatestMismatchBadge(
+        chapterWordCount: Int,
+        contentRefSim: Double?,
+    ): Boolean {
+        if (chapterWordCount == 0) return false
+        if (!isQualityOkWordCount(chapterWordCount)) return true
+        val sim = contentRefSim ?: return false
+        return sim < LATEST_BADGE_SUPPRESS_REF_SIM
     }
 
     /**

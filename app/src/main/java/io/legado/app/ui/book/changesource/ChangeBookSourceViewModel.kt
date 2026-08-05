@@ -123,6 +123,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private val probingNames = ConcurrentHashMap.newKeySet<String>()
     /** Hits still in toc/content after ask slot released. */
     private val deepInFlightNames = ConcurrentHashMap.newKeySet<String>()
+    /** Last content digram Jaccard vs local ref (origin → sim); used to suppress tip badges. */
+    private val contentRefSimByOrigin = ConcurrentHashMap<String, Double>()
     private val completedProbeCount = AtomicInteger(0)
     private val qualityOkCount = AtomicInteger(0)
     private val earlyStopped = AtomicBoolean(false)
@@ -151,6 +153,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         searchCallback = object : SourceCallback {
 
             override fun searchSuccess(searchBook: SearchBook) {
+                // Early-stop: never re-accept unfinished pending rows after dropPending.
+                if (earlyStopped.get() && searchBook.chapterWordCount == 0) return
                 searchBook.releaseHtmlData()
                 appDb.searchBookDao.insert(searchBook)
                 val accepted = synchronized(searchBooks) {
@@ -237,7 +241,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 }
                 .thenBy {
                     ChangeBookSourceQuality.softMetaPenalty(
-                        qualityTiers[it.origin] ?: ChangeBookSourceQuality.TIER_UNKNOWN
+                        qualityTiers[it.origin] ?: ChangeBookSourceQuality.TIER_UNKNOWN,
+                        chapterWordCount = it.chapterWordCount,
                     )
                 }
                 .thenBy { it.originOrder }
@@ -369,6 +374,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             wordCountEvalContext = null
             wordCountEvalByLocalIndex.clear()
             probeContentSamples.clear()
+            contentRefSimByOrigin.clear()
             qualityTiers.clear()
             sessionSoftFail.clear()
             probingNames.clear()
@@ -451,6 +457,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             wordCountEvalContext = null
             wordCountEvalByLocalIndex.clear()
             probeContentSamples.clear()
+            contentRefSimByOrigin.clear()
             qualityTiers.clear()
             sessionSoftFail.clear()
             probingNames.clear()
@@ -521,7 +528,14 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             else -> "询问中 $sample"
         }
         val deepLabel = if (deepInFlight > 0) "深探$deepInFlight/${deepParallel()}" else ""
-        val probingLabel = listOf(askLabel, deepLabel).filter { it.isNotEmpty() }.joinToString(" · ")
+        val okHint = if (!early && AppConfig.changeSourceEarlyStop) {
+            "好源${qualityOkCount.get()}/${AppConfig.changeSourceEarlyStopCount}"
+        } else {
+            ""
+        }
+        val probingLabel = listOf(okHint, askLabel, deepLabel)
+            .filter { it.isNotEmpty() }
+            .joinToString(" · ")
         val label = when {
             early -> "" // freeze subtitle during early-stop wind-down (no probing flicker)
             else -> probingLabel
@@ -565,6 +579,14 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     probingNames.add(source.bookSourceUrl)
                     publishProgress()
                     try {
+                        if (ChangeSourceAskMemory.isTitleEmpty(name, author, source.bookSourceUrl)) {
+                            ChangeSourceLog.i(
+                                "miss empty-cached ${source.bookSourceUrl} " +
+                                    "done=${completedProbeCount.get()} list=${searchBooks.size} " +
+                                    "inFlight=${probingNames.size}"
+                            )
+                            return@mapParallel source
+                        }
                         // Ask only — deep toc/word scheduled separately so empties keep draining.
                         searchAsk(source)
                     } catch (e: TimeoutCancellationException) {
@@ -617,6 +639,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                             deepJobs.forEach { it.cancel() }
                         }
                         applyBookQualityGates(force = true)
+                        if (earlyStopped.get()) {
+                            dropPendingWordCountRows()
+                        }
                         RespondTimeUpdater.flush()
                         probingNames.clear()
                         deepInFlightNames.clear()
@@ -678,6 +703,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             val searchElapsed = System.currentTimeMillis() - startTime
             if (resultBooks.isEmpty()) {
                 noteAskMiss(source.bookSourceUrl, "empty", processDemote = false)
+                ChangeSourceAskMemory.noteTitleEmpty(name, author, source.bookSourceUrl)
                 return@withTimeoutOrNull true
             }
             searchHitCount.incrementAndGet()
@@ -693,6 +719,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     "list=${searchBooks.size} inFlight=${probingNames.size}"
             )
             if (!deep) {
+                if (earlyStopped.get()) return@withTimeoutOrNull true
                 resultBooks.forEach { searchBook ->
                     searchBook.respondTime = searchElapsed.toInt()
                     publishSearchBook(searchBook)
@@ -703,6 +730,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 "deep-schedule origin=${source.bookSourceUrl} " +
                     "loadInfo=$loadInfo loadToc=$loadToc loadWordCount=$loadWordCount"
             )
+            if (earlyStopped.get()) return@withTimeoutOrNull true
             // Early list so UI fills while ask slots keep draining empties.
             // Do NOT skip on latestMatchesLocal==false: lagging mirrors (same book, older tip)
             // must still deep-probe; wrong books fail content ref_sim and are dropped.
@@ -713,6 +741,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     getApplication<Application>().getString(R.string.change_source_pending_word)
                 publishSearchBook(searchBook)
             }
+            if (earlyStopped.get()) return@withTimeoutOrNull true
             val pool = deepPool ?: IO
             val gate = deepGate
             // Register before dispatch so early-stop cancel cannot miss this job.
@@ -818,6 +847,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             processedContent = content
             val evalCtx = bookChangeContentEvalContext(chapterIndex, bookChapter.title)
             val diag = ChangeChapterVerify.evaluateContentDiag(content, evalCtx)
+            diag.refSim?.let { contentRefSimByOrigin[source.bookSourceUrl] = it }
             ChangeSourceLog.i(
                 "phase word-eval origin=${source.bookSourceUrl} reason=${diag.reason} " +
                     "len=${diag.contentLen} stitch=${diag.stitch} " +
@@ -928,14 +958,36 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             searchBook.latestChapterTitle,
         )) {
             false -> {
-                mergeTier(origin, ChangeBookSourceQuality.TIER_LATEST_BAD)
-                searchBook.chapterWordCountText = appendBadge(
-                    searchBook.chapterWordCountText,
-                    getApplication<Application>().getString(R.string.change_source_latest_mismatch),
-                )
+                if (ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+                        searchBook.chapterWordCount,
+                        contentRefSimByOrigin[origin],
+                    )
+                ) {
+                    mergeTier(origin, ChangeBookSourceQuality.TIER_LATEST_BAD)
+                    searchBook.chapterWordCountText = appendBadge(
+                        searchBook.chapterWordCountText,
+                        getApplication<Application>().getString(R.string.change_source_latest_mismatch),
+                    )
+                }
             }
             else -> Unit
         }
+    }
+
+    /** Drop unfinished early-list rows after early-stop cancels deep probes. */
+    private fun dropPendingWordCountRows() {
+        val removed = synchronized(searchBooks) {
+            val doomed = searchBooks.filter { it.chapterWordCount == 0 }
+            if (doomed.isEmpty()) return@synchronized emptyList()
+            searchBooks.removeAll { it.chapterWordCount == 0 }
+            doomed
+        }
+        if (removed.isEmpty()) return
+        runCatching { appDb.searchBookDao.delete(*removed.toTypedArray()) }
+        searchCallback?.upAdapter()
+        ChangeSourceLog.i(
+            "list- drop pending-cancel count=${removed.size} size=${searchBooks.size}"
+        )
     }
 
     private fun applyBookQualityGates(force: Boolean) {
@@ -961,13 +1013,19 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 localLatest = oldBook?.latestChapterTitle,
             )
             for (origin in latestOutliers) {
-                mergeTier(origin, ChangeBookSourceQuality.TIER_LATEST_BAD)
-                searchBooks.find { it.origin == origin }?.let { book ->
-                    book.chapterWordCountText = appendBadge(
-                        book.chapterWordCountText,
-                        getApplication<Application>().getString(R.string.change_source_latest_mismatch),
+                val book = searchBooks.find { it.origin == origin } ?: continue
+                if (!ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+                        book.chapterWordCount,
+                        contentRefSimByOrigin[origin],
                     )
+                ) {
+                    continue
                 }
+                mergeTier(origin, ChangeBookSourceQuality.TIER_LATEST_BAD)
+                book.chapterWordCountText = appendBadge(
+                    book.chapterWordCountText,
+                    getApplication<Application>().getString(R.string.change_source_latest_mismatch),
+                )
             }
         }
         if (force || titles.size >= ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES ||

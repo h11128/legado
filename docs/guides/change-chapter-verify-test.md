@@ -73,6 +73,7 @@ Toolbar **换源** opens 整书 dialog; long-press still offers 单章/整书 wh
 | 2026-08-05c | PASS product / FAIL deep_cap | [self-test report](../reference/change-source-selftest-2026-08-05.md); log `temp/legado_change_source_selftest_2026-08-05.txt`; qualityOk=20 early-stop; max deep=49/16 |
 | 2026-08-05d | harness + deep Semaphore | device-session script + analyzer; deep `Semaphore` so `--expect-deep-cap` can PASS on re-run |
 | 2026-08-05e | PASS (all gates) | Automated `--device-session`; log `temp/legado_change_source_session_2026-08-05_112211.txt`; max deep=16/16; qualityOk=20 early-stop |
+| 2026-08-05f | PASS | UX/perf on device; log `temp/legado_change_source_session_2026-08-05_114404.txt`; finish list=20=qualityOk; UI no latest/pending badges; max deep=16/16; label 好源 k/20 |
 
 ## Fixes landed (was improvement backlog)
 
@@ -88,4 +89,9 @@ Toolbar **换源** opens 整书 dialog; long-press still offers 单章/整书 wh
 
 Follow-up Warning fixes: `refreshList` uses `withTimeoutOrNull`; both Cronet interceptors share `CronetHardStop` (no OkHttp stack on timeout).
 
-Open backlog after 2026-08-05c: soft latest-mismatch noise on OK rows; title-scoped empty skip; locale progress string drift — see self-test report.
+Open backlog after 2026-08-05e: further perf/UX ideas in
+[self-test report](../reference/change-source-selftest-2026-08-05.md)
+(remaining: host pacing, shorter ask timeout for known-slow tails — optional).
+
+Landed 2026-08-05f: latest-badge suppress on strong content; title-scoped empty
+skip; locale progress strings; `好源 k/n` progress hint; drop pending on early-stop.

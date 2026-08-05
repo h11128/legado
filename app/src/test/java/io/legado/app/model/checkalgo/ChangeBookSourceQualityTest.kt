@@ -97,7 +97,54 @@ class ChangeBookSourceQualityTest {
         )
         assertEquals(ChangeBookSourceQuality.TIER_OK, ok)
         assertEquals(1, ChangeBookSourceQuality.softMetaPenalty(ChangeBookSourceQuality.TIER_LATEST_BAD))
+        assertEquals(
+            0,
+            ChangeBookSourceQuality.softMetaPenalty(
+                ChangeBookSourceQuality.TIER_LATEST_BAD,
+                chapterWordCount = 3800,
+            ),
+        )
         assertEquals(0, ChangeBookSourceQuality.softMetaPenalty(ChangeBookSourceQuality.TIER_OK))
+    }
+
+    @Test
+    fun suppressLatestBadgeWhenContentOkAndStrongRef() {
+        assertFalse(
+            ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+                chapterWordCount = 3800,
+                contentRefSim = 0.90,
+            )
+        )
+        assertFalse(
+            ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+                chapterWordCount = 3800,
+                contentRefSim = 0.50,
+            )
+        )
+        assertFalse(
+            ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+                chapterWordCount = 3800,
+                contentRefSim = null,
+            )
+        )
+        assertFalse(
+            ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+                chapterWordCount = 0,
+                contentRefSim = null,
+            )
+        )
+        assertTrue(
+            ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+                chapterWordCount = 3800,
+                contentRefSim = 0.10,
+            )
+        )
+        assertTrue(
+            ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+                chapterWordCount = -1,
+                contentRefSim = 0.90,
+            )
+        )
     }
 
     @Test

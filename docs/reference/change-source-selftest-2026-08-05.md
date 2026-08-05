@@ -82,41 +82,37 @@ UI subtitle at end: `结果 65 · 已足够好源（20）· 已停止 779 / 1113
 
 ## Optimization backlog (from this run)
 
-### P0 — Deep gate real concurrency (fixed in same change)
+### P0 — Deep gate real concurrency (fixed)
 
-`Dispatchers.IO.limitedParallelism(16)` frees the permit when the coroutine
-**suspends on network**, so many deep HTTP calls run together (`deep` peaked at 49).
-Fix: acquire `Semaphore(deepParallel)` around each deep job so in-flight
-(including suspended) stays ≤ cap; progress `深探 n/16` becomes truthful.
+`Semaphore(deepParallel)` — re-verify PASS max deep=16/16.
 
-### P1 — Soft meta noise on good rows
+### P1 — Soft meta noise on good rows (fixed)
 
-Top OK rows still show `最新章疑似不一致` beside `字数：3xxx`. Soft meta is
-informative but clutters “good enough” results. Options: demote soft badges
-below word-count line, or hide latest mismatch when content `refSim` is high.
+Suppress 「最新章疑似不一致」 when chapter body is quality-OK and
+`refSim ≥ 0.50` (or no ref). Soft sort penalty also cleared for quality-OK.
 
-### P1 — `missEmpty=426` still dominates ask cost
+### P1 — `missEmpty` ask cost (fixed)
 
-~55% of asks empty for this title. Not a regression, but early-stop at 20 OK
-still burned ~780 asks. Ideas: tighter ask-order using prior empty memory for
-*this book title* (session already demotes timeout/error/content-bad; empty is
-intentionally session-only globally — maybe title-scoped empty skip).
+Title-scoped empty cache: same (name, author) skips network on later asks
+(`miss empty-cached`). Does not poison global ask-order.
 
-### P2 — Locale progress strings drift
+### P2 — Locale progress strings (fixed)
 
-`values-zh` uses「已询问」; `zh-rHK` / `zh-rTW` still「已完成」; JA/ES still
-“done/parallel”. Align copy with ask/deep split semantics.
+zh-HK/TW / JA / ES / PT / VI progress copy aligned to asked/asking semantics.
 
-### P2 — Guide gesture wording
+### Extra UX from same pass
 
-Skill said 短按=整书; on this build the toolbar 换源 opens 整书 dialog
-directly (long-press still available). Keep docs in sync with actual menu.
+- Progress label shows `好源 k/target` while asking (early-stop armed).
+- Early-stop drops unfinished pending (`chapterWordCount==0`) rows so list is not full of「校验中」.
 
-### P3 — Re-verify after deep Semaphore
+### Further perf / UX ideas (not in this pass)
 
-**Done 2026-08-05e:** `./scripts/change-source-device-session.sh --no-install`
-→ analyzer **PASS**, `max deep / deepCap = 16 / 16`
-(`temp/legado_change_source_session_2026-08-05_112211.txt`).
+| Idea | Why | Risk |
+|---|---|---|
+| Host-level ask pacing | Some hosts time out in batches under threadCount=100 | Needs token bucket; may slow good hosts |
+| Shorter ask timeout for demoted/tail | Tail sources burn AskTimeout | Can false-timeout flaky good sources |
+| Persist title-empty across process | Second open of same book is instant for empties | Disk / wrong after site recovers |
+| Hide TOC-mismatch when content OK | Same clutter as latest tip | TOC gap can still mean wrong edition |
 
 ## How to re-run
 
