@@ -695,6 +695,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     "loadInfo=$loadInfo loadToc=$loadToc loadWordCount=$loadWordCount"
             )
             // Early list so UI fills while ask slots keep draining empties.
+            // Do NOT skip on latestMatchesLocal==false: lagging mirrors (same book, older tip)
+            // must still deep-probe; wrong books fail content ref_sim and are dropped.
             resultBooks.forEach { searchBook ->
                 searchBook.respondTime = searchElapsed.toInt()
                 searchBook.chapterWordCount = 0
@@ -719,6 +721,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     ChangeSourceLog.i(
                         "deep-error origin=${source.bookSourceUrl} ${e.localizedMessage}"
                     )
+                    dropSearchBookOrigin(source.bookSourceUrl, "deep-error")
                     noteAskMiss(source.bookSourceUrl, "error", processDemote = true)
                 } finally {
                     deepInFlightNames.remove(source.bookSourceUrl)
@@ -777,11 +780,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         chapters: List<BookChapter>
     ) = coroutineScope {
         if (chapters.isEmpty()) {
-            val searchBook = book.toSearchBook().apply {
-                chapterWordCountText = "目录为空"
-                chapterWordCount = -1
-            }
-            publishSearchBook(searchBook, tocSize = 0)
+            dropSearchBookOrigin(book.origin, "empty-toc")
+            noteAskMiss(book.origin, "content-bad", processDemote = false)
             return@coroutineScope
         }
         val chapterIndex = wordCountChapterIndex(chapters).coerceIn(0, chapters.lastIndex)
@@ -848,16 +848,42 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 "ok=${ChangeBookSourceQuality.isQualityOkWordCount(pair.first)} " +
                 "list=${searchBooks.size}"
         )
-        if (ChangeBookSourceQuality.isQualityOkWordCount(pair.first) && processedContent != null) {
-            probeContentSamples[searchBook.origin] = processedContent
-            qualityOkCount.incrementAndGet()
-        } else if (pair.first < 0) {
-            // Session soft-fail only — TOC/VIP/stitch false positives must not poison ask-order.
+        if (pair.first < 0) {
+            // Do not keep content-bad rows in the result list (session evidence: 140 bad flooded UI).
+            dropSearchBookOrigin(searchBook.origin, "content-bad")
             noteAskMiss(searchBook.origin, "content-bad", processDemote = false)
             mergeTier(searchBook.origin, ChangeBookSourceQuality.TIER_CONTENT_BAD)
+        } else {
+            if (ChangeBookSourceQuality.isQualityOkWordCount(pair.first) && processedContent != null) {
+                probeContentSamples[searchBook.origin] = processedContent
+                qualityOkCount.incrementAndGet()
+            }
+            publishSearchBook(searchBook, tocSize = chapters.size)
+            applyBookQualityGates(force = false)
         }
-        publishSearchBook(searchBook, tocSize = chapters.size)
-        applyBookQualityGates(force = false)
+    }
+
+    /** Remove a pending/failed origin from the on-screen list + DB row. */
+    private fun dropSearchBookOrigin(origin: String, reason: String) {
+        val (removed, wasOk) = synchronized(searchBooks) {
+            val doomed = searchBooks.filter { it.origin == origin }
+            if (doomed.isEmpty()) return@synchronized Pair(emptyList(), false)
+            val ok = doomed.any {
+                ChangeBookSourceQuality.isQualityOkWordCount(it.chapterWordCount)
+            }
+            searchBooks.removeAll { it.origin == origin }
+            Pair(doomed, ok)
+        }
+        if (removed.isEmpty()) return
+        if (wasOk) {
+            qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
+            probeContentSamples.remove(origin)
+        }
+        runCatching { appDb.searchBookDao.delete(*removed.toTypedArray()) }
+        searchCallback?.upAdapter()
+        ChangeSourceLog.i(
+            "list- drop origin=$origin reason=$reason wasOk=$wasOk size=${searchBooks.size}"
+        )
     }
 
     private fun publishSearchBook(searchBook: SearchBook, tocSize: Int? = null) {
@@ -935,19 +961,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private fun demoteOriginContent(origin: String, badge: String) {
         sessionSoftFail.add(origin)
         mergeTier(origin, ChangeBookSourceQuality.TIER_CONTENT_BAD)
-        val removedSample = probeContentSamples.remove(origin) != null
-        searchBooks.find { it.origin == origin }?.let { book ->
-            val wasOk = ChangeBookSourceQuality.isQualityOkWordCount(book.chapterWordCount)
-            book.chapterWordCount = -1
-            book.chapterWordCountText = appendBadge(book.chapterWordCountText, badge)
-            if (removedSample || wasOk) {
-                qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
-            }
-        } ?: run {
-            if (removedSample) {
-                qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
-            }
-        }
+        probeContentSamples.remove(origin)
+        // Consensus outliers leave the visible list; drop rolls back qualityOk if needed.
+        dropSearchBookOrigin(origin, "consensus:$badge")
     }
 
     private fun mergeTier(origin: String, tier: Int) {
@@ -979,11 +995,17 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         if (localChapters.isEmpty()) {
             return ChangeChapterVerify.ContentEvalContext().also { wordCountEvalContext = it }
         }
-        val idx = ChangeChapterVerify.alignIndex(
-            candidateChapterIndex,
-            candidateTitle,
-            localChapters,
-        ) ?: wordCountChapterIndex(localChapters).coerceIn(0, localChapters.lastIndex)
+        val idx = if (fromReadBookActivity) {
+            // From reading: always compare against the chapter the user is on.
+            // Candidate-title align can lock onto a wrong local chapter for wrong-book hits.
+            wordCountChapterIndex(localChapters).coerceIn(0, localChapters.lastIndex)
+        } else {
+            ChangeChapterVerify.alignIndex(
+                candidateChapterIndex,
+                candidateTitle,
+                localChapters,
+            ) ?: wordCountChapterIndex(localChapters).coerceIn(0, localChapters.lastIndex)
+        }
         wordCountEvalByLocalIndex[idx]?.let { return it }
         val localChapter = localChapters[idx]
         var reference = BookHelp.getContent(book, localChapter)?.trim()?.takeIf { it.isNotEmpty() }

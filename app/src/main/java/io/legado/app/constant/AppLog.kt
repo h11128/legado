@@ -13,6 +13,9 @@ import java.util.Locale
 
 object AppLog {
 
+    /** In-app ring; keep enough for one 换源 milestone window (was 100 — too small). */
+    private const val MAX_LOGS = 400
+
     private val mLogs = arrayListOf<Triple<Long, String, Throwable?>>()
 
     val logs
@@ -24,7 +27,7 @@ object AppLog {
         if (toast) {
             appCtx.toastOnUi(message)
         }
-        if (mLogs.size >= 100) {
+        if (mLogs.size >= MAX_LOGS) {
             mLogs.removeLastOrNull()
         }
         if (throwable == null) {
@@ -46,7 +49,7 @@ object AppLog {
         if (toast) {
             appCtx.toastOnUi(message)
         }
-        if (mLogs.size >= 100) {
+        if (mLogs.size >= MAX_LOGS) {
             mLogs.removeLastOrNull()
         }
         mLogs.add(0, Triple(System.currentTimeMillis(), message, throwable))

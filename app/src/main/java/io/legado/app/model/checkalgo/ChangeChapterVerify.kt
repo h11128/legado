@@ -145,30 +145,33 @@ object ChangeChapterVerify {
             }
         }
         val stitch = looksLikeStitchedParagraphs(text)
-        if (stitch) {
-            return ContentEvalDiag(
-                quality = ContentQuality.Hijack,
-                contentLen = text.length,
-                stitch = true,
-                refSim = null,
-                expectedChars = expected,
-                reason = "stitch",
-            )
-        }
         val reference = context.referenceContent?.trim().orEmpty()
         val refSim = if (reference.length >= REFERENCE_MIN_CHARS && text.length >= MIN_CONTENT_CHARS) {
             digramJaccard(text, reference)
         } else {
             null
         }
+        // Reference disagreement is the hard wrong-book signal.
         if (refSim != null && refSim < REFERENCE_SIM_HIJACK_MAX) {
             return ContentEvalDiag(
                 quality = ContentQuality.Hijack,
                 contentLen = text.length,
-                stitch = false,
+                stitch = stitch,
                 refSim = refSim,
                 expectedChars = expected,
                 reason = "ref_sim",
+            )
+        }
+        // Stitch alone often false-positives on dialogue/scene breaks.
+        // Only hard-fail when there is no *strong* reference agreement (>= AUTH_REF_MIN).
+        if (stitch && (refSim == null || refSim < MULTI_SOURCE_AUTH_REF_MIN)) {
+            return ContentEvalDiag(
+                quality = ContentQuality.Hijack,
+                contentLen = text.length,
+                stitch = true,
+                refSim = refSim,
+                expectedChars = expected,
+                reason = if (refSim == null) "stitch" else "stitch_weak_ref",
             )
         }
         if (highPrecisionShellMarkers.any { text.contains(it) } &&
@@ -177,7 +180,7 @@ object ChangeChapterVerify {
             return ContentEvalDiag(
                 quality = ContentQuality.AntiTheft,
                 contentLen = text.length,
-                stitch = false,
+                stitch = stitch,
                 refSim = refSim,
                 expectedChars = expected,
                 reason = "shell",
@@ -186,10 +189,10 @@ object ChangeChapterVerify {
         return ContentEvalDiag(
             quality = ContentQuality.Ok(text.length),
             contentLen = text.length,
-            stitch = false,
+            stitch = stitch,
             refSim = refSim,
             expectedChars = expected,
-            reason = "ok",
+            reason = if (stitch) "ok_stitch_override" else "ok",
         )
     }
 

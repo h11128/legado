@@ -14,7 +14,7 @@ object ChangeBookSourceQuality {
     const val EARLY_STOP_QUALITY_OK = 20
 
     /** Minimum chapterWordCount to count as quality-OK for early-stop. */
-    const val QUALITY_OK_MIN_CHARS = 1000
+    const val QUALITY_OK_MIN_CHARS = 400
 
     /** Candidate TOC length vs local must stay inside this ratio band. */
     const val TOC_MIN_RATIO = 0.35

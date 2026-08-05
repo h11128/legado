@@ -186,6 +186,41 @@ class ChangeChapterVerifyTest {
     }
 
     @Test
+    fun evaluateContentStitchOverrideRequiresStrongReference() {
+        val reference = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(120)
+        val weakOverlapHijack = """
+            甲世界剑修斩落星辰。${"剑气".repeat(40)}
+            乙大陆炼气士吞服丹药。${"丹田".repeat(40)}
+            罗峰。
+        """.trimIndent()
+        assertTrue(ChangeChapterVerify.looksLikeStitchedParagraphs(weakOverlapHijack))
+        val weak = ChangeChapterVerify.evaluateContentDiag(
+            weakOverlapHijack,
+            ChangeChapterVerify.ContentEvalContext(
+                expectedChars = reference.length,
+                referenceContent = reference,
+            ),
+        )
+        // Weak digram vs reference must not get stitch override.
+        assertTrue(
+            weak.reason == "ref_sim" ||
+                weak.reason == "stitch_weak_ref" ||
+                weak.reason == "stitch"
+        )
+        assertTrue(weak.quality is ChangeChapterVerify.ContentQuality.Hijack)
+
+        val strong = ChangeChapterVerify.evaluateContentDiag(
+            reference,
+            ChangeChapterVerify.ContentEvalContext(
+                expectedChars = reference.length,
+                referenceContent = reference,
+            ),
+        )
+        assertTrue(strong.quality is ChangeChapterVerify.ContentQuality.Ok)
+        assertTrue(strong.reason == "ok" || strong.reason == "ok_stitch_override")
+    }
+
+    @Test
     fun evaluateContentDetectsStitchedMultiNovelParagraphs() {
         val stitched = listOf(
             "罗峰站在黑洞边缘，感受宇宙深处传来的威压，手中战刀微微震动不止。",

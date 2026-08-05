@@ -146,6 +146,22 @@ Session log only stored `chars=-1` — **did not record which branch**. Samples 
 
 `inFlight≈100` / ask-slot holding is separate (already fixed). Content-bad volume is **quality-gate + reference/stitch + wrong-book search**, proven by DB text labels.
 
+## Remaining issues — fix status (2026-08-05 follow-up)
+
+| # | Issue | Status |
+|---|---|---|
+| 1–3 | Ask/deep slot, progress, early list+ | Done earlier |
+| 4 | Pending sort tier | Done (early list+) |
+| 5 | qualityOk / Hijack flood | **Done:** stitch soft w/ reference; QUALITY_OK=400; dur-chapter ref from read |
+| 6 | AppLog flood / tiny ring | **Done:** milestone-only mirror; ring 400 |
+| 7 | Subtitle stuck names | Done (已询问 + 深探 n) |
+| 8 | content-bad floods list | **Done:** drop on content-bad / consensus / empty-toc |
+| 9 | AppLog ring 100 | **Done:** 400 |
+| — | Wrong-book deep waste | Soft: content `ref_sim` + list drop (no skip-deep on lagging latest) |
+| — | content-bad ask demote | Done earlier (session-only) |
+| — | ref cache once | Done earlier (per local index) |
+| — | stitch false-positive | **Done:** hard stitch only without strong ref (`AUTH_REF_MIN`) |
+
 ## Session numbers (finish log)
 
 | Metric | Value |
