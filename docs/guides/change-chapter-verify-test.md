@@ -17,50 +17,45 @@ Covers **整书换源** / **单章换源** quality + ask-order + early-stop + MC
 ```bash
 export GRADLE_USER_HOME="${GRADLE_USER_HOME:-/e/.gradle}"   # or /mnt/e/.gradle on WSL
 ./scripts/change-source-smoke.sh
+./scripts/change-source-smoke.sh --apply-prefs    # broadcast SET_CHANGE_SOURCE_PREFS
 ./scripts/change-source-smoke.sh --assert-prefs
-# expect changeSourceLoadWordCount=true and changeSourceEarlyStop not false
+# or MCP: set_change_source_prefs / get_change_source_prefs (after app/MCP warm)
+# or deep link: legado://import/changeSourcePrefs?loadWordCount=true&earlyStop=true
+adb logcat -s LegadoChangeSource
 ```
 
 | Layer | Prove | How |
 |---|---|---|
-| A Unit | checkalgo + Rfc001 contracts | `--unit-only` |
+| A Unit | checkalgo + Rfc001 + demotion | `--unit-only` |
 | B Install | code on phone | script → debug package |
-| C UI | badges + sort | 短按整书；长按→单章 |
-| D Prefs | quality path armed | `--assert-prefs` |
-| E MCP | check status writeback | 1 URL `start_check_sources` → `get_check_progress` |
+| C UI | badges + sort + early-stop subtitle | 短按整书；长按→单章 |
+| D Prefs | quality path armed | `--apply-prefs` / MCP |
+| E MCP | check status writeback | 1 URL `start_check_sources` |
 
 ## UI pass criteria
 
-- Progress: `结果 N, 当前进度 a / b`
-- Bad rows: `疑似错书/广告劫持` / `正文过短` / `无此章` / 最新章或目录不一致
+- Progress shows **探测中 &lt;源&gt;** while probing (not only last completed name)
+- Early-stop: subtitle `已足够好源（N）· 已停止 …`
+- Bad rows: `疑似错书/广告劫持` / `正文过短` / …
 - Good rows: `字数：N`
-- Without **加载字数**, length-only rank may promote shells — not a full quality PASS
-- Stall `1/b: <name>` **>70s** → fail timeout/cancel
+- After a timeout/empty miss, that URL is demoted for later asks in-process (no DB failure write)
+- Stall `探测中 X` **>70s** → fail hard-cancel
 
 Gestures: **短按**换源 = 整书；**长按** = 选单章/整书。
-
-## Log / dump
-
-```bash
-adb logcat -d | rg -i '换源|ChangeChapter|hijack|consensus|early' | tail -80
-adb shell uiautomator dump /sdcard/uidump.xml
-adb pull /sdcard/uidump.xml /tmp/uidump.xml
-rg -o '疑似[^"]+|字数：[0-9]+|结果 [^"]+|停止|刷新' /tmp/uidump.xml | head
-```
 
 ## Agent run record
 
 | Date | Result | Evidence |
 |---|---|---|
-| 2026-08-05 | PASS (partial: earlyStop=false) | unit+install `3.26080511debug`; badges OK with loadWordCount; Xpicvid stall >80s at `1/1113`; MCP `m.bqg.fun` fail → `respondTime=180289` |
-| 2026-08-04 | PASS schedule | first device pass; quality demotion later confirmed 08-05 |
+| 2026-08-05 | PASS (partial: earlyStop=false) | pre-fix device run; motivated the 7 fixes below |
+| 2026-08-05b | code fix | hard-cancel Cronet + ask memory demotion + loadWordCount default + early-stop UI + LegadoChangeSource log + prefs deep link/MCP |
 
-## Improvements from device evidence (priority)
+## Fixes landed (was improvement backlog)
 
-1. **Hard-cancel probe** — `withTimeout(CHANGE_SOURCE_MS)` often fails to stop WebView/Cronet; ask-order head can block >60s.
-2. **Ask-order head pollution** — tiny SUCCESS `respondTime` (e.g. Xpicvid) leads 换源 while dead for this title; need session soft-fail / recent-miss demotion.
-3. **Default `changeSourceLoadWordCount=true`** — badges/sort depend on it; default false hides quality UX (early-stop already defaults true).
-4. **Surface early-stop** — progress hint when pref off / when early-stop fired.
-5. **RespondTime band weak at scale** — most sources stay SUCCESS; ask-order ≈ ascending rt until check/soft-fail demotes.
-6. **Observable logs** — AppLog thin in `adb logcat`; tag key 换源 events for agents.
-7. **Pref write for agents** — `run-as` read OK, write often denied; keep menu / add debug intent.
+1. Cronet **production** path (`CronetInterceptor`/`NewCallBack`): always timed (≤90s) + cancel UrlRequest; timeout/cancel **no** OkHttp fallback. Probe uses `withTimeoutOrNull`; progress shows in-flight names
+2. `ChangeSourceAskMemory` demotes **timeout/error/content-bad** for later asks; **empty** is session-only (does not poison global search). No failure RT write (RFC-safe)
+3. `changeSourceLoadWordCount` default **true**
+4. Early-stop subtitle strings + `ChangeSourceProgressUi`
+5. Ask-order uses `RespondTimeRank.classify` + demote tail
+6. `ChangeSourceLog` → `adb logcat -s LegadoChangeSource`
+7. Broadcast `io.legado.app.action.SET_CHANGE_SOURCE_PREFS` + deep link + MCP `set_change_source_prefs` + script `--apply-prefs`

@@ -547,8 +547,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.changeSourceLoadToc, value)
         }
 
+    /** Default on: quality badges / content-first sort need word-count probes. */
     var changeSourceLoadWordCount: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.changeSourceLoadWordCount)
+        get() = appCtx.getPrefBoolean(PreferKey.changeSourceLoadWordCount, true)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.changeSourceLoadWordCount, value)
         }

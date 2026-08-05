@@ -4,6 +4,7 @@
 #   GRADLE_USER_HOME=E:/.gradle ./scripts/change-source-smoke.sh
 #   ./scripts/change-source-smoke.sh --prefs
 #   ./scripts/change-source-smoke.sh --assert-prefs
+#   ./scripts/change-source-smoke.sh --apply-prefs
 #   ./scripts/change-source-smoke.sh --unit-only
 #   ./scripts/change-source-smoke.sh --install-only
 set -euo pipefail
@@ -28,10 +29,11 @@ MODE="all"
 case "${1:-}" in
   --prefs) MODE="prefs" ;;
   --assert-prefs) MODE="assert-prefs" ;;
+  --apply-prefs) MODE="apply-prefs" ;;
   --unit-only) MODE="unit" ;;
   --install-only) MODE="install" ;;
   -h|--help)
-    sed -n '2,10p' "$0"
+    sed -n '2,12p' "$0"
     exit 0
     ;;
 esac
@@ -68,18 +70,30 @@ assert_prefs() {
   }
   local ok=0
   printf '%s\n' "$xml" | rg_or_grep 'name="changeSourceLoadWordCount" value="true"' >/dev/null || {
-    echo "FAIL: changeSourceLoadWordCount must be true (菜单「加载字数」)" >&2
-    ok=1
+    if printf '%s\n' "$xml" | rg_or_grep 'name="changeSourceLoadWordCount" value="false"' >/dev/null; then
+      echo "FAIL: changeSourceLoadWordCount is false (use --apply-prefs)" >&2
+      ok=1
+    fi
   }
   printf '%s\n' "$xml" | rg_or_grep 'name="changeSourceEarlyStop" value="true"' >/dev/null || {
-    # key missing → code default true; explicit false fails
     if printf '%s\n' "$xml" | rg_or_grep 'name="changeSourceEarlyStop" value="false"' >/dev/null; then
-      echo "FAIL: changeSourceEarlyStop is false (菜单「足够好源后提前停止」)" >&2
+      echo "FAIL: changeSourceEarlyStop is false (use --apply-prefs)" >&2
       ok=1
     fi
   }
   dump_prefs
   return "$ok"
+}
+
+apply_prefs() {
+  # Force-stopped apps ignore broadcasts on modern Android — wake the package first.
+  adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+  sleep 2
+  adb shell am broadcast -a io.legado.app.action.SET_CHANGE_SOURCE_PREFS \
+    --ez loadWordCount true --ez earlyStop true \
+    -n "${PKG}/io.legado.app.receiver.ChangeSourcePrefsReceiver"
+  sleep 1
+  assert_prefs
 }
 
 unit() {
@@ -96,15 +110,17 @@ install() {
 case "$MODE" in
   prefs) dump_prefs ;;
   assert-prefs) assert_prefs ;;
+  apply-prefs) apply_prefs ;;
   unit) unit ;;
   install) install ;;
   all)
     unit
     install
     if [[ "$(adb get-state 2>/dev/null || true)" == "device" ]]; then
-      echo "--- changeSource prefs (warn only; use --assert-prefs to gate) ---"
-      dump_prefs || echo "WARN: prefs unread — open 换源 menu and set 加载字数 + 足够好源后提前停止" >&2
+      echo "--- changeSource prefs (warn only; use --apply-prefs / --assert-prefs) ---"
+      dump_prefs || echo "WARN: prefs unread — run --apply-prefs or MCP set_change_source_prefs" >&2
     fi
     echo "OK: unit+install done. Device UI: docs/guides/change-chapter-verify-test.md"
+    echo "Logcat: adb logcat -s LegadoChangeSource"
     ;;
 esac

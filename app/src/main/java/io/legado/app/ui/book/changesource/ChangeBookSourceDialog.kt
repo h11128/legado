@@ -245,15 +245,12 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
             repeatOnLifecycle(STARTED) {
                 viewModel.changeSourceProgress
                     .drop(1)
-                    .collect { (count, name) ->
-                        binding.tvDur.text =
-                            getString(
-                                R.string.change_source_progress,
-                                adapter.itemCount,
-                                count,
-                                viewModel.totalSourceCount,
-                                name
-                            )
+                    .collect { progress ->
+                        binding.tvDur.text = requireContext().formatChangeSourceProgress(
+                            resultCount = adapter.itemCount,
+                            progress = progress,
+                            total = viewModel.totalSourceCount,
+                        )
                         delay(500)
                     }
             }

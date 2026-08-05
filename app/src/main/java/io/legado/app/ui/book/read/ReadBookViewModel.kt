@@ -33,6 +33,7 @@ import io.legado.app.model.SourceCallBack
 import io.legado.app.model.checkalgo.AskSourceOrder
 import io.legado.app.model.checkalgo.AskSourcePrefetch
 import io.legado.app.model.checkalgo.AskTimeout
+import io.legado.app.model.checkalgo.ChangeSourceAskMemory
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.BaseReadAloudService
@@ -331,6 +332,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             val sources = AskSourceOrder.order(
                 appDb.bookSourceDao.allTextEnabledPart,
                 threadCount = AppConfig.threadCount,
+                demoteUrls = ChangeSourceAskMemory.snapshot(),
             )
             AskSourcePrefetch.emitSources(sources)
                 .onStart {

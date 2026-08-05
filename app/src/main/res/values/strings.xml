@@ -1329,6 +1329,8 @@
     <string name="export_md">Export(MD)</string>
     <string name="change_source_delay">Change source delay</string>
     <string name="change_source_progress">Result %1$d, Progress %2$d / %3$d: %4$s</string>
+    <string name="change_source_early_stop_done">Result %1$d · enough good sources (%2$d) · stopped at %3$d / %4$d</string>
+    <string name="change_source_early_stop_running">Result %1$d · enough good sources (%2$d) · stopping %3$d / %4$d: %5$s</string>
     <string name="change_source_verify_chapter">Verifying chapter</string>
     <string name="change_source_verify_done">Chapter verify done</string>
     <string name="change_source_verify_progress">Verify %1$d / %2$d: %3$s</string>

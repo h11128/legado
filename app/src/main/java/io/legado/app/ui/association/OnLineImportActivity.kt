@@ -1,18 +1,23 @@
 package io.legado.app.ui.association
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.viewModels
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.databinding.ActivityTranslucenceBinding
+import io.legado.app.help.config.ChangeSourcePrefsApply
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.autoTask.ImportAutoTaskDialog
 import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 /**
  * 网络一键导入
  * 格式: legado://import/{path}?src={url}
+ *
+ * Agent prefs: legado://import/changeSourcePrefs?loadWordCount=true&earlyStop=true
  */
 class OnLineImportActivity :
     VMBaseActivity<ActivityTranslucenceBinding, OnLineImportViewModel>() {
@@ -58,8 +63,33 @@ class OnLineImportActivity :
         viewModel.errorLive.observe(this) {
             finallyDialog(getString(R.string.error), it)
         }
+        if (applyChangeSourcePrefsIfPresent(intent)) {
+            finish()
+            return
+        }
         if (viewModel.intentHandled) return
         viewModel.intentHandled = true
+        handleImportIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (applyChangeSourcePrefsIfPresent(intent)) {
+            finish()
+        }
+    }
+
+    /** @return true if this was a changeSourcePrefs deep link (always re-handled). */
+    private fun applyChangeSourcePrefsIfPresent(intent: Intent): Boolean {
+        val data = intent.data ?: return false
+        if (data.path != "/changeSourcePrefs") return false
+        val msg = ChangeSourcePrefsApply.applyFromUri(data)
+        toastOnUi(msg)
+        return true
+    }
+
+    private fun handleImportIntent(intent: Intent) {
         intent.data?.let {
             val url = it.getQueryParameter("src")
             if (url.isNullOrEmpty()) {

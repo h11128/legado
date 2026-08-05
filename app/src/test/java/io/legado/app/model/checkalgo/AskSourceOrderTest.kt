@@ -126,6 +126,38 @@ class AskSourceOrderTest {
         val ordered = AskSourceOrder.order(parts, headReserve = 8, threadCount = 3)
         assertEquals(listOf("s0", "s1", "s2"), ordered.take(3).map { it.bookSourceUrl })
     }
+
+    @Test
+    fun demotedUrlsAppendedLast() {
+        ChangeSourceAskMemory.clear()
+        try {
+            val fastDead = part("dead", 10, 50) // would lead without demotion
+            val mid = part("mid", 20, 5_000)
+            val ordered = AskSourceOrder.order(
+                listOf(fastDead, mid),
+                headReserve = 0,
+                threadCount = 32,
+                demoteUrls = setOf("dead"),
+            )
+            assertEquals(listOf("mid", "dead"), ordered.map { it.bookSourceUrl })
+        } finally {
+            ChangeSourceAskMemory.clear()
+        }
+    }
+
+    @Test
+    fun memoryNoteMissFeedsDefaultDemoteSet() {
+        ChangeSourceAskMemory.clear()
+        try {
+            ChangeSourceAskMemory.noteMiss("x")
+            val a = part("x", 0, 10)
+            val b = part("y", 1, 20)
+            val ordered = AskSourceOrder.order(listOf(a, b), headReserve = 0, threadCount = 8)
+            assertEquals(listOf("y", "x"), ordered.map { it.bookSourceUrl })
+        } finally {
+            ChangeSourceAskMemory.clear()
+        }
+    }
 }
 
 class BookSourceTypeMapperTest {

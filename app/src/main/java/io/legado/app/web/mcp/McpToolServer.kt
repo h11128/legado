@@ -87,6 +87,7 @@ object McpToolServer {
             registerResources(it)
             // Local repair/MCP batch path (coexists with upstream check_source).
             it.registerMcpCheckTools()
+            it.registerMcpChangeSourceTools()
         }
     }
 

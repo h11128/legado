@@ -245,21 +245,19 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             repeatOnLifecycle(STARTED) {
                 viewModel.changeSourceProgress
                     .drop(1)
-                    .collect { (count, name) ->
+                    .collect { progress ->
                         binding.tvDur.text = if (viewModel.isChapterVerifying) {
                             getString(
                                 R.string.change_source_verify_progress,
-                                count,
+                                progress.completed,
                                 searchBookAdapter.itemCount.coerceAtLeast(1),
-                                name
+                                progress.label
                             )
                         } else {
-                            getString(
-                                R.string.change_source_progress,
-                                searchBookAdapter.itemCount,
-                                count,
-                                viewModel.totalSourceCount,
-                                name
+                            requireContext().formatChangeSourceProgress(
+                                resultCount = searchBookAdapter.itemCount,
+                                progress = progress,
+                                total = viewModel.totalSourceCount,
                             )
                         }
                         delay(500)

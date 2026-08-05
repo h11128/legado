@@ -387,6 +387,7 @@
             android:name=".ui.association.OnLineImportActivity"
             android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/AppTheme.Transparent">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -398,6 +399,13 @@
                 <data android:scheme="yuedu" />
             </intent-filter>
         </activity>
+        <receiver
+            android:name=".receiver.ChangeSourcePrefsReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="io.legado.app.action.SET_CHANGE_SOURCE_PREFS" />
+            </intent-filter>
+        </receiver>
         <!-- 验证码输入 -->
         <activity
             android:name=".ui.association.VerificationCodeActivity"

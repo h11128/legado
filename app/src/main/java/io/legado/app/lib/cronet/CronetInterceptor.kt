@@ -13,6 +13,7 @@ import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import java.util.concurrent.TimeoutException
 
 @Keep
 @Suppress("unused")
@@ -54,6 +55,10 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
             return proceedWithCronet(newReq, chain.call(), chain.readTimeoutMillis())!!
         } catch (e: Exception) {
             cronetException = e
+            // Timeout / cancel must NOT fall back to OkHttp (would stack another ~60s).
+            if (isHardStop(e) || chain.call().isCanceled()) {
+                throw asIOException(e)
+            }
             //不能抛出错误,抛出错误会导致应用崩溃
             //遇到Cronet处理有问题时的情况，如证书过期等等，回退到okhttp处理
             if (!e.message.toString().contains("ERR_CERT_", true)
@@ -68,6 +73,30 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
             e.addSuppressed(cronetException)
             throw e
         }
+    }
+
+    private fun isHardStop(e: Exception): Boolean {
+        var cur: Throwable? = e
+        while (cur != null) {
+            when (cur) {
+                is TimeoutException -> return true
+            }
+            val msg = cur.message.orEmpty()
+            if (msg.contains("Cronet timeout", true) ||
+                msg.contains("Cronet interrupted", true) ||
+                msg.contains("TIMED_OUT", true) ||
+                msg.contains("Canceled", true) ||
+                msg.contains("cancelled", true)
+            ) {
+                return true
+            }
+            cur = cur.cause
+        }
+        return false
+    }
+
+    private fun asIOException(e: Exception): IOException {
+        return e as? IOException ?: IOException(e.message, e)
     }
 
     @SuppressLint("ObsoleteSdkInt")

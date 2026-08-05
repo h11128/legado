@@ -44,16 +44,19 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
             }
 
             val newReq = builder.build()
-            val timeout = chain.call().timeout().timeoutNanos() / 1000000
-            runBlocking() {
-                if (timeout > 0) {
-                    withTimeout(timeout) {
-                        proceedWithCronet(newReq, chain.call(), chain.readTimeoutMillis()).also { response ->
-                            cookieJar.receiveHeaders(newReq.url, response.headers)
-                        }
+            val call = chain.call()
+            // Never run Cronet unbounded: callTimeout==0 previously skipped withTimeout and
+            // could outlive outer 换源 withTimeout (agent saw >80s stalls). Cap at 90s.
+            val timeoutMs = (call.timeout().timeoutNanos() / 1_000_000L)
+                .let { if (it > 0) it else 60_000L }
+                .coerceAtMost(90_000L)
+                .coerceAtLeast(1L)
+            runBlocking {
+                withTimeout(timeoutMs) {
+                    if (call.isCanceled()) {
+                        throw IOException("Canceled")
                     }
-                } else {
-                    proceedWithCronet(newReq, chain.call(), chain.readTimeoutMillis()).also { response ->
+                    proceedWithCronet(newReq, call, chain.readTimeoutMillis()).also { response ->
                         cookieJar.receiveHeaders(newReq.url, response.headers)
                     }
                 }
@@ -101,7 +104,10 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
 
             }
 
-            val req = buildRequest(request, callBack)?.also { it.start() }
+            val req = buildRequest(request, callBack)?.also {
+                callBack.startCheckCancelJob(it)
+                it.start()
+            }
             coroutine.invokeOnCancellation {
                 req?.cancel()
             }

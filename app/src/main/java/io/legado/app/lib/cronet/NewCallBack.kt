@@ -10,7 +10,9 @@ import okhttp3.Response
 import org.chromium.net.UrlRequest
 import java.io.IOException
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 @SuppressLint("ObsoleteSdkInt")
 @Keep
@@ -24,30 +26,31 @@ class NewCallBack(originalRequest: Request, mCall: Call, readTimeoutMillis: Int)
     override fun waitForDone(urlRequest: UrlRequest): Response {
         urlRequest.start()
         startCheckCancelJob(urlRequest)
-        //DebugLog.i(javaClass.simpleName, "start ${originalRequest.method} ${originalRequest.url}")
-        return if (mCall.timeout().timeoutNanos() > 0) {
-            responseFuture.get(mCall.timeout().timeoutNanos(), TimeUnit.NANOSECONDS)
-        } else {
-            return responseFuture.get()
+        // Never block forever: callTimeout==0 previously used get() unbounded and could
+        // outlive outer 换源 withTimeout (device saw >80s stalls).
+        val timeoutNs = mCall.timeout().timeoutNanos().let { if (it > 0) it else 60_000_000_000L }
+            .coerceAtMost(90_000_000_000L)
+        return try {
+            responseFuture.get(timeoutNs, TimeUnit.NANOSECONDS)
+        } catch (e: TimeoutException) {
+            urlRequest.cancel()
+            throw IOException("Cronet timeout after wait ${timeoutNs / 1_000_000}ms", e)
+        } catch (e: ExecutionException) {
+            val cause = e.cause
+            if (cause is IOException) throw cause
+            throw IOException(cause?.message ?: "Cronet failed", cause)
+        } catch (e: InterruptedException) {
+            urlRequest.cancel()
+            Thread.currentThread().interrupt()
+            throw IOException("Cronet interrupted", e)
         }
-
     }
 
-    /**
-     * 当发生错误时，通知子类终止阻塞抛出错误
-     * @param error
-     */
     override fun onError(error: IOException) {
         responseFuture.completeExceptionally(error)
     }
 
-    /**
-     * 请求成功后，通知子类结束阻塞，返回response
-     * @param response
-     */
     override fun onSuccess(response: Response) {
         responseFuture.complete(response)
     }
-
-
 }
