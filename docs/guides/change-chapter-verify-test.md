@@ -1,7 +1,6 @@
 # Change-source device verify
 
-Process SOT: `docs/guides/change-chapter-verify-test.md`  
-Skill (repo): `skills/legado-change-source-test/SKILL.md`  
+Skill: `skills/legado-change-source-test/SKILL.md`  
 Script: `scripts/change-source-smoke.sh`  
 Package: `com.legado.app.debug`
 
