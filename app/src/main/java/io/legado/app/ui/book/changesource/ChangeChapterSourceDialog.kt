@@ -248,7 +248,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             lifecycle.currentStateFlow.first { it.isAtLeast(STARTED) }
             viewModel.searchDataFlow.conflate().collect {
                 searchBookAdapter.setItems(it)
-                delay(1000)
+                delay(250)
             }
         }
         lifecycleScope.launch {

@@ -79,6 +79,16 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
+    fun pendingSearchHitRanksAboveContentBad() {
+        val pending = ChangeBookSourceQuality.contentSortTier(0, "校验中…")
+        val bad = ChangeBookSourceQuality.contentSortTier(-1, "疑似错书/广告劫持")
+        val ok = ChangeBookSourceQuality.contentSortTier(3800, "字数：3800")
+        assertEquals(ChangeBookSourceQuality.TIER_PENDING, pending)
+        assertTrue(ok < pending)
+        assertTrue(pending < bad)
+    }
+
+    @Test
     fun contentOkIgnoresLatestMetaInHardTier() {
         val ok = ChangeBookSourceQuality.sortTier(
             chapterWordCount = 3800,

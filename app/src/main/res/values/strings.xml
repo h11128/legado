@@ -1328,7 +1328,7 @@
     <string name="export_book_notification_content">Exporting (%1$s), with %2$d to be exported.</string>
     <string name="export_md">Export(MD)</string>
     <string name="change_source_delay">Change source delay</string>
-    <string name="change_source_progress">Result %1$d · done %2$d/%3$d · parallel %4$d/%5$d · %6$s</string>
+    <string name="change_source_progress">Result %1$d · asked %2$d/%3$d · asking %4$d/%5$d · %6$s</string>
     <string name="change_source_early_stop_done">Result %1$d · enough good sources (%2$d) · stopped at %3$d / %4$d</string>
     <string name="change_source_early_stop_running">Result %1$d · enough good sources (%2$d) · stopping %3$d / %4$d: %5$s</string>
     <string name="change_source_verify_chapter">Verifying chapter</string>
@@ -1344,6 +1344,7 @@
     <string name="change_source_latest_mismatch">Latest chapter looks unrelated</string>
     <string name="change_source_toc_mismatch">TOC size looks inconsistent</string>
     <string name="change_source_early_stop">Stop when enough good sources</string>
+    <string name="change_source_pending_word">Checking content…</string>
     <string name="open_book_info_by_click_title">Click on the book title to open details</string>
     <string name="export_wait">Waiting for export</string>
     <string name="show_bookshelf_fast_scroller">Show quick scroll bar</string>

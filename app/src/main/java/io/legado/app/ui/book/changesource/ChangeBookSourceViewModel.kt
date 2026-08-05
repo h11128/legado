@@ -64,7 +64,9 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.Closeable
@@ -73,6 +75,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.min
 
 @Suppress("MemberVisibilityCanBePrivate")
 open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(application) {
@@ -112,8 +115,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private val qualityTiers = ConcurrentHashMap<String, Int>()
     /** Session-only soft fails (timeout / hijack); never written to BookSource.respondTime. */
     private val sessionSoftFail = ConcurrentHashMap.newKeySet<String>()
-    /** In-flight probe names for progress subtitle (not “last completed”). */
+    /** In-flight ask (search) names for progress subtitle. */
     private val probingNames = ConcurrentHashMap.newKeySet<String>()
+    /** Hits still in toc/content after ask slot released. */
+    private val deepInFlightNames = ConcurrentHashMap.newKeySet<String>()
     private val completedProbeCount = AtomicInteger(0)
     private val qualityOkCount = AtomicInteger(0)
     private val earlyStopped = AtomicBoolean(false)
@@ -125,8 +130,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private val missErrorCount = AtomicInteger(0)
     private val missContentBadCount = AtomicInteger(0)
     private val lastProgressLogCompleted = AtomicInteger(-1)
+    private val deepJobs = ConcurrentHashMap.newKeySet<Job>()
     protected var searchCallback: SourceCallback? = null
     protected var task: Job? = null
+    private var deepPool: CoroutineDispatcher? = null
+    private var deepPoolSize: Int = 0
     val bookMap = ConcurrentHashMap<String, Book>()
     val searchDataFlow = callbackFlow {
 
@@ -135,11 +143,21 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             override fun searchSuccess(searchBook: SearchBook) {
                 searchBook.releaseHtmlData()
                 appDb.searchBookDao.insert(searchBook)
-                when {
-                    screenKey.isEmpty() -> searchBooks.add(searchBook)
-                    searchBook.name.contains(screenKey) -> searchBooks.add(searchBook)
-                    else -> return
+                val accepted = synchronized(searchBooks) {
+                    val idx = searchBooks.indexOfFirst { it.origin == searchBook.origin }
+                    when {
+                        idx >= 0 -> {
+                            searchBooks[idx] = searchBook
+                            true
+                        }
+                        screenKey.isEmpty() || searchBook.name.contains(screenKey) -> {
+                            searchBooks.add(searchBook)
+                            true
+                        }
+                        else -> false
+                    }
                 }
+                if (!accepted) return
                 val size = searchBooks.size
                 listPublishCount.incrementAndGet()
                 val tier = ChangeBookSourceQuality.contentSortTier(
@@ -247,6 +265,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             completed = index,
             inFlight = 0,
             concurrency = threadCount(),
+            deepInFlight = deepInFlightNames.size,
             label = label,
             qualityOk = qualityOkCount.get(),
             earlyStopped = earlyStopped.get(),
@@ -259,6 +278,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         (searchPool as? Closeable)?.close()
         searchPool = null
         searchPoolSize = 0
+        (deepPool as? Closeable)?.close()
+        deepPool = null
+        deepPoolSize = 0
     }
 
     @CallSuper
@@ -285,6 +307,27 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         (searchPool as? Closeable)?.close()
         searchPoolSize = n
         searchPool = Dispatchers.IO.limitedParallelism(n)
+    }
+
+    /**
+     * Deep toc/content concurrency — capped so hits do not monopolize ask slots.
+     * Session evidence 2026-08-05: mapParallel(100) held through word-count → done stuck.
+     */
+    private fun deepParallel(): Int =
+        min(threadCount(), DEEP_PARALLEL_CAP).coerceAtLeast(1)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun initDeepPool() {
+        val n = deepParallel()
+        if (deepPool != null && deepPoolSize == n) return
+        (deepPool as? Closeable)?.close()
+        deepPoolSize = n
+        deepPool = Dispatchers.IO.limitedParallelism(n)
+    }
+
+    companion object {
+        /** Max concurrent toc/content probes after ask releases the slot. */
+        const val DEEP_PARALLEL_CAP = 16
     }
 
     open fun refresh(): Boolean {
@@ -316,6 +359,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             qualityTiers.clear()
             sessionSoftFail.clear()
             probingNames.clear()
+            deepInFlightNames.clear()
+            deepJobs.clear()
             completedProbeCount.set(0)
             qualityOkCount.set(0)
             earlyStopped.set(false)
@@ -360,13 +405,15 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 ChangeSourceLog.i("early-stop pref off; will ask all ${bookSourceParts.size} sources")
             }
             initSearchPool()
+            initDeepPool()
             val tPool = System.currentTimeMillis()
             val headSample = bookSourceParts.take(5).joinToString(" | ") {
                 "${it.bookSourceName}(${it.respondTime})"
             }
             ChangeSourceLog.i(
                 "start book=$name author=$author sources=${bookSourceParts.size} " +
-                    "threads=$threads demoted=${ChangeSourceAskMemory.snapshot().size} " +
+                    "threads=$threads deepParallel=${deepParallel()} " +
+                    "demoted=${ChangeSourceAskMemory.snapshot().size} " +
                     "loadInfo=${AppConfig.changeSourceLoadInfo} " +
                     "loadToc=${AppConfig.changeSourceLoadToc} " +
                     "loadWordCount=${AppConfig.changeSourceLoadWordCount} " +
@@ -393,6 +440,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             qualityTiers.clear()
             sessionSoftFail.clear()
             probingNames.clear()
+            deepInFlightNames.clear()
+            deepJobs.clear()
             completedProbeCount.set(0)
             qualityOkCount.set(0)
             earlyStopped.set(false)
@@ -400,6 +449,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             bookSourceParts.add(appDb.bookSourceDao.getBookSourcePart(origin)!!)
             searchBooks.removeIf { it.origin == origin }
             initSearchPool()
+            initDeepPool()
             search()
         }
     }
@@ -445,16 +495,19 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
         val inFlightUrls = probingNames.toList()
         val inFlight = inFlightUrls.size
+        val deepInFlight = deepInFlightNames.size
         // Show several in-flight names so parallel work is visible (not just one serial name).
         val sample = inFlightUrls.take(3).joinToString("、") { url ->
             bookSourceParts.find { it.bookSourceUrl == url }?.bookSourceName ?: url
         }
         val more = (inFlight - 3).coerceAtLeast(0)
-        val probingLabel = when {
+        val askLabel = when {
             inFlight == 0 -> ""
-            more > 0 -> "探测中 $sample 等${more}个"
-            else -> "探测中 $sample"
+            more > 0 -> "询问中 $sample 等${more}个"
+            else -> "询问中 $sample"
         }
+        val deepLabel = if (deepInFlight > 0) "深探$deepInFlight/${deepParallel()}" else ""
+        val probingLabel = listOf(askLabel, deepLabel).filter { it.isNotEmpty() }.joinToString(" · ")
         val label = when {
             early -> "" // freeze subtitle during early-stop wind-down (no probing flicker)
             else -> probingLabel
@@ -463,6 +516,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             completed = completed,
             inFlight = inFlight,
             concurrency = threadCount(),
+            deepInFlight = deepInFlight,
             label = label,
             qualityOk = qualityOkCount.get(),
             earlyStopped = early,
@@ -475,10 +529,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             lastProgressLogCompleted.set(completed)
             ChangeSourceLog.i(
                 "progress done=$completed/${bookSourceParts.size} " +
-                    "inFlight=$inFlight/${threadCount()} list=${searchBooks.size} " +
-                    "qualityOk=${qualityOkCount.get()} hits=${searchHitCount.get()} " +
-                    "published=${listPublishCount.get()} early=$early finished=$finished " +
-                    "label=${label.take(80)}"
+                    "inFlight=$inFlight/${threadCount()} deep=$deepInFlight/${deepParallel()} " +
+                    "list=${searchBooks.size} qualityOk=${qualityOkCount.get()} " +
+                    "hits=${searchHitCount.get()} published=${listPublishCount.get()} " +
+                    "early=$early finished=$finished label=${label.take(80)}"
             )
         }
     }
@@ -487,102 +541,119 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         val parts = bookSourceParts.toList()
         val parallelism = threadCount()
         task = viewModelScope.launch(searchPool!!) {
-            AskSourcePrefetch.emitSources(parts).onStart {
-                searchStateData.postValue(true)
-                publishProgress(force = true)
-            }.mapParallel(parallelism) { source ->
-                if (earlyStopped.get()) return@mapParallel source
-                if (source.bookSourceUrl in sessionSoftFail) return@mapParallel source
-                probingNames.add(source.bookSourceUrl)
-                publishProgress()
-                try {
-                    search(source)
-                } catch (e: TimeoutCancellationException) {
-                    // Session demote only — RFC-001 forbids persisting failure on ask timeout.
-                    noteAskMiss(source.bookSourceUrl, "timeout", processDemote = true)
-                    currentCoroutineContext().ensureActive()
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    noteAskMiss(source.bookSourceUrl, "error", processDemote = true)
-                    currentCoroutineContext().ensureActive()
-                } finally {
-                    probingNames.remove(source.bookSourceUrl)
-                    completedProbeCount.incrementAndGet()
-                    // After early-stop, keep subtitle stable; still throttle (do not force).
-                    if (earlyStopped.get()) {
-                        publishProgress(early = true)
-                    } else {
-                        publishProgress()
+            supervisorScope {
+                AskSourcePrefetch.emitSources(parts).onStart {
+                    searchStateData.postValue(true)
+                    publishProgress(force = true)
+                }.mapParallel(parallelism) { source ->
+                    if (earlyStopped.get()) return@mapParallel source
+                    if (source.bookSourceUrl in sessionSoftFail) return@mapParallel source
+                    probingNames.add(source.bookSourceUrl)
+                    publishProgress()
+                    try {
+                        // Ask only — deep toc/word scheduled separately so empties keep draining.
+                        searchAsk(source)
+                    } catch (e: TimeoutCancellationException) {
+                        noteAskMiss(source.bookSourceUrl, "timeout", processDemote = true)
+                        currentCoroutineContext().ensureActive()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        noteAskMiss(source.bookSourceUrl, "error", processDemote = true)
+                        currentCoroutineContext().ensureActive()
+                    } finally {
+                        probingNames.remove(source.bookSourceUrl)
+                        completedProbeCount.incrementAndGet()
+                        if (earlyStopped.get()) {
+                            publishProgress(early = true)
+                        } else {
+                            publishProgress()
+                        }
                     }
-                }
-                source
-            }.onEachIndexed { _, _ ->
-                if (ChangeBookSourceQuality.shouldEarlyStop(
-                        qualityOkCount = qualityOkCount.get(),
-                        enabled = AppConfig.changeSourceEarlyStop,
-                        target = AppConfig.changeSourceEarlyStopCount,
-                    )
-                ) {
-                    if (earlyStopped.compareAndSet(false, true)) {
+                    source
+                }.onEachIndexed { _, _ ->
+                    if (ChangeBookSourceQuality.shouldEarlyStop(
+                            qualityOkCount = qualityOkCount.get(),
+                            enabled = AppConfig.changeSourceEarlyStop,
+                            target = AppConfig.changeSourceEarlyStopCount,
+                        )
+                    ) {
+                        if (earlyStopped.compareAndSet(false, true)) {
+                            ChangeSourceLog.i(
+                                "early-stop qualityOk=${qualityOkCount.get()} " +
+                                    "target=${AppConfig.changeSourceEarlyStopCount}"
+                            )
+                            deepJobs.forEach { it.cancel() }
+                            publishProgress(early = true, force = true)
+                            currentCoroutineContext().cancel()
+                        }
+                    }
+                }.onCompletion { cause ->
+                    withContext(NonCancellable + IO) {
+                        // Ask wave done — wait remaining deep probes (unless cancelled/early-stop).
+                        if (cause == null || earlyStopped.get()) {
+                            val pending = deepJobs.toList()
+                            if (pending.isNotEmpty()) {
+                                ChangeSourceLog.i(
+                                    "deep-wait jobs=${pending.size} deepInFlight=${deepInFlightNames.size}"
+                                )
+                                pending.joinAll()
+                            }
+                        } else {
+                            deepJobs.forEach { it.cancel() }
+                        }
+                        applyBookQualityGates(force = true)
+                        RespondTimeUpdater.flush()
+                        probingNames.clear()
+                        deepInFlightNames.clear()
+                        publishProgress(
+                            early = earlyStopped.get(),
+                            finished = true,
+                            force = true,
+                        )
+                        val sorted = runCatching { sortSearchBooks(searchBooks.toList()) }
+                            .getOrDefault(searchBooks.toList())
+                        val top = sorted.take(8).joinToString(" | ") { b ->
+                            val tier = ChangeBookSourceQuality.contentSortTier(
+                                b.chapterWordCount,
+                                b.chapterWordCountText,
+                                b.origin in sessionSoftFail,
+                            )
+                            "${b.originName}(w=${b.chapterWordCount},t=$tier,ms=${b.respondTime})"
+                        }
                         ChangeSourceLog.i(
-                            "early-stop qualityOk=${qualityOkCount.get()} " +
-                                "target=${AppConfig.changeSourceEarlyStopCount}"
+                            "finish cause=${cause?.javaClass?.simpleName ?: "ok"} " +
+                                "early=${earlyStopped.get()} " +
+                                "completed=${completedProbeCount.get()}/${bookSourceParts.size} " +
+                                "list=${searchBooks.size} qualityOk=${qualityOkCount.get()} " +
+                                "hits=${searchHitCount.get()} published=${listPublishCount.get()} " +
+                                "missEmpty=${missEmptyCount.get()} missTimeout=${missTimeoutCount.get()} " +
+                                "missError=${missErrorCount.get()} missContentBad=${missContentBadCount.get()} " +
+                                "top=[$top]"
                         )
-                        publishProgress(early = true, force = true)
-                        currentCoroutineContext().cancel()
+                        searchStateData.postValue(false)
+                        if (cause == null || earlyStopped.get()) {
+                            onSearchTaskFinished(searchBooks.isEmpty())
+                        }
                     }
-                }
-            }.onCompletion { cause ->
-                withContext(NonCancellable + IO) {
-                    applyBookQualityGates(force = true)
-                    RespondTimeUpdater.flush()
-                    probingNames.clear()
-                    publishProgress(
-                        early = earlyStopped.get(),
-                        finished = true,
-                        force = true,
-                    )
-                    val sorted = runCatching { sortSearchBooks(searchBooks.toList()) }
-                        .getOrDefault(searchBooks.toList())
-                    val top = sorted.take(8).joinToString(" | ") { b ->
-                        val tier = ChangeBookSourceQuality.contentSortTier(
-                            b.chapterWordCount,
-                            b.chapterWordCountText,
-                            b.origin in sessionSoftFail,
-                        )
-                        "${b.originName}(w=${b.chapterWordCount},t=$tier,ms=${b.respondTime})"
-                    }
-                    ChangeSourceLog.i(
-                        "finish cause=${cause?.javaClass?.simpleName ?: "ok"} " +
-                            "early=${earlyStopped.get()} " +
-                            "completed=${completedProbeCount.get()}/${bookSourceParts.size} " +
-                            "list=${searchBooks.size} qualityOk=${qualityOkCount.get()} " +
-                            "hits=${searchHitCount.get()} published=${listPublishCount.get()} " +
-                            "missEmpty=${missEmptyCount.get()} missTimeout=${missTimeoutCount.get()} " +
-                            "missError=${missErrorCount.get()} missContentBad=${missContentBadCount.get()} " +
-                            "top=[$top]"
-                    )
-                    searchStateData.postValue(false)
-                    // User cancel / restart: do not invoke finish callback (avoids false empty toast).
-                    if (cause == null || earlyStopped.get()) {
-                        onSearchTaskFinished(searchBooks.isEmpty())
-                    }
-                }
-            }.catch {
-                ChangeSourceLog.w("搜索出错 ${it.localizedMessage}", it)
-                AppLog.put("换源搜索出错\n${it.localizedMessage}", it)
-            }.collect()
+                }.catch {
+                    ChangeSourceLog.w("搜索出错 ${it.localizedMessage}", it)
+                    AppLog.put("换源搜索出错\n${it.localizedMessage}", it)
+                }.collect()
+            }
         }
     }
 
-    private suspend fun search(source: BookSource) {
+    /**
+     * Search-only ask. On hit: early [list+] as pending, then schedule deep on [deepPool]
+     * without holding the ask [mapParallel] slot.
+     */
+    private suspend fun searchAsk(source: BookSource) {
         val checkAuthor = AppConfig.changeSourceCheckAuthor
         val loadInfo = AppConfig.changeSourceLoadInfo
         val loadToc = AppConfig.changeSourceLoadToc
         val loadWordCount = AppConfig.changeSourceLoadWordCount
         val startTime = System.currentTimeMillis()
-        // withTimeoutOrNull returns promptly even when nested Cronet/WebView cleanup is slow.
         val ok = withTimeoutOrNull(AskTimeout.CHANGE_SOURCE_MS) {
             val resultBooks = WebBook.searchBookAwait(
                 source, name,
@@ -607,21 +678,50 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     "searchMs=$searchElapsed results=${resultBooks.size} deep=$deep " +
                     "list=${searchBooks.size} inFlight=${probingNames.size}"
             )
-            if (deep) {
-                ChangeSourceLog.i(
-                    "deep origin=${source.bookSourceUrl} " +
-                        "loadInfo=$loadInfo loadToc=$loadToc loadWordCount=$loadWordCount"
-                )
-                resultBooks.forEach { searchBook ->
-                    currentCoroutineContext().ensureActive()
-                    loadBookInfo(source, searchBook.toBook())
-                }
-            } else {
+            if (!deep) {
                 resultBooks.forEach { searchBook ->
                     searchBook.respondTime = searchElapsed.toInt()
                     publishSearchBook(searchBook)
                 }
+                return@withTimeoutOrNull true
             }
+            ChangeSourceLog.i(
+                "deep-schedule origin=${source.bookSourceUrl} " +
+                    "loadInfo=$loadInfo loadToc=$loadToc loadWordCount=$loadWordCount"
+            )
+            // Early list so UI fills while ask slots keep draining empties.
+            resultBooks.forEach { searchBook ->
+                searchBook.respondTime = searchElapsed.toInt()
+                searchBook.chapterWordCount = 0
+                searchBook.chapterWordCountText =
+                    getApplication<Application>().getString(R.string.change_source_pending_word)
+                publishSearchBook(searchBook)
+            }
+            val pool = deepPool ?: IO
+            val job = viewModelScope.launch(pool) {
+                deepInFlightNames.add(source.bookSourceUrl)
+                publishProgress()
+                try {
+                    if (earlyStopped.get()) return@launch
+                    resultBooks.forEach { searchBook ->
+                        currentCoroutineContext().ensureActive()
+                        if (earlyStopped.get()) return@launch
+                        loadBookInfo(source, searchBook.toBook())
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    ChangeSourceLog.i(
+                        "deep-error origin=${source.bookSourceUrl} ${e.localizedMessage}"
+                    )
+                    noteAskMiss(source.bookSourceUrl, "error", processDemote = true)
+                } finally {
+                    deepInFlightNames.remove(source.bookSourceUrl)
+                    publishProgress()
+                }
+            }
+            deepJobs.add(job)
+            job.invokeOnCompletion { deepJobs.remove(job) }
             true
         }
         if (ok != true) {
@@ -990,8 +1090,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     fun stopSearch() {
-        val wasActive = task?.isActive == true
+        val wasActive = task?.isActive == true || deepJobs.any { it.isActive }
         task?.cancel()
+        deepJobs.forEach { it.cancel() }
+        deepJobs.clear()
+        deepInFlightNames.clear()
         // Do not close searchPool here: onCompletion may still flush on it;
         // Pool is reused while threadCount() is unchanged; resized in initSearchPool().
         // onCleared() attempts Closeable.close() (Executor pools); limitedParallelism is a no-op.
