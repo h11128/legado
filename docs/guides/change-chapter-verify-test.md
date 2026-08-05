@@ -60,22 +60,24 @@ Fill after each run:
 
 | Step | Result | Evidence |
 |---|---|---|
-| A Unit | PASS (2026-08-04) | `./gradlew …ChangeChapterVerifyTest :app:installAppDebug` → `BUILD SUCCESSFUL` |
-| B Install | PASS (2026-08-04) | `Installed on 1 device` SM-A366U1; package `com.legado.app.debug` |
-| C UI | PASS (2026-08-04, 未分组) | Book **学霸也开挂** (未分组). Long-press 换源 → **单章换源**. Progress `校验章节 …` then `章节校验完成`. Badges seen: `已对齐章节`, `字数：2565`, `字数：37`, `无此章`, earlier `获取字数失败：内容为空`. Log: `ChangeChapterSourceDialog` + `换源类型过滤`. |
-| C2 整书换源 | PASS schedule (2026-08-04); quality gate **code-only** | Book **吞噬星空：收徒万倍返还** (新乙, 养肥2). Short-tap 换源. Progress `1/1113` → `143/1113` complete. Type filter: 1252 enabled → **1113** text. Ask-order: first non-reserve source **Xpicvid** (rt=35) matches `AskSourceOrder` rest sort. Early results ~18 by ~272 done; stall ~40s on dead hosts (60s `CHANGE_SOURCE_MS`). WebView/site UI flash (**仙域书库**) mid-search. **Pre-fix list:** many OK ~3800 on ch410, but same-title shells (PO18/海棠/肉文*) also ~4400 — length-only rank promoted them. **Post-fix:** `loadBookWordCount` now runs `ChangeChapterVerify.evaluateContent` (+ one-shot origin fetch if no disk cache); device re-verify of demotion badges not re-run this session. |
-| D Logs | PASS (partial) | `AppLog 换源类型过滤…`; LiveEventBus on `ChangeChapterSourceDialog` / `sourceChanged`. |
+| A Unit | PASS (2026-08-04; reconfirmed 2026-08-05) | `./gradlew …checkalgo.*` (+ Rfc001 / CheckHttpLimits) → `BUILD SUCCESSFUL`, 0 failures |
+| B Install | PASS (2026-08-05) | `installAppDebug` on SM-A366U1 `RZCYA19Z3DX`; `com.legado.app.debug` `versionName=3.26080511debug` after `merge upstream/master` (`f531b2538`) |
+| C UI | PASS (2026-08-05) | Book **吞噬星空：收徒万倍返还**. Long-press 换源 → **单章换源**. Badges: `正文过短`, `疑似错书/广告劫持`, `目录规模疑似不一致`, `最新章疑似不一致`, OK row `字数：3675` (源「小说」). Progress seen `结果 9, 当前进度 265 / 1113`. |
+| C2 整书换源 | PASS (2026-08-05) + quality badges | Short-tap 换源. Mid-run list mixed PO18/海棠 ~4400 字; after `changeSourceLoadWordCount=true` evaluation: demotion badges on 顶点/海棠/笔趣阁* (`疑似错书/广告劫持` + 最新章/目录不一致). Progress `结果 12, 当前进度 260 / 1113`. Ask-order restart first probe **Xpicvid** stalled **>80s** at `1/1113` (past 60s `CHANGE_SOURCE_MS` — likely WebView/hang path). Device pref `changeSourceEarlyStop=false` during run (default code=true); flipped to true in prefs for next cold start. Menu shows 「足够好源后提前停止」. |
+| D Logs | PASS (partial) | Cronet timeouts; UI strings for quality badges. AppLog tag filter thin. |
+| E MCP check smoke | PASS path (2026-08-05) | `start_check_sources` 1 URL `https://m.bqg.fun` → finished; `success=false`, group `搜索失效`, `respondTime=180289` (FAILURE-class writeback). |
 
 ### Notes
 
 - Short tap 换源 = 整书换源; **long-press** 换源 = menu with 单章换源 / 整书换源.
 - First attempt on 「在追」 book hit auto-换源 / lock; switched to **未分组** as requested.
 - RFC-001 ask-order works, but almost all sources are SUCCESS-class (`respondTime < 180000`); only ~3 FAILURE rows → rank band barely helps; rest is ascending respondTime. RFC forbids writing failure on empty/timeout ask probes — dead hosts stay SUCCESS until a proper check encodes failure.
-- Follow-up in tree: 整书换源 word-count path runs `ChangeChapterVerify.evaluateContent` (align local chapter by title; one-shot fetch from current origin if disk cache empty; session-cached context). Device re-test of 「疑似错书」badges on PO18 shells still pending.
-- Book-quality pack (2026-08-04): multi-source content consensus + latest-title outliers + TOC size band + quality-first sort + session soft-fail (timeout/hijack, no respondTime write) + early-stop (`changeSourceEarlyStop`, default 20 OK). Menu: 「足够好源后提前停止」.
+- Follow-up in tree: 整书换源 word-count path runs `ChangeChapterVerify.evaluateContent` (align local chapter by title; one-shot fetch from current origin if disk cache empty; session-cached context). **2026-08-05 device:** 「疑似错书/广告劫持」等徽章已在整书/单章换源列表复现（需 `changeSourceLoadWordCount=true`）。
+- Book-quality pack (2026-08-04): multi-source content consensus + latest-title outliers + TOC size band + quality-first sort + session soft-fail (timeout/hijack, no respondTime write) + early-stop (`changeSourceEarlyStop`, default 20 OK). Menu: 「足够好源后提前停止」. Device may have pref=false — check menu before claiming early-stop worked.
 - Sort refined: **content tier → length band → likes → probe respondTime → soft latest/TOC hint**. Latest/TOC stay badges + soft penalty only; they do not veto content-OK.
+- 2026-08-05: ask-order first hit **Xpicvid** can stall past `CHANGE_SOURCE_MS` on restart; treat as known timeout/WebView hang watch item.
 
 ## Out of scope
 
-- MCP `debug_source` / `start_check_sources` (书源校验, not 换源 UI).
 - Full 1200-source ask-order perf (RFC-001 separate).
+- Exhaustive early-stop wall-clock on device this session (pref was off until end).
