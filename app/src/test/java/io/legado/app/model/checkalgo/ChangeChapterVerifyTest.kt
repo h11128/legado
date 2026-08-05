@@ -188,11 +188,11 @@ class ChangeChapterVerifyTest {
     @Test
     fun evaluateContentStitchOverrideRequiresStrongReference() {
         val reference = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(120)
-        val weakOverlapHijack = """
-            甲世界剑修斩落星辰。${"剑气".repeat(40)}
-            乙大陆炼气士吞服丹药。${"丹田".repeat(40)}
-            罗峰。
-        """.trimIndent()
+        val weakOverlapHijack = listOf(
+            "罗峰站在黑洞边缘，感受宇宙深处传来的威压，手中战刀微微震动不止。",
+            "萧炎看向药老虚影，纳戒里的异火忽然躁动起来，焚决开始疯狂运转。",
+            "叶凡在北斗星空撕开虚空裂缝，圣体与敌人硬撼，鲜血溅落星辰。",
+        ).joinToString("\n\n")
         assertTrue(ChangeChapterVerify.looksLikeStitchedParagraphs(weakOverlapHijack))
         val weak = ChangeChapterVerify.evaluateContentDiag(
             weakOverlapHijack,
