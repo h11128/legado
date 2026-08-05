@@ -22,14 +22,16 @@ internal fun Context.formatChangeSourceProgress(
             progress.qualityOk,
             progress.completed,
             total,
-            progress.label,
+            progress.label.ifBlank { "…" },
         )
         else -> getString(
             R.string.change_source_progress,
             resultCount,
             progress.completed,
             total,
-            progress.label,
+            progress.inFlight,
+            progress.concurrency.coerceAtLeast(1),
+            progress.label.ifBlank { "…" },
         )
     }
 }

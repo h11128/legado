@@ -5,6 +5,10 @@ package io.legado.app.ui.book.changesource
  */
 data class ChangeSourceProgressUi(
     val completed: Int = 0,
+    /** Sources currently being probed in parallel. */
+    val inFlight: Int = 0,
+    /** Configured mapParallel concurrency (usually AppConfig.threadCount). */
+    val concurrency: Int = 0,
     val label: String = "",
     val qualityOk: Int = 0,
     val earlyStopped: Boolean = false,

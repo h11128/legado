@@ -266,7 +266,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                                 total = viewModel.totalSourceCount,
                             )
                         }
-                        delay(500)
+                        delay(100)
                     }
             }
         }

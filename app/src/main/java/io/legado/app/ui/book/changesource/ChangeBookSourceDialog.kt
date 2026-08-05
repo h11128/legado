@@ -251,7 +251,8 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
                             progress = progress,
                             total = viewModel.totalSourceCount,
                         )
-                        delay(500)
+                        // Short yield so parallel inFlight updates are not starved by a 500ms lag.
+                        delay(100)
                     }
             }
         }

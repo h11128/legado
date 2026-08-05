@@ -1318,7 +1318,7 @@
     <string name="export_book_notification_content">正在导出(%1$s),还有%2$d本待导出</string>
     <string name="export_md">导出(MD)</string>
     <string name="change_source_delay">换源间隔</string>
-    <string name="change_source_progress">结果 %1$d, 当前进度 %2$d / %3$d: %4$s</string>
+    <string name="change_source_progress">结果 %1$d · 已完成 %2$d/%3$d · 并行 %4$d/%5$d · %6$s</string>
     <string name="change_source_early_stop_done">结果 %1$d · 已足够好源（%2$d）· 已停止 %3$d / %4$d</string>
     <string name="change_source_early_stop_running">结果 %1$d · 已足够好源（%2$d）· 正在停止 %3$d / %4$d: %5$s</string>
     <string name="change_source_verify_chapter">校验章节</string>

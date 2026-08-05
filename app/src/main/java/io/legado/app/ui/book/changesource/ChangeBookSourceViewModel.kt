@@ -216,6 +216,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     protected fun updateChangeSourceProgress(index: Int, label: String) {
         _changeSourceProgress.value = ChangeSourceProgressUi(
             completed = index,
+            inFlight = 0,
+            concurrency = threadCount,
             label = label,
             qualityOk = qualityOkCount.get(),
             earlyStopped = earlyStopped.get(),
@@ -363,16 +365,26 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         early: Boolean = earlyStopped.get(),
         finished: Boolean = false,
     ) {
-        val probing = probingNames.take(2).joinToString("、") { url ->
+        val inFlightUrls = probingNames.toList()
+        val inFlight = inFlightUrls.size
+        // Show several in-flight names so parallel work is visible (not just one serial name).
+        val sample = inFlightUrls.take(3).joinToString("、") { url ->
             bookSourceParts.find { it.bookSourceUrl == url }?.bookSourceName ?: url
+        }
+        val more = (inFlight - 3).coerceAtLeast(0)
+        val probingLabel = when {
+            inFlight == 0 -> ""
+            more > 0 -> "探测中 $sample 等${more}个"
+            else -> "探测中 $sample"
         }
         val label = when {
             early -> "" // freeze subtitle during early-stop wind-down (no probing flicker)
-            probing.isNotEmpty() -> "探测中 $probing"
-            else -> ""
+            else -> probingLabel
         }
         _changeSourceProgress.value = ChangeSourceProgressUi(
             completed = completed,
+            inFlight = inFlight,
+            concurrency = threadCount,
             label = label,
             qualityOk = qualityOkCount.get(),
             earlyStopped = early,
