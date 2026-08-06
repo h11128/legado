@@ -1,5 +1,6 @@
 package io.legado.app.model.checkalgo
 
+import io.legado.app.data.entities.SearchBook
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -195,5 +196,74 @@ class ChangeBookSourceQualityTest {
         assertFalse(ChangeBookSourceQuality.shouldEarlyStop(19, enabled = true, target = 20))
         assertTrue(ChangeBookSourceQuality.shouldEarlyStop(20, enabled = true, target = 20))
         assertFalse(ChangeBookSourceQuality.shouldEarlyStop(100, enabled = false, target = 20))
+    }
+
+    @Test
+    fun backendFromBookUrlReadsSourceQuery() {
+        assertEquals(
+            "69书吧",
+            ChangeBookSourceQuality.backendFromBookUrl(
+                "https://v1.gyks.cf/detail?book_id=abc&source=69书吧&tab=小说",
+            ),
+        )
+        assertNull(ChangeBookSourceQuality.backendFromBookUrl("https://example.com/book/1"))
+    }
+
+    @Test
+    fun usableLatestRejectsAggregatorTipThatIsOnlyBackend() {
+        val url = "https://v1.gyks.cf/detail?book_id=x&source=百度"
+        assertFalse(ChangeBookSourceQuality.hasUsableSearchLatest("百度", url))
+        assertFalse(ChangeBookSourceQuality.hasUsableSearchLatest("", url))
+        assertTrue(
+            ChangeBookSourceQuality.hasUsableSearchLatest(
+                "69书吧 第382章 一等天才，万倍返还！",
+                "https://v1.gyks.cf/detail?book_id=x&source=69书吧",
+            )
+        )
+        assertEquals(
+            "第382章 一等天才，万倍返还！",
+            ChangeBookSourceQuality.effectiveLatestChapterTitle(
+                "69书吧 第382章 一等天才，万倍返还！",
+                "https://v1.gyks.cf/detail?book_id=x&source=69书吧",
+            ),
+        )
+    }
+
+    @Test
+    fun displayOriginNameAppendsBackend() {
+        assertEquals(
+            "🌞晴天小说5.0 · 69书吧",
+            ChangeBookSourceQuality.displayOriginName(
+                "🌞晴天小说5.0",
+                "https://v1.gyks.cf/detail?book_id=x&source=69书吧",
+            ),
+        )
+        assertEquals(
+            "普通书源",
+            ChangeBookSourceQuality.displayOriginName("普通书源", "https://example.com/a"),
+        )
+    }
+
+    @Test
+    fun prepareSearchHitDecoratesAndRejects() {
+        val bad = SearchBook(
+            name = "吞噬星空：收徒万倍返还",
+            origin = "https://v1.gyks.cf/#小说/",
+            originName = "🌞晴天小说5.0",
+            bookUrl = "https://v1.gyks.cf/detail?book_id=x&source=猫眼",
+            latestChapterTitle = "猫眼",
+        )
+        assertFalse(ChangeBookSourceQuality.prepareSearchHitForChangeSource(bad))
+
+        val good = SearchBook(
+            name = "吞噬星空：收徒万倍返还",
+            origin = "https://v1.gyks.cf/#小说/",
+            originName = "🌞晴天小说5.0",
+            bookUrl = "https://v1.gyks.cf/detail?book_id=y&source=69书吧",
+            latestChapterTitle = "69书吧 第382章 一等天才，万倍返还！",
+        )
+        assertTrue(ChangeBookSourceQuality.prepareSearchHitForChangeSource(good))
+        assertEquals("🌞晴天小说5.0 · 69书吧", good.originName)
+        assertEquals("第382章 一等天才，万倍返还！", good.latestChapterTitle)
     }
 }

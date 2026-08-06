@@ -1,5 +1,7 @@
 package io.legado.app.model.checkalgo
 
+import io.legado.app.data.entities.SearchBook
+import java.net.URLDecoder
 import kotlin.math.abs
 
 /**
@@ -9,6 +11,65 @@ import kotlin.math.abs
  * Content digram / stitch / multi-source consensus stay in [ChangeChapterVerify].
  */
 object ChangeBookSourceQuality {
+
+    private val bookUrlSourceParam =
+        Regex("""(?:^|[?&])source=([^&#]+)""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Aggregator backends often put `source=` on [SearchBook.bookUrl]
+     * (e.g. 晴天 `…/detail?book_id=…&source=69书吧`).
+     */
+    fun backendFromBookUrl(bookUrl: String?): String? {
+        if (bookUrl.isNullOrBlank()) return null
+        val encoded = bookUrlSourceParam.find(bookUrl)?.groupValues?.getOrNull(1) ?: return null
+        return runCatching {
+            URLDecoder.decode(encoded, Charsets.UTF_8.name()).trim()
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * Tip text after stripping an aggregator `source=` label prefix.
+     * Blank ⇒ search hit has no real latest chapter (e.g. lastChapter=`百度`).
+     */
+    fun effectiveLatestChapterTitle(latest: String?, bookUrl: String?): String {
+        val raw = latest?.trim().orEmpty()
+        if (raw.isEmpty()) return ""
+        val backend = backendFromBookUrl(bookUrl) ?: return raw
+        if (raw.equals(backend, ignoreCase = true)) return ""
+        if (raw.length > backend.length &&
+            raw.regionMatches(0, backend, 0, backend.length, ignoreCase = true) &&
+            raw[backend.length].isWhitespace()
+        ) {
+            return raw.substring(backend.length).trim()
+        }
+        return raw
+    }
+
+    /** Change-source list should not keep hits with no usable tip chapter. */
+    fun hasUsableSearchLatest(latest: String?, bookUrl: String?): Boolean =
+        effectiveLatestChapterTitle(latest, bookUrl).isNotEmpty()
+
+    fun displayOriginName(originName: String, bookUrl: String?): String {
+        val backend = backendFromBookUrl(bookUrl) ?: return originName
+        val suffix = " · $backend"
+        if (originName.endsWith(suffix)) return originName
+        return originName + suffix
+    }
+
+    /**
+     * Normalize aggregator search hits for the change-source list.
+     * @return false when the hit should be discarded (no usable latest chapter).
+     */
+    fun prepareSearchHitForChangeSource(book: SearchBook): Boolean {
+        if (!hasUsableSearchLatest(book.latestChapterTitle, book.bookUrl)) return false
+        val effective = effectiveLatestChapterTitle(book.latestChapterTitle, book.bookUrl)
+        if (effective.isNotEmpty()) {
+            book.latestChapterTitle = effective
+        }
+        book.originName = displayOriginName(book.originName, book.bookUrl)
+        return true
+    }
+
 
     /** Stop asking more sources once this many quality-OK probes exist. */
     const val EARLY_STOP_QUALITY_OK = 20

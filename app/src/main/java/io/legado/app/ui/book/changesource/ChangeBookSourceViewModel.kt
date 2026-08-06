@@ -175,10 +175,18 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             override fun searchSuccess(searchBook: SearchBook) {
                 // Early-stop: never re-accept unfinished pending rows after dropPending.
                 if (earlyStopped.get() && searchBook.chapterWordCount == 0) return
+                if (!ChangeBookSourceQuality.prepareSearchHitForChangeSource(searchBook)) {
+                    ChangeSourceLog.i(
+                        "list- skip origin=${searchBook.origin} reason=empty-latest " +
+                            "url=${searchBook.bookUrl.take(80)}"
+                    )
+                    return
+                }
                 searchBook.releaseHtmlData()
                 appDb.searchBookDao.insert(searchBook)
                 val accepted = synchronized(searchBooks) {
-                    val idx = searchBooks.indexOfFirst { it.origin == searchBook.origin }
+                    // bookUrl (not origin): aggregators may return several backends.
+                    val idx = searchBooks.indexOfFirst { it.bookUrl == searchBook.bookUrl }
                     when {
                         idx >= 0 -> {
                             searchBooks[idx] = searchBook
@@ -214,9 +222,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
         }
 
-        getDbSearchBooks().let {
+        getDbSearchBooks().let { rows ->
             searchBooks.clear()
-            searchBooks.addAll(it)
+            searchBooks.addAll(
+                rows.filter { ChangeBookSourceQuality.prepareSearchHitForChangeSource(it) }
+            )
             trySend(arrayOf(searchBooks))
         }
 
@@ -266,7 +276,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             }
             .thenBy {
                 ChangeBookSourceQuality.softMetaPenalty(
-                    qualityTiers[it.origin] ?: ChangeBookSourceQuality.TIER_UNKNOWN,
+                    qualityTiers[it.bookUrl]
+                        ?: qualityTiers[it.origin]
+                        ?: ChangeBookSourceQuality.TIER_UNKNOWN,
                     chapterWordCount = it.chapterWordCount,
                 )
             }
@@ -432,9 +444,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     open fun refresh(): Boolean {
-        getDbSearchBooks().let {
+        getDbSearchBooks().let { rows ->
             searchBooks.clear()
-            searchBooks.addAll(it)
+            searchBooks.addAll(rows.filter { ChangeBookSourceQuality.prepareSearchHitForChangeSource(it) })
             searchCallback?.upAdapter()
         }
         return searchBooks.isEmpty().also { isEmpty ->
@@ -832,17 +844,31 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
         val startTime = System.currentTimeMillis()
         val ok = withTimeoutOrNull(budgetMs) {
-            val resultBooks = WebBook.searchBookAwait(
+            val rawBooks = WebBook.searchBookAwait(
                 source, name,
                 filter = { fName, fAuthor, _ ->
                     fName == name && (!checkAuthor || fAuthor.contains(author))
                 })
             currentCoroutineContext().ensureActive()
             val searchElapsed = System.currentTimeMillis() - startTime
-            if (resultBooks.isEmpty()) {
+            if (rawBooks.isEmpty()) {
                 noteAskMiss(source.bookSourceUrl, "empty", processDemote = false)
                 ChangeSourceAskMemory.noteTitleEmpty(name, author, source.bookSourceUrl)
                 runCatching { ChangeSourceTitleEmptyPrefs.persistCurrent(name, author) }
+                return@withTimeoutOrNull true
+            }
+            val resultBooks = rawBooks.filter {
+                ChangeBookSourceQuality.hasUsableSearchLatest(
+                    it.latestChapterTitle,
+                    it.bookUrl,
+                )
+            }
+            if (resultBooks.isEmpty()) {
+                // Name matched but tips were only aggregator labels / blank — not a title miss.
+                ChangeSourceLog.i(
+                    "miss empty-latest origin=${source.bookSourceUrl} " +
+                        "raw=${rawBooks.size} list=${searchBooks.size}"
+                )
                 return@withTimeoutOrNull true
             }
             searchHitCount.incrementAndGet()
@@ -904,7 +930,17 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     resultBooks.forEach { searchBook ->
                         currentCoroutineContext().ensureActive()
                         if (earlyStopped.get()) return@launch
-                        loadBookInfo(source, searchBook.toBook())
+                        try {
+                            loadBookInfo(source, searchBook.toBook())
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            ChangeSourceLog.i(
+                                "deep-error origin=${source.bookSourceUrl} " +
+                                    "url=${searchBook.bookUrl.take(80)} ${e.localizedMessage}"
+                            )
+                            dropSearchBookHit(searchBook, "deep-error")
+                        }
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -912,7 +948,6 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     ChangeSourceLog.i(
                         "deep-error origin=${source.bookSourceUrl} ${e.localizedMessage}"
                     )
-                    dropSearchBookOrigin(source.bookSourceUrl, "deep-error")
                     noteAskMiss(source.bookSourceUrl, "error", processDemote = true)
                 } finally {
                     deepInFlightNames.remove(source.bookSourceUrl)
@@ -974,8 +1009,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         chapters: List<BookChapter>
     ) = coroutineScope {
         if (chapters.isEmpty()) {
-            dropSearchBookOrigin(book.origin, "empty-toc")
-            noteAskMiss(book.origin, "content-bad", processDemote = false)
+            val hit = book.toSearchBook()
+            dropSearchBookHit(hit, "empty-toc")
             return@coroutineScope
         }
         val chapterIndex = wordCountChapterIndex(chapters).coerceIn(0, chapters.lastIndex)
@@ -1013,7 +1048,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             val evalCtx = bookChangeContentEvalContext(chapterIndex, bookChapter.title)
             val diag = ChangeChapterVerify.evaluateContentDiag(contentRaw, evalCtx)
             evalMs = System.currentTimeMillis() - tEval0
-            diag.refSim?.let { contentRefSimByOrigin[source.bookSourceUrl] = it }
+            diag.refSim?.let { contentRefSimByOrigin[book.bookUrl] = it }
             ChangeSourceLog.i(
                 "phase word-eval origin=${source.bookSourceUrl} reason=${diag.reason} " +
                     "len=${diag.contentLen} stitch=${diag.stitch} " +
@@ -1072,13 +1107,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 "list=${searchBooks.size}"
         )
         if (pair.first < 0) {
-            // Do not keep content-bad rows in the result list (session evidence: 140 bad flooded UI).
-            dropSearchBookOrigin(searchBook.origin, "content-bad")
-            noteAskMiss(searchBook.origin, "content-bad", processDemote = false)
-            mergeTier(searchBook.origin, ChangeBookSourceQuality.TIER_CONTENT_BAD)
+            // Drop this hit only (aggregators share origin across backends).
+            dropSearchBookHit(searchBook, "content-bad")
         } else {
             if (ChangeBookSourceQuality.isQualityOkWordCount(pair.first) && processedContent != null) {
-                probeContentSamples[searchBook.origin] = processedContent
+                probeContentSamples[searchBook.bookUrl] = processedContent
                 qualityOkCount.incrementAndGet()
             }
             publishSearchBook(searchBook, tocSize = chapters.size)
@@ -1109,13 +1142,40 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         )
     }
 
+    /** Remove one search hit (by bookUrl) so aggregator siblings stay listed. */
+    private fun dropSearchBookHit(searchBook: SearchBook, reason: String) {
+        val bookUrl = searchBook.bookUrl
+        val (removed, wasOk) = synchronized(searchBooks) {
+            val doomed = searchBooks.filter { it.bookUrl == bookUrl }
+            if (doomed.isEmpty()) return@synchronized Pair(emptyList(), false)
+            val ok = doomed.any {
+                ChangeBookSourceQuality.isQualityOkWordCount(it.chapterWordCount)
+            }
+            searchBooks.removeAll { it.bookUrl == bookUrl }
+            Pair(doomed, ok)
+        }
+        if (removed.isEmpty()) return
+        if (wasOk) {
+            qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
+        }
+        probeContentSamples.remove(bookUrl)
+        contentRefSimByOrigin.remove(bookUrl)
+        qualityTiers.remove(bookUrl)
+        runCatching { appDb.searchBookDao.delete(*removed.toTypedArray()) }
+        searchCallback?.upAdapter()
+        ChangeSourceLog.i(
+            "list- drop hit origin=${searchBook.origin} reason=$reason wasOk=$wasOk " +
+                "url=${bookUrl.take(80)} size=${searchBooks.size}"
+        )
+    }
+
     private fun publishSearchBook(searchBook: SearchBook, tocSize: Int? = null) {
         annotateMetaQuality(searchBook, tocSize)
         searchCallback?.searchSuccess(searchBook)
     }
 
     private fun annotateMetaQuality(searchBook: SearchBook, tocSize: Int?) {
-        val origin = searchBook.origin
+        val hitKey = searchBook.bookUrl
         val local = oldBook
         if (tocSize != null &&
             local != null &&
@@ -1123,10 +1183,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         ) {
             if (ChangeBookSourceQuality.shouldShowTocMismatchBadge(
                     searchBook.chapterWordCount,
-                    contentRefSimByOrigin[origin],
+                    contentRefSimByOrigin[hitKey],
                 )
             ) {
-                mergeTier(origin, ChangeBookSourceQuality.TIER_TOC_BAD)
+                mergeTier(hitKey, ChangeBookSourceQuality.TIER_TOC_BAD)
                 searchBook.chapterWordCountText = appendBadge(
                     searchBook.chapterWordCountText,
                     getApplication<Application>().getString(R.string.change_source_toc_mismatch),
@@ -1140,10 +1200,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             false -> {
                 if (ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
                         searchBook.chapterWordCount,
-                        contentRefSimByOrigin[origin],
+                        contentRefSimByOrigin[hitKey],
                     )
                 ) {
-                    mergeTier(origin, ChangeBookSourceQuality.TIER_LATEST_BAD)
+                    mergeTier(hitKey, ChangeBookSourceQuality.TIER_LATEST_BAD)
                     searchBook.chapterWordCountText = appendBadge(
                         searchBook.chapterWordCountText,
                         getApplication<Application>().getString(R.string.change_source_latest_mismatch),
@@ -1177,31 +1237,32 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 samples = samples,
                 referenceContent = wordCountEvalContext?.referenceContent,
             )
-            for (origin in outliers) {
-                demoteOriginContent(
-                    origin,
+            for (bookUrl in outliers) {
+                val book = searchBooks.find { it.bookUrl == bookUrl } ?: continue
+                demoteSearchHitContent(
+                    book,
                     getApplication<Application>().getString(R.string.change_source_chapter_hijack),
                 )
             }
         }
         val titles = searchBooks.mapNotNull { book ->
-            book.latestChapterTitle?.trim()?.takeIf { it.isNotEmpty() }?.let { book.origin to it }
+            book.latestChapterTitle?.trim()?.takeIf { it.isNotEmpty() }?.let { book.bookUrl to it }
         }.toMap()
         if (force || titles.size >= ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES) {
             val latestOutliers = ChangeBookSourceQuality.latestTitleOutliers(
                 titlesByOrigin = titles,
                 localLatest = oldBook?.latestChapterTitle,
             )
-            for (origin in latestOutliers) {
-                val book = searchBooks.find { it.origin == origin } ?: continue
+            for (bookUrl in latestOutliers) {
+                val book = searchBooks.find { it.bookUrl == bookUrl } ?: continue
                 if (!ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
                         book.chapterWordCount,
-                        contentRefSimByOrigin[origin],
+                        contentRefSimByOrigin[bookUrl],
                     )
                 ) {
                     continue
                 }
-                mergeTier(origin, ChangeBookSourceQuality.TIER_LATEST_BAD)
+                mergeTier(bookUrl, ChangeBookSourceQuality.TIER_LATEST_BAD)
                 book.chapterWordCountText = appendBadge(
                     book.chapterWordCountText,
                     getApplication<Application>().getString(R.string.change_source_latest_mismatch),
@@ -1215,12 +1276,19 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }
 
+    private fun demoteSearchHitContent(searchBook: SearchBook, badge: String) {
+        mergeTier(searchBook.bookUrl, ChangeBookSourceQuality.TIER_CONTENT_BAD)
+        probeContentSamples.remove(searchBook.bookUrl)
+        dropSearchBookHit(searchBook, "consensus:$badge")
+    }
+
     private fun demoteOriginContent(origin: String, badge: String) {
         sessionSoftFail.add(origin)
         mergeTier(origin, ChangeBookSourceQuality.TIER_CONTENT_BAD)
-        probeContentSamples.remove(origin)
-        // Consensus outliers leave the visible list; drop rolls back qualityOk if needed.
-        dropSearchBookOrigin(origin, "consensus:$badge")
+        val hits = synchronized(searchBooks) { searchBooks.filter { it.origin == origin } }
+        for (hit in hits) {
+            demoteSearchHitContent(hit, badge)
+        }
     }
 
     private fun mergeTier(origin: String, tier: Int) {
@@ -1493,9 +1561,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     fun screen(key: String?) {
         screenKey = key?.trim() ?: ""
         execute {
-            getDbSearchBooks().let {
+            getDbSearchBooks().let { rows ->
                 searchBooks.clear()
-                searchBooks.addAll(it)
+                searchBooks.addAll(
+                    rows.filter { ChangeBookSourceQuality.prepareSearchHitForChangeSource(it) }
+                )
                 searchCallback?.upAdapter()
             }
         }
