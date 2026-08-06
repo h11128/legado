@@ -175,9 +175,14 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             override fun searchSuccess(searchBook: SearchBook) {
                 // Early-stop: never re-accept unfinished pending rows after dropPending.
                 if (earlyStopped.get() && searchBook.chapterWordCount == 0) return
-                if (!ChangeBookSourceQuality.prepareSearchHitForChangeSource(searchBook)) {
+                if (!ChangeBookSourceQuality.prepareSearchHitForChangeSource(
+                        searchBook,
+                        author,
+                        requireAuthor = AppConfig.changeSourceCheckAuthor,
+                    )
+                ) {
                     ChangeSourceLog.i(
-                        "list- skip origin=${searchBook.origin} reason=empty-latest " +
+                        "list- skip origin=${searchBook.origin} reason=search-quality " +
                             "url=${searchBook.bookUrl.take(80)}"
                     )
                     return
@@ -225,7 +230,13 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         getDbSearchBooks().let { rows ->
             searchBooks.clear()
             searchBooks.addAll(
-                rows.filter { ChangeBookSourceQuality.prepareSearchHitForChangeSource(it) }
+                rows.filter {
+                    ChangeBookSourceQuality.prepareSearchHitForChangeSource(
+                        it,
+                        author,
+                        requireAuthor = AppConfig.changeSourceCheckAuthor,
+                    )
+                }
             )
             trySend(arrayOf(searchBooks))
         }
@@ -446,7 +457,13 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     open fun refresh(): Boolean {
         getDbSearchBooks().let { rows ->
             searchBooks.clear()
-            searchBooks.addAll(rows.filter { ChangeBookSourceQuality.prepareSearchHitForChangeSource(it) })
+            searchBooks.addAll(rows.filter {
+                ChangeBookSourceQuality.prepareSearchHitForChangeSource(
+                    it,
+                    author,
+                    requireAuthor = AppConfig.changeSourceCheckAuthor,
+                )
+            })
             searchCallback?.upAdapter()
         }
         return searchBooks.isEmpty().also { isEmpty ->
@@ -858,15 +875,16 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 return@withTimeoutOrNull true
             }
             val resultBooks = rawBooks.filter {
-                ChangeBookSourceQuality.hasUsableSearchLatest(
-                    it.latestChapterTitle,
-                    it.bookUrl,
+                ChangeBookSourceQuality.isAcceptableChangeSourceHit(
+                    it,
+                    author,
+                    requireAuthor = checkAuthor,
                 )
             }
             if (resultBooks.isEmpty()) {
-                // Name matched but tips were only aggregator labels / blank — not a title miss.
+                // Title matched but tip/author/intro failed quality gate — not a title miss.
                 ChangeSourceLog.i(
-                    "miss empty-latest origin=${source.bookSourceUrl} " +
+                    "miss search-quality origin=${source.bookSourceUrl} " +
                         "raw=${rawBooks.size} list=${searchBooks.size}"
                 )
                 return@withTimeoutOrNull true
@@ -1564,7 +1582,13 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             getDbSearchBooks().let { rows ->
                 searchBooks.clear()
                 searchBooks.addAll(
-                    rows.filter { ChangeBookSourceQuality.prepareSearchHitForChangeSource(it) }
+                    rows.filter {
+                    ChangeBookSourceQuality.prepareSearchHitForChangeSource(
+                        it,
+                        author,
+                        requireAuthor = AppConfig.changeSourceCheckAuthor,
+                    )
+                }
                 )
                 searchCallback?.upAdapter()
             }

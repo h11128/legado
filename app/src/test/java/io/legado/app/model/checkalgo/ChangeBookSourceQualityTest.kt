@@ -214,6 +214,7 @@ class ChangeBookSourceQualityTest {
         val url = "https://v1.gyks.cf/detail?book_id=x&source=百度"
         assertFalse(ChangeBookSourceQuality.hasUsableSearchLatest("百度", url))
         assertFalse(ChangeBookSourceQuality.hasUsableSearchLatest("", url))
+        assertFalse(ChangeBookSourceQuality.hasUsableSearchLatest("详细", url))
         assertTrue(
             ChangeBookSourceQuality.hasUsableSearchLatest(
                 "69书吧 第382章 一等天才，万倍返还！",
@@ -226,6 +227,64 @@ class ChangeBookSourceQualityTest {
                 "69书吧 第382章 一等天才，万倍返还！",
                 "https://v1.gyks.cf/detail?book_id=x&source=69书吧",
             ),
+        )
+    }
+
+    @Test
+    fun authorCompatibleRequiresOverlapWhenLocalSet() {
+        assertTrue(
+            ChangeBookSourceQuality.authorCompatibleForChangeSource("新乙", "", requireAuthor = false)
+        )
+        assertTrue(
+            ChangeBookSourceQuality.authorCompatibleForChangeSource("", "任何人", requireAuthor = true)
+        )
+        assertFalse(
+            ChangeBookSourceQuality.authorCompatibleForChangeSource("新乙", "", requireAuthor = true)
+        )
+        assertFalse(
+            ChangeBookSourceQuality.authorCompatibleForChangeSource("新乙", "铁匠小笑", requireAuthor = true)
+        )
+        assertTrue(
+            ChangeBookSourceQuality.authorCompatibleForChangeSource("新乙", "新乙", requireAuthor = true)
+        )
+        assertTrue(
+            ChangeBookSourceQuality.authorCompatibleForChangeSource("新乙", "作者：新乙", requireAuthor = true)
+        )
+    }
+
+    @Test
+    fun usableLatestKeepsShortRealTips() {
+        assertTrue(ChangeBookSourceQuality.hasUsableSearchLatest("序章", null))
+        assertTrue(ChangeBookSourceQuality.hasUsableSearchLatest("第1话 开端", null))
+        assertFalse(ChangeBookSourceQuality.hasUsableSearchLatest("详细", null))
+        assertFalse(ChangeBookSourceQuality.hasUsableSearchLatest("最新章节", null))
+    }
+
+    @Test
+    fun acceptableHitRejectsHaiciStyleShell() {
+        val shell = SearchBook(
+            name = "吞噬星空：收徒万倍返还",
+            origin = "http://dict.cn",
+            originName = "海词精选（优）",
+            bookUrl = "http://dict.cn/%E5%90%9E%E5%99%AC",
+            author = "",
+            latestChapterTitle = "",
+            intro = "该词条未找到_海词词典",
+        )
+        assertFalse(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
+                shell,
+                "新乙",
+                requireAuthor = false,
+            )
+        )
+        val introOnly = shell.copy(latestChapterTitle = "第1章 开始", intro = "该词条未找到_海词词典")
+        assertFalse(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
+                introOnly,
+                "新乙",
+                requireAuthor = false,
+            )
         )
     }
 
@@ -252,8 +311,9 @@ class ChangeBookSourceQualityTest {
             originName = "🌞晴天小说5.0",
             bookUrl = "https://v1.gyks.cf/detail?book_id=x&source=猫眼",
             latestChapterTitle = "猫眼",
+            author = "新乙",
         )
-        assertFalse(ChangeBookSourceQuality.prepareSearchHitForChangeSource(bad))
+        assertFalse(ChangeBookSourceQuality.prepareSearchHitForChangeSource(bad, "新乙"))
 
         val good = SearchBook(
             name = "吞噬星空：收徒万倍返还",
@@ -261,8 +321,9 @@ class ChangeBookSourceQualityTest {
             originName = "🌞晴天小说5.0",
             bookUrl = "https://v1.gyks.cf/detail?book_id=y&source=69书吧",
             latestChapterTitle = "69书吧 第382章 一等天才，万倍返还！",
+            author = "新乙",
         )
-        assertTrue(ChangeBookSourceQuality.prepareSearchHitForChangeSource(good))
+        assertTrue(ChangeBookSourceQuality.prepareSearchHitForChangeSource(good, "新乙"))
         assertEquals("🌞晴天小说5.0 · 69书吧", good.originName)
         assertEquals("第382章 一等天才，万倍返还！", good.latestChapterTitle)
     }

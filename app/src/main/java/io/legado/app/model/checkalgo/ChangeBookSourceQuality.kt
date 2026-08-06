@@ -15,6 +15,28 @@ object ChangeBookSourceQuality {
     private val bookUrlSourceParam =
         Regex("""(?:^|[?&])source=([^&#]+)""", RegexOption.IGNORE_CASE)
 
+    /** Tips that are UI chrome / placeholders, not chapter titles. */
+    private val placeholderLatestTips = setOf(
+        "详细", "目录", "正文", "阅读", "查看", "无", "暂无", "无最新章节",
+        "连载中", "连载", "完结", "全文", "开始阅读", "点击阅读",
+        "最新章节", "继续阅读", "全文阅读", "进入阅读", "立即阅读",
+    )
+
+    private val softChapterTips = setOf(
+        "序章", "楔子", "番外", "尾声", "前言", "后记", "引子", "感言",
+    )
+
+    private val chapterTipHint =
+        Regex("第[\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+[章节回集卷部篇话]")
+
+    private val nonBookIntroHints = listOf(
+        "该词条未找到",
+        "没有找到与此相符",
+        "Sorry，没有找到",
+        "Sorry,没有找到",
+        "词条未找到",
+    )
+
     /**
      * Aggregator backends often put `source=` on [SearchBook.bookUrl]
      * (e.g. 晴天 `…/detail?book_id=…&source=69书吧`).
@@ -45,9 +67,58 @@ object ChangeBookSourceQuality {
         return raw
     }
 
-    /** Change-source list should not keep hits with no usable tip chapter. */
-    fun hasUsableSearchLatest(latest: String?, bookUrl: String?): Boolean =
-        effectiveLatestChapterTitle(latest, bookUrl).isNotEmpty()
+    /**
+     * Change-source list needs a tip that looks like a chapter, not chrome / backend label.
+     */
+    fun hasUsableSearchLatest(latest: String?, bookUrl: String?): Boolean {
+        val tip = effectiveLatestChapterTitle(latest, bookUrl)
+        if (tip.isEmpty()) return false
+        if (tip in placeholderLatestTips) return false
+        if (placeholderLatestTips.any { it.length >= 2 && tip.contains(it) && tip.length <= it.length + 2 }) {
+            return false
+        }
+        if (chapterTipHint.containsMatchIn(tip)) return true
+        if (tip in softChapterTips) return true
+        return tip.length >= 2
+    }
+
+    /**
+     * Author overlap gate — only when [requireAuthor] (App 「校验作者」) is on.
+     * Empty local author ⇒ no constraint.
+     */
+    fun authorCompatibleForChangeSource(
+        localAuthor: String?,
+        hitAuthor: String?,
+        requireAuthor: Boolean,
+    ): Boolean {
+        if (!requireAuthor) return true
+        val local = localAuthor?.trim().orEmpty()
+        if (local.isEmpty()) return true
+        val hit = hitAuthor?.trim().orEmpty()
+        if (hit.isEmpty()) return false
+        return hit.contains(local) || local.contains(hit)
+    }
+
+    fun looksLikeNonBookIntro(intro: String?): Boolean {
+        val text = intro?.trim().orEmpty()
+        if (text.isEmpty()) return false
+        return nonBookIntroHints.any { text.contains(it) }
+    }
+
+    /**
+     * Post-search gate for 换源 (beyond exact title match in WebBook filter).
+     * Drops hollow / dictionary / aggregator-label hits before list+ and respondTime success.
+     */
+    fun isAcceptableChangeSourceHit(
+        book: SearchBook,
+        localAuthor: String?,
+        requireAuthor: Boolean = false,
+    ): Boolean {
+        if (!hasUsableSearchLatest(book.latestChapterTitle, book.bookUrl)) return false
+        if (!authorCompatibleForChangeSource(localAuthor, book.author, requireAuthor)) return false
+        if (looksLikeNonBookIntro(book.intro)) return false
+        return true
+    }
 
     fun displayOriginName(originName: String, bookUrl: String?): String {
         val backend = backendFromBookUrl(bookUrl) ?: return originName
@@ -58,10 +129,14 @@ object ChangeBookSourceQuality {
 
     /**
      * Normalize aggregator search hits for the change-source list.
-     * @return false when the hit should be discarded (no usable latest chapter).
+     * @return false when the hit should be discarded.
      */
-    fun prepareSearchHitForChangeSource(book: SearchBook): Boolean {
-        if (!hasUsableSearchLatest(book.latestChapterTitle, book.bookUrl)) return false
+    fun prepareSearchHitForChangeSource(
+        book: SearchBook,
+        localAuthor: String? = null,
+        requireAuthor: Boolean = false,
+    ): Boolean {
+        if (!isAcceptableChangeSourceHit(book, localAuthor, requireAuthor)) return false
         val effective = effectiveLatestChapterTitle(book.latestChapterTitle, book.bookUrl)
         if (effective.isNotEmpty()) {
             book.latestChapterTitle = effective
