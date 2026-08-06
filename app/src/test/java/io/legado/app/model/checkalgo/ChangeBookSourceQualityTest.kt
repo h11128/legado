@@ -289,6 +289,89 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
+    fun nonNovelHostAlwaysRejected() {
+        assertTrue(ChangeBookSourceQuality.isNonNovelSearchHost("https://image.baidu.com/search/flip?word=x"))
+        assertTrue(ChangeBookSourceQuality.isNonNovelSearchHost("https://zhidao.baidu.com/msearch?word=x"))
+        assertFalse(ChangeBookSourceQuality.isNonNovelSearchHost("https://novel.html5.qq.com/book/1"))
+        val img = SearchBook(
+            name = "任意书名",
+            origin = "https://image.baidu.com",
+            originName = "百度图片",
+            bookUrl = "https://image.baidu.com/search/flip?word=任意书名",
+            author = "假作者",
+            latestChapterTitle = "第1章 开端",
+            intro = "这是一段足够长的简介用来骗过空最新章回退门禁，但 host 仍应拦截。",
+        )
+        assertFalse(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(img, "新乙", requireAuthor = false)
+        )
+    }
+
+    @Test
+    fun emptyLatestAllowedWhenAuthorAndIntroCredible() {
+        val intro = "（起点第一本万订吞噬同人，质量保证。）意外穿越到吞噬星空世界，陆青山本以为自己能够成为强者。"
+        val qq = SearchBook(
+            name = "吞噬星空：收徒万倍返还",
+            origin = "https://novel.html5.qq.com",
+            originName = "白浏览器",
+            bookUrl = "https://novel.html5.qq.com/qbread/api/novel/bookInfo?resourceId=1155749461",
+            author = "新乙",
+            latestChapterTitle = "",
+            intro = intro,
+        )
+        assertTrue(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(qq, "新乙", requireAuthor = false)
+        )
+        assertFalse(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
+                qq.copy(author = "", intro = intro),
+                "新乙",
+                requireAuthor = false,
+            )
+        )
+        assertFalse(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
+                qq.copy(intro = "短"),
+                "新乙",
+                requireAuthor = false,
+            )
+        )
+        // empty-latest fallback still requires local author overlap
+        assertFalse(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
+                qq.copy(author = "别人"),
+                "新乙",
+                requireAuthor = false,
+            )
+        )
+        assertEquals(40, intro.take(40).length)
+        assertTrue(
+            ChangeBookSourceQuality.hasCredibleAuthorIntro(
+                qq.copy(intro = "x".repeat(40)),
+                "新乙",
+            )
+        )
+        assertFalse(
+            ChangeBookSourceQuality.hasCredibleAuthorIntro(
+                qq.copy(intro = "x".repeat(39)),
+                "新乙",
+            )
+        )
+    }
+
+    @Test
+    fun hostMatchIsHostOnlyNotQuerySubstring() {
+        assertFalse(
+            ChangeBookSourceQuality.isNonNovelSearchHost(
+                "https://good.example/book?ref=https://image.baidu.com/x",
+            )
+        )
+        assertFalse(ChangeBookSourceQuality.isNonNovelSearchHost("https://notdict.cn/book/1"))
+        assertTrue(ChangeBookSourceQuality.isNonNovelSearchHost("https://www.dict.cn/hello"))
+        assertEquals("image.baidu.com", ChangeBookSourceQuality.hostOf("https://image.baidu.com/a"))
+    }
+
+    @Test
     fun displayOriginNameAppendsBackend() {
         assertEquals(
             "🌞晴天小说5.0 · 69书吧",

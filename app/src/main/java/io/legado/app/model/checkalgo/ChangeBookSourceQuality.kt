@@ -38,6 +38,28 @@ object ChangeBookSourceQuality {
     )
 
     /**
+     * Hosts that are never novel book sources (image / Q&A / dict shells).
+     * Defense in depth when search rules fake a title / latest tip.
+     * Matched against URL host only (not query/path).
+     */
+    private val nonNovelHostExact = setOf(
+        "image.baidu.com",
+        "zhidao.baidu.com",
+        "tieba.baidu.com",
+        "baike.baidu.com",
+        "wenku.baidu.com",
+        "dict.cn",
+        "fanyi.baidu.com",
+    )
+
+    private val nonNovelHostPrefixes = listOf(
+        "translate.google.",
+    )
+
+    /** Min intro length to treat empty-latest search hits as real books (QQ/百度 API). */
+    private const val CREDIBLE_INTRO_MIN_CHARS = 40
+
+    /**
      * Aggregator backends often put `source=` on [SearchBook.bookUrl]
      * (e.g. 晴天 `…/detail?book_id=…&source=69书吧`).
      */
@@ -105,6 +127,46 @@ object ChangeBookSourceQuality {
         return nonBookIntroHints.any { text.contains(it) }
     }
 
+    /** True when [url] host is a known non-novel shell (百度图片/知道/词典…). */
+    fun isNonNovelSearchHost(url: String?): Boolean {
+        val host = hostOf(url) ?: return false
+        if (host in nonNovelHostExact) return true
+        if (nonNovelHostExact.any { host.endsWith(".$it") }) return true
+        if (nonNovelHostPrefixes.any { host.startsWith(it) }) return true
+        return false
+    }
+
+    internal fun hostOf(url: String?): String? {
+        if (url.isNullOrBlank()) return null
+        return runCatching {
+            val raw = url.trim()
+            val withScheme = when {
+                raw.startsWith("//") -> "https:$raw"
+                "://" in raw -> raw
+                else -> "https://$raw"
+            }
+            java.net.URI(withScheme).host?.lowercase()?.trim('.')
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * QQ / 百度小说 API often omit lastChapter on search JSON but still return
+     * author + long synopsis. Allow those through when host is not a shell.
+     * When [localAuthor] is set, hit author must overlap (even if App 「校验作者」off).
+     */
+    fun hasCredibleAuthorIntro(book: SearchBook, localAuthor: String? = null): Boolean {
+        val author = book.author.trim()
+        if (author.isEmpty()) return false
+        val intro = book.intro?.trim().orEmpty()
+        if (intro.length < CREDIBLE_INTRO_MIN_CHARS) return false
+        if (looksLikeNonBookIntro(intro)) return false
+        val local = localAuthor?.trim().orEmpty()
+        if (local.isNotEmpty() && !authorCompatibleForChangeSource(local, author, requireAuthor = true)) {
+            return false
+        }
+        return true
+    }
+
     /**
      * Post-search gate for 换源 (beyond exact title match in WebBook filter).
      * Drops hollow / dictionary / aggregator-label hits before list+ and respondTime success.
@@ -114,9 +176,11 @@ object ChangeBookSourceQuality {
         localAuthor: String?,
         requireAuthor: Boolean = false,
     ): Boolean {
-        if (!hasUsableSearchLatest(book.latestChapterTitle, book.bookUrl)) return false
-        if (!authorCompatibleForChangeSource(localAuthor, book.author, requireAuthor)) return false
+        if (isNonNovelSearchHost(book.bookUrl) || isNonNovelSearchHost(book.origin)) return false
         if (looksLikeNonBookIntro(book.intro)) return false
+        val usableLatest = hasUsableSearchLatest(book.latestChapterTitle, book.bookUrl)
+        if (!usableLatest && !hasCredibleAuthorIntro(book, localAuthor)) return false
+        if (!authorCompatibleForChangeSource(localAuthor, book.author, requireAuthor)) return false
         return true
     }
 
