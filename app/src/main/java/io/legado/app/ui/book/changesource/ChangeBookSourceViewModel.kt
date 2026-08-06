@@ -173,15 +173,17 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         searchCallback = object : SourceCallback {
 
             override fun searchSuccess(searchBook: SearchBook) {
-                // Early-stop: never re-accept unfinished pending rows after dropPending.
-                if (earlyStopped.get() && searchBook.chapterWordCount == 0) return
-                if (!prepareChangeSourceHit(searchBook)) {
-                    ChangeSourceLog.i(
-                        "list- skip origin=${searchBook.origin} reason=search-quality " +
-                            "url=${searchBook.bookUrl.take(80)}"
-                    )
+                // Early-stop: never re-accept unfinished deep pending after dropPending.
+                val pendingLabel =
+                    getApplication<Application>().getString(R.string.change_source_pending_word)
+                if (earlyStopped.get() &&
+                    searchBook.chapterWordCount == 0 &&
+                    searchBook.chapterWordCountText == pendingLabel
+                ) {
                     return
                 }
+                // Keep all title hits in memory/DB; menu filters apply in currentResults().
+                ChangeBookSourceQuality.decorateSearchHitForChangeSource(searchBook)
                 searchBook.releaseHtmlData()
                 appDb.searchBookDao.insert(searchBook)
                 val accepted = synchronized(searchBooks) {
@@ -192,23 +194,24 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                             searchBooks[idx] = searchBook
                             true
                         }
-                        screenKey.isEmpty() || searchBook.name.contains(screenKey) -> {
+                        else -> {
+                            // Keep every title hit; screenKey is display-only in currentResults().
                             searchBooks.add(searchBook)
                             true
                         }
-                        else -> false
                     }
                 }
                 if (!accepted) return
                 val size = searchBooks.size
                 listPublishCount.incrementAndGet()
+                val visible = passesDisplayFilters(searchBook)
                 val tier = ChangeBookSourceQuality.contentSortTier(
                     chapterWordCount = searchBook.chapterWordCount,
                     wordCountText = searchBook.chapterWordCountText,
                     softFailed = searchBook.origin in sessionSoftFail,
                 )
                 ChangeSourceLog.i(
-                    "list+ size=$size origin=${searchBook.origin} " +
+                    "list+ size=$size visible=$visible origin=${searchBook.origin} " +
                         "name=${searchBook.originName} words=${searchBook.chapterWordCount} " +
                         "tier=$tier respondMs=${searchBook.respondTime} " +
                         "latest=${searchBook.latestChapterTitle?.take(24) ?: ""}"
@@ -224,7 +227,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
         getDbSearchBooks().let { rows ->
             searchBooks.clear()
-            searchBooks.addAll(rows.filter { prepareChangeSourceHit(it) })
+            // Keep all cached hits; display filters run in currentResults().
+            rows.forEach { ChangeBookSourceQuality.decorateSearchHitForChangeSource(it) }
+            searchBooks.addAll(rows)
             trySend(arrayOf(searchBooks))
         }
 
@@ -247,8 +252,38 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     /** Sorted/filtered snapshot for UI + autoChangeSource (same policy). */
     private fun currentResults(): List<SearchBook> {
-        val books = synchronized(searchBooks) { searchBooks.toList() }
+        val books = synchronized(searchBooks) {
+            searchBooks.filter { passesDisplayFilters(it) }.toList()
+        }
         return sortSearchBooks(books)
+    }
+
+    /** Menu filters (author / non-novel host / dict intro / content-bad) — display only. */
+    private fun passesDisplayFilters(book: SearchBook): Boolean {
+        if (screenKey.isNotEmpty()) {
+            val key = screenKey
+            val screenHit = book.originName.contains(key) ||
+                book.author.contains(key) ||
+                (book.latestChapterTitle?.contains(key) == true)
+            if (!screenHit) return false
+        }
+        // True content-bad: measured failure (-1 + failure text). Chapter-mode reset
+        // uses -1 with null text and must stay visible. Ignore softFailed wrap.
+        if (AppConfig.changeSourceDropContentBad &&
+            book.chapterWordCount == -1 &&
+            !book.chapterWordCountText.isNullOrBlank()
+        ) {
+            return false
+        }
+        return isAcceptableChangeSourceHit(
+            book,
+            requireAuthor = AppConfig.changeSourceCheckAuthor,
+        )
+    }
+
+    /** Menu toggled a display filter — reshuffle visible rows without re-searching. */
+    fun onDisplayFilterPrefsChanged() {
+        searchCallback?.upAdapter()
     }
 
     /** Called when DB already has searchBooks — book mode keeps list; chapter mode verifies. */
@@ -442,15 +477,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         const val DEEP_PARALLEL_CAP = 16
     }
 
-    /** Gate flags from 换源 menu — never hard-force when a toggle is off. */
-    private fun prepareChangeSourceHit(book: SearchBook): Boolean =
-        ChangeBookSourceQuality.prepareSearchHitForChangeSource(
-            book,
-            author,
-            requireAuthor = AppConfig.changeSourceCheckAuthor,
-            filterNonNovelHost = AppConfig.changeSourceFilterNonNovelHost,
-            filterNonBookIntro = AppConfig.changeSourceFilterNonBookIntro,
-        )
+    /** Gate flags from 换源 menu — used for display filter + deep-probe eligibility. */
+    private fun decorateChangeSourceHit(book: SearchBook) {
+        ChangeBookSourceQuality.decorateSearchHitForChangeSource(book)
+    }
 
     private fun isAcceptableChangeSourceHit(book: SearchBook, requireAuthor: Boolean): Boolean =
         ChangeBookSourceQuality.isAcceptableChangeSourceHit(
@@ -464,10 +494,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     open fun refresh(): Boolean {
         getDbSearchBooks().let { rows ->
             searchBooks.clear()
-            searchBooks.addAll(rows.filter { prepareChangeSourceHit(it) })
+            rows.forEach { decorateChangeSourceHit(it) }
+            searchBooks.addAll(rows)
             searchCallback?.upAdapter()
         }
-        return searchBooks.isEmpty().also { isEmpty ->
+        return synchronized(searchBooks) { searchBooks.isEmpty() }.also { isEmpty ->
             if (!isEmpty && AppConfig.changeSourceLoadWordCount) {
                 refreshResultMeasurements()
             }
@@ -866,11 +897,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
         val startTime = System.currentTimeMillis()
         val ok = withTimeoutOrNull(budgetMs) {
+            // Name-only at ask time; author / host / intro are display filters so
+            // toggling them never requires a full re-search of this session's hits.
             val rawBooks = WebBook.searchBookAwait(
                 source, name,
-                filter = { fName, fAuthor, _ ->
-                    fName == name && (!checkAuthor || fAuthor.contains(author))
-                })
+                filter = { fName, _, _ -> fName == name },
+            )
             currentCoroutineContext().ensureActive()
             val searchElapsed = System.currentTimeMillis() - startTime
             if (rawBooks.isEmpty()) {
@@ -879,18 +911,17 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 runCatching { ChangeSourceTitleEmptyPrefs.persistCurrent(name, author) }
                 return@withTimeoutOrNull true
             }
-            val resultBooks = rawBooks.filter {
+            // Persist every title hit; deep-probe only rows that pass current display filters.
+            val deepCandidates = rawBooks.filter {
                 isAcceptableChangeSourceHit(it, requireAuthor = checkAuthor)
             }
-            if (resultBooks.isEmpty()) {
-                // Title matched but tip/author/intro failed quality gate — not a title miss.
+            if (deepCandidates.isEmpty() && rawBooks.isNotEmpty()) {
                 ChangeSourceLog.i(
-                    "miss search-quality origin=${source.bookSourceUrl} " +
-                        "raw=${rawBooks.size} list=${searchBooks.size}"
+                    "hit display-filtered origin=${source.bookSourceUrl} " +
+                        "raw=${rawBooks.size} deep=0 list=${searchBooks.size}"
                 )
-                return@withTimeoutOrNull true
             }
-            searchHitCount.addAndGet(resultBooks.size)
+            searchHitCount.addAndGet(rawBooks.size)
             RespondTimeUpdater.noteSuccessAndMaybeFlush(
                 source.bookSourceUrl,
                 searchElapsed,
@@ -899,12 +930,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             val deep = loadInfo || loadToc || loadWordCount
             ChangeSourceLog.i(
                 "hit origin=${source.bookSourceUrl} name=${source.bookSourceName} " +
-                    "searchMs=$searchElapsed results=${resultBooks.size} deep=$deep " +
-                    "list=${searchBooks.size} inFlight=${probingNames.size}"
+                    "searchMs=$searchElapsed results=${rawBooks.size} deepEligible=${deepCandidates.size} " +
+                    "deep=$deep list=${searchBooks.size} inFlight=${probingNames.size}"
             )
             if (!deep) {
                 if (earlyStopped.get()) return@withTimeoutOrNull true
-                resultBooks.forEach { searchBook ->
+                rawBooks.forEach { searchBook ->
                     searchBook.respondTime = searchElapsed.toInt()
                     publishSearchBook(searchBook)
                 }
@@ -912,19 +943,24 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             }
             ChangeSourceLog.i(
                 "deep-schedule origin=${source.bookSourceUrl} " +
-                    "loadInfo=$loadInfo loadToc=$loadToc loadWordCount=$loadWordCount"
+                    "loadInfo=$loadInfo loadToc=$loadToc loadWordCount=$loadWordCount " +
+                    "deepN=${deepCandidates.size}"
             )
             if (earlyStopped.get()) return@withTimeoutOrNull true
-            // Early list so UI fills while ask slots keep draining empties.
-            // Do NOT skip on latestMatchesLocal==false: lagging mirrors (same book, older tip)
-            // must still deep-probe; wrong books fail content ref_sim and are dropped.
-            resultBooks.forEach { searchBook ->
+            // Early-list deep candidates as pending. Display-filtered title hits stay
+            // listed without pending so early-stop does not delete them.
+            val pendingLabel =
+                getApplication<Application>().getString(R.string.change_source_pending_word)
+            val deepUrls = deepCandidates.map { it.bookUrl }.toHashSet()
+            rawBooks.forEach { searchBook ->
                 searchBook.respondTime = searchElapsed.toInt()
-                searchBook.chapterWordCount = 0
-                searchBook.chapterWordCountText =
-                    getApplication<Application>().getString(R.string.change_source_pending_word)
+                if (searchBook.bookUrl in deepUrls) {
+                    searchBook.chapterWordCount = 0
+                    searchBook.chapterWordCountText = pendingLabel
+                }
                 publishSearchBook(searchBook)
             }
+            if (deepCandidates.isEmpty()) return@withTimeoutOrNull true
             if (earlyStopped.get()) return@withTimeoutOrNull true
             val pool = deepPool ?: IO
             val gate = deepGate
@@ -946,7 +982,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     if (earlyStopped.get()) return@launch
                     deepInFlightNames.add(source.bookSourceUrl)
                     publishProgress()
-                    resultBooks.forEach { searchBook ->
+                    deepCandidates.forEach { searchBook ->
                         currentCoroutineContext().ensureActive()
                         if (earlyStopped.get()) return@launch
                         try {
@@ -1126,15 +1162,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 "list=${searchBooks.size}"
         )
         if (pair.first < 0) {
-            // Drop this hit only when menu 「正文不合格时移除」 is on.
-            if (AppConfig.changeSourceDropContentBad) {
-                dropSearchBookHit(searchBook, "content-bad")
-            } else {
-                mergeTier(searchBook.bookUrl, ChangeBookSourceQuality.TIER_CONTENT_BAD)
-                missContentBadCount.incrementAndGet()
-                publishSearchBook(searchBook, tocSize = chapters.size)
-                applyBookQualityGates(force = false)
-            }
+            // Keep the row; 「正文不合格时移除」 only hides it in currentResults().
+            mergeTier(searchBook.bookUrl, ChangeBookSourceQuality.TIER_CONTENT_BAD)
+            missContentBadCount.incrementAndGet()
+            publishSearchBook(searchBook, tocSize = chapters.size)
+            applyBookQualityGates(force = false)
         } else {
             if (ChangeBookSourceQuality.isQualityOkWordCount(pair.first) && processedContent != null) {
                 probeContentSamples[searchBook.bookUrl] = processedContent
@@ -1243,12 +1275,18 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }
 
-    /** Drop unfinished early-list rows after early-stop cancels deep probes. */
+    /** Drop unfinished deep-probe pending rows after early-stop cancels deep jobs. */
     private fun dropPendingWordCountRows() {
+        val pendingLabel =
+            getApplication<Application>().getString(R.string.change_source_pending_word)
         val removed = synchronized(searchBooks) {
-            val doomed = searchBooks.filter { it.chapterWordCount == 0 }
+            val doomed = searchBooks.filter {
+                it.chapterWordCount == 0 && it.chapterWordCountText == pendingLabel
+            }
             if (doomed.isEmpty()) return@synchronized emptyList()
-            searchBooks.removeAll { it.chapterWordCount == 0 }
+            searchBooks.removeAll {
+                it.chapterWordCount == 0 && it.chapterWordCountText == pendingLabel
+            }
             doomed
         }
         if (removed.isEmpty()) return
@@ -1309,19 +1347,15 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private fun demoteSearchHitContent(searchBook: SearchBook, badge: String) {
         mergeTier(searchBook.bookUrl, ChangeBookSourceQuality.TIER_CONTENT_BAD)
         probeContentSamples.remove(searchBook.bookUrl)
-        if (AppConfig.changeSourceDropContentBad) {
-            dropSearchBookHit(searchBook, "consensus:$badge")
-            return
-        }
         val wasOk = ChangeBookSourceQuality.isQualityOkWordCount(searchBook.chapterWordCount)
         if (wasOk) {
             qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
         }
         // Force content-bad sort tier (contentSortTier needs count<0 + non-blank text).
+        // Display hide is via passesDisplayFilters when drop-content-bad is on.
         searchBook.chapterWordCount = -1
         searchBook.chapterWordCountText = appendBadge(searchBook.chapterWordCountText, badge)
         missContentBadCount.incrementAndGet()
-        // Persist so refresh() / DB reload keeps the badge.
         runCatching { appDb.searchBookDao.insert(searchBook) }
         synchronized(searchBooks) {
             val idx = searchBooks.indexOfFirst { it.bookUrl == searchBook.bookUrl }
@@ -1329,32 +1363,16 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
         searchCallback?.upAdapter()
         ChangeSourceLog.i(
-            "list~ demote hit origin=${searchBook.origin} reason=consensus:$badge keep=true " +
+            "list~ demote content-bad origin=${searchBook.origin} badge=$badge " +
                 "wasOk=$wasOk url=${searchBook.bookUrl.take(80)} size=${searchBooks.size}"
         )
     }
 
     /**
-     * Apply menu 「正文不合格时移除」 to already-measured rows.
-     * When enabled: drop rows with chapterWordCount &lt; 0. When disabled: resort only
-     * (already-dropped hits need a full re-search to return).
+     * Apply menu 「正文不合格时移除」 — display-only reshuffle; never deletes rows.
      */
     fun applyDropContentBadPreference() {
-        if (!AppConfig.changeSourceDropContentBad) {
-            searchCallback?.upAdapter()
-            return
-        }
-        val doomed = synchronized(searchBooks) {
-            searchBooks.filter { it.chapterWordCount < 0 }.toList()
-        }
-        for (hit in doomed) {
-            // Prefer a non-content-bad reason so missContentBadCount is not double-counted
-            // (these rows already incremented when first marked bad).
-            dropSearchBookHit(hit, "pref-drop-content-bad")
-        }
-        if (doomed.isEmpty()) {
-            searchCallback?.upAdapter()
-        }
+        onDisplayFilterPrefsChanged()
     }
 
     private fun demoteOriginContent(origin: String, badge: String) {
@@ -1624,44 +1642,20 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }
 
+    /**
+     * Load cached hits by book name only. Author / screenKey / host / intro are
+     * applied in [passesDisplayFilters] so menu toggles reshuffle without re-ask.
+     */
     private fun getDbSearchBooks(): List<SearchBook> {
-        return if (screenKey.isEmpty()) {
-            if (AppConfig.changeSourceCheckAuthor) {
-                appDb.searchBookDao.changeSourceByGroup(
-                    name, author, AppConfig.searchGroup
-                )
-            } else {
-                appDb.searchBookDao.changeSourceByGroup(
-                    name, "", AppConfig.searchGroup
-                )
-            }
-        } else {
-            if (AppConfig.changeSourceCheckAuthor) {
-                appDb.searchBookDao.changeSourceSearch(
-                    name, author, screenKey, AppConfig.searchGroup
-                )
-            } else {
-                appDb.searchBookDao.changeSourceSearch(
-                    name, "", screenKey, AppConfig.searchGroup
-                )
-            }
-        }
+        return appDb.searchBookDao.changeSourceByGroup(name, "", AppConfig.searchGroup)
     }
 
     /**
-     * 筛选
+     * 筛选 — display-only; keeps in-memory hits and reshuffles via currentResults().
      */
     fun screen(key: String?) {
         screenKey = key?.trim() ?: ""
-        execute {
-            getDbSearchBooks().let { rows ->
-                searchBooks.clear()
-                searchBooks.addAll(
-                    rows.filter { prepareChangeSourceHit(it) }
-                )
-                searchCallback?.upAdapter()
-            }
-        }
+        onDisplayFilterPrefsChanged()
     }
 
     fun startOrStopSearch() {

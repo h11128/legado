@@ -293,30 +293,25 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
             R.id.menu_check_author -> {
                 AppConfig.changeSourceCheckAuthor = !item.isChecked
                 item.isChecked = !item.isChecked
-                restartSearchAfterFilterChange()
+                viewModel.onDisplayFilterPrefsChanged()
             }
 
             R.id.menu_filter_non_novel -> {
                 AppConfig.changeSourceFilterNonNovelHost = !item.isChecked
                 binding.toolBar.menu.syncChangeSourceResultOptions()
-                restartSearchAfterFilterChange()
+                viewModel.onDisplayFilterPrefsChanged()
             }
 
             R.id.menu_filter_non_book_intro -> {
                 AppConfig.changeSourceFilterNonBookIntro = !item.isChecked
                 binding.toolBar.menu.syncChangeSourceResultOptions()
-                restartSearchAfterFilterChange()
+                viewModel.onDisplayFilterPrefsChanged()
             }
 
             R.id.menu_drop_content_bad -> {
                 AppConfig.changeSourceDropContentBad = !item.isChecked
                 binding.toolBar.menu.syncChangeSourceResultOptions()
-                // ON: drop already-bad rows in place. OFF: deleted hits are gone — re-ask.
-                if (AppConfig.changeSourceDropContentBad) {
-                    viewModel.applyDropContentBadPreference()
-                } else {
-                    restartSearchAfterFilterChange()
-                }
+                viewModel.applyDropContentBadPreference()
             }
 
             R.id.menu_load_info -> {
@@ -373,17 +368,6 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
             }
         }
         return false
-    }
-
-    /**
-     * Ask-time gates never persist rejected hits. Re-filter from DB alone cannot
-     * bring them back (or re-ask with a tighter gate) — stop and search again.
-     */
-    private fun restartSearchAfterFilterChange() {
-        lifecycleScope.launch(IO) {
-            viewModel.stopSearch()
-            viewModel.startSearch()
-        }
     }
 
     private fun scrollToDurSource() {

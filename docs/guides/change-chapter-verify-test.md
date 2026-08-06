@@ -68,6 +68,7 @@ Toolbar **换源** opens 整书 dialog; long-press still offers 单章/整书 wh
 
 | Date | Result | Evidence |
 |---|---|---|
+| 2026-08-06c | code: display-only filters | Menu toggles (作者/非小说/词典简介/正文不合格) only reshuffle `currentResults()` — no full re-search. Ask keeps all title hits; deep-probe = display-eligible; content-bad soft-hides via tier; early-stop only drops explicit pending rows. |
 | 2026-08-06b | PASS untrusted-ref soft gate | 学霸也开挂/必读居: `trusted=false trustReason=page_toc`; `stitch_weak_ref=0`; `stitch_soft_unref` kept; `qualityOk=20` early-stop (`temp/legado_cs_trust_xueba_2026-08-06_145414.txt`). 吞噬: `trusted=true` on real TOC title (`temp/legado_cs_trust_tunshi_2026-08-06_150133.txt`; local body login-walled refLen=32 so early-stop N/A). |
 | 2026-08-06 | PASS menu filters (partial session) | UI overflow shows 过滤非小说源/过滤词典简介/正文不合格时移除; prefs broadcast OK; dropContentBad ON→179 content-bad drops (`142328`); OFF→0 content-bad drops + list+ words=-1 tier=5 kept (`143313`); full early-stop FAIL on 学霸也开挂 (qualityOk≪20) |
 | 2026-08-05 | PASS (partial: earlyStop=false) | pre-fix device run; motivated the 7 fixes below |
