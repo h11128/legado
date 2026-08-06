@@ -58,12 +58,84 @@ object ChangeChapterVerify {
      */
     const val MULTI_SOURCE_AUTH_REF_MIN = 0.12
 
+    /** Sibling body lengths: below this count, skip uniform-page smell. */
+    const val REF_TRUST_UNIFORM_MIN_SAMPLES = 5
+    /** CV (stdev/mean) below this ⇒ page-split smell (必读居 ~4k slices). */
+    const val REF_TRUST_UNIFORM_MAX_CV = 0.05
+
+    private val pageTocTitleRegex = Regex("""第\s*\d+\s*(部分|页)""")
+    private val pageChromeMarkers = listOf(
+        "按键盘上方向键",
+        "加入书签已便下次继续阅读",
+        "未阅读完？加入书签",
+    )
+
     data class ContentEvalContext(
         /** Typical chapter length from peer OK probes / current chapter; null = skip relative. */
         val expectedChars: Int? = null,
         /** Optional known-good chapter body; boost only, not required. */
         val referenceContent: String? = null,
+        /**
+         * When false, local body must not hard-kill candidates via ref_sim / stitch_weak_ref
+         * (pagination TOC / chrome / uniform slices). Default true keeps legacy callers safe.
+         */
+        val referenceTrusted: Boolean = true,
     )
+
+    data class LocalReferenceTrust(
+        val trusted: Boolean,
+        /** ok | page_toc | page_chrome | uniform_lengths */
+        val reason: String,
+    )
+
+    /**
+     * Whether a bookshelf chapter is a trustworthy change-source reference ruler.
+     * Page-split sources (「第 N 部分」+ keyboard chrome) are not.
+     * Near-equal sibling lengths alone do not untrust (many real novels are stable);
+     * they only reinforce when the title also lacks a real chapter marker.
+     */
+    fun assessLocalReferenceTrust(
+        localTitle: String?,
+        referenceContent: String?,
+        siblingBodyLengths: List<Int> = emptyList(),
+    ): LocalReferenceTrust {
+        val title = localTitle?.trim().orEmpty()
+        if (title.isNotEmpty() && pageTocTitleRegex.containsMatchIn(title)) {
+            return LocalReferenceTrust(trusted = false, reason = "page_toc")
+        }
+        val body = referenceContent?.trim().orEmpty()
+        if (body.isNotEmpty()) {
+            val head = body.take(200)
+            if (pageChromeMarkers.any { head.contains(it) || body.contains(it) }) {
+                return LocalReferenceTrust(trusted = false, reason = "page_chrome")
+            }
+        }
+        if (!looksLikeRealChapterTitle(title) &&
+            siblingBodyLengths.size >= REF_TRUST_UNIFORM_MIN_SAMPLES
+        ) {
+            val lengths = siblingBodyLengths.filter { it >= MIN_CONTENT_CHARS }
+            if (lengths.size >= REF_TRUST_UNIFORM_MIN_SAMPLES) {
+                val mean = lengths.average()
+                if (mean > 0) {
+                    val variance = lengths.map { (it - mean) * (it - mean) }.average()
+                    val cv = kotlin.math.sqrt(variance) / mean
+                    if (cv <= REF_TRUST_UNIFORM_MAX_CV) {
+                        return LocalReferenceTrust(trusted = false, reason = "uniform_lengths")
+                    }
+                }
+            }
+        }
+        return LocalReferenceTrust(trusted = true, reason = "ok")
+    }
+
+    /** True when title looks like a real chapter, not a page slice label. */
+    fun looksLikeRealChapterTitle(title: String?): Boolean {
+        val t = title?.trim().orEmpty()
+        if (t.isEmpty()) return false
+        if (pageTocTitleRegex.containsMatchIn(t)) return false
+        return t.contains('章') || t.contains('回') ||
+            Regex("""第\s*\d+\s*节""").containsMatchIn(t)
+    }
 
     /**
      * Ultra high-precision shells that almost never appear in real novel prose.
@@ -146,13 +218,14 @@ object ChangeChapterVerify {
         }
         val stitch = looksLikeStitchedParagraphs(text)
         val reference = context.referenceContent?.trim().orEmpty()
+        val refTrusted = context.referenceTrusted
         val refSim = if (reference.length >= REFERENCE_MIN_CHARS && text.length >= MIN_CONTENT_CHARS) {
             digramJaccard(text, reference)
         } else {
             null
         }
-        // Reference disagreement is the hard wrong-book signal.
-        if (refSim != null && refSim < REFERENCE_SIM_HIJACK_MAX) {
+        // Reference disagreement is the hard wrong-book signal — only when the ruler is trusted.
+        if (refSim != null && refSim < REFERENCE_SIM_HIJACK_MAX && refTrusted) {
             return ContentEvalDiag(
                 quality = ContentQuality.Hijack,
                 contentLen = text.length,
@@ -163,16 +236,24 @@ object ChangeChapterVerify {
             )
         }
         // Stitch alone often false-positives on dialogue/scene breaks.
-        // Only hard-fail when there is no *strong* reference agreement (>= AUTH_REF_MIN).
+        // Hard-fail when no usable refSim, or trusted local ref is weak.
+        // Untrusted local (page-split) must not stitch_weak_ref-kill mainstream chapters.
         if (stitch && (refSim == null || refSim < MULTI_SOURCE_AUTH_REF_MIN)) {
-            return ContentEvalDiag(
-                quality = ContentQuality.Hijack,
-                contentLen = text.length,
-                stitch = true,
-                refSim = refSim,
-                expectedChars = expected,
-                reason = if (refSim == null) "stitch" else "stitch_weak_ref",
-            )
+            val hardKill = when {
+                refSim == null -> true
+                refTrusted -> true
+                else -> false
+            }
+            if (hardKill) {
+                return ContentEvalDiag(
+                    quality = ContentQuality.Hijack,
+                    contentLen = text.length,
+                    stitch = true,
+                    refSim = refSim,
+                    expectedChars = expected,
+                    reason = if (refSim == null) "stitch" else "stitch_weak_ref",
+                )
+            }
         }
         if (highPrecisionShellMarkers.any { text.contains(it) } &&
             text.length < RELATIVE_MIN_EXPECTED * 2
@@ -186,13 +267,19 @@ object ChangeChapterVerify {
                 reason = "shell",
             )
         }
+        val reason = when {
+            stitch && !refTrusted && refSim != null -> "stitch_soft_unref"
+            stitch -> "ok_stitch_override"
+            !refTrusted && refSim != null && refSim < MULTI_SOURCE_AUTH_REF_MIN -> "ok_unref_peer"
+            else -> "ok"
+        }
         return ContentEvalDiag(
             quality = ContentQuality.Ok(text.length),
             contentLen = text.length,
             stitch = stitch,
             refSim = refSim,
             expectedChars = expected,
-            reason = if (stitch) "ok_stitch_override" else "ok",
+            reason = reason,
         )
     }
 
@@ -237,6 +324,7 @@ object ChangeChapterVerify {
     fun multiSourceOutlierOrigins(
         samples: Map<String, String>,
         referenceContent: String? = null,
+        referenceTrusted: Boolean = true,
         minSamples: Int = MULTI_SOURCE_MIN_SAMPLES,
     ): Set<String> {
         if (samples.size < minSamples) return emptySet()
@@ -246,7 +334,10 @@ object ChangeChapterVerify {
         }.filter { it.size >= 2 }
         if (clusters.isEmpty()) return emptySet()
 
-        val ref = referenceContent?.takeIf { it.length >= REFERENCE_MIN_CHARS }
+        // Untrusted local page-slices must not veto a coherent peer majority.
+        val ref = referenceContent
+            ?.takeIf { it.length >= REFERENCE_MIN_CHARS }
+            ?.takeIf { referenceTrusted }
         val scored = clusters.mapNotNull { members ->
             val texts = members.map { samples.getValue(it) }
             val stitchRatio = texts.count { looksLikeStitchedParagraphs(it) }.toDouble() / texts.size

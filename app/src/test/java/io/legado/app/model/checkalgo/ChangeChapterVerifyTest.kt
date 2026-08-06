@@ -4,6 +4,7 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.ChangeSourceChapterProbe
 import io.legado.app.data.entities.SearchBook
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -449,6 +450,169 @@ class ChangeChapterVerifyTest {
             sourceScore = { 0 },
         )
         assertEquals(listOf("high", "low"), sorted.map { it.origin })
+    }
+
+    @Test
+    fun assessLocalReferenceTrustDetectsPageSplitSmell() {
+        val chrome = "　　按键盘上方向键 ← 或 → 可快速上下翻页，按键盘上的 Enter 键可回到本书目录页\n" +
+            "　　张益民今年62了，已经退休的年纪了。" + "中医".repeat(200)
+        val pageToc = ChangeChapterVerify.assessLocalReferenceTrust(
+            localTitle = "第 7 部分",
+            referenceContent = chrome,
+        )
+        assertFalse(pageToc.trusted)
+        assertEquals("page_toc", pageToc.reason)
+
+        val chromeOnly = ChangeChapterVerify.assessLocalReferenceTrust(
+            localTitle = "第七章：名师指导的奇效",
+            referenceContent = chrome,
+        )
+        assertFalse(chromeOnly.trusted)
+        assertEquals("page_chrome", chromeOnly.reason)
+
+        val uniform = ChangeChapterVerify.assessLocalReferenceTrust(
+            localTitle = "正文", // no 章/回 — page-slice smell + uniform lengths
+            referenceContent = "罗峰站在黑洞边缘。" + "修炼".repeat(200),
+            siblingBodyLengths = listOf(4280, 4284, 4279, 4290, 4286, 4281),
+        )
+        assertFalse(uniform.trusted)
+        assertEquals("uniform_lengths", uniform.reason)
+
+        // Stable novel lengths with a real chapter title stay trusted.
+        val stableReal = ChangeChapterVerify.assessLocalReferenceTrust(
+            localTitle = "第七章：名师指导的奇效",
+            referenceContent = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(200),
+            siblingBodyLengths = listOf(3000, 3010, 2995, 3005, 2988, 3020),
+        )
+        assertTrue(stableReal.trusted)
+
+        val ok = ChangeChapterVerify.assessLocalReferenceTrust(
+            localTitle = "第七章：名师指导的奇效",
+            referenceContent = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(200),
+            siblingBodyLengths = listOf(1800, 3200, 4100, 2500, 2900),
+        )
+        assertTrue(ok.trusted)
+        assertEquals("ok", ok.reason)
+    }
+
+    @Test
+    fun untrustedStillFailsAbsoluteShortAndShell() {
+        val shortDiag = ChangeChapterVerify.evaluateContentDiag(
+            "太短",
+            ChangeChapterVerify.ContentEvalContext(referenceTrusted = false),
+        )
+        assertEquals("too_short_abs", shortDiag.reason)
+        assertTrue(shortDiag.quality is ChangeChapterVerify.ContentQuality.TooShort)
+
+        val shell = "您现在看的是防盗章节，正确章节请访问本站。" + "广告".repeat(80)
+        assertTrue(shell.length >= ChangeChapterVerify.MIN_CONTENT_CHARS)
+        val shellDiag = ChangeChapterVerify.evaluateContentDiag(
+            shell,
+            ChangeChapterVerify.ContentEvalContext(
+                referenceContent = "按键盘上方向键" + "分页".repeat(100),
+                referenceTrusted = false,
+            ),
+        )
+        assertEquals("shell", shellDiag.reason)
+        assertTrue(shellDiag.quality is ChangeChapterVerify.ContentQuality.AntiTheft)
+    }
+
+    @Test
+    fun untrustedLocalDoesNotHardKillStitchWeakRef() {
+        // 学霸-shaped: page-slice local vs mainstream dialogue chapter.
+        val localPage = "　　按键盘上方向键 ← 或 → 可快速上下翻页\n" +
+            "　　张益民负责中医考研出题。" + "考试".repeat(400)
+        val candidate = listOf(
+            "白烨一愣，心想，5连号？还是99999，这要是能接通才鬼呢！这白烨分明是戏耍自己。",
+            "刘振西面色严厉，沉声说道：别耍小聪明，把你爸妈电话给我！要不你自己打。",
+            "白烨的手机忽然响了，来电显示是老爸，刘振西直接夺了过来接通免提。",
+            "周围宿舍的人听见了这边的响动，也走了过来盯着白烨宿舍门口围观。",
+        ).joinToString("\n\n") + "内容".repeat(40)
+        assertTrue(ChangeChapterVerify.looksLikeStitchedParagraphs(candidate))
+
+        val trustedKill = ChangeChapterVerify.evaluateContentDiag(
+            candidate,
+            ChangeChapterVerify.ContentEvalContext(
+                expectedChars = localPage.length,
+                referenceContent = localPage,
+                referenceTrusted = true,
+            ),
+        )
+        assertTrue(
+            "trusted should hard-kill: ${trustedKill.reason}",
+            trustedKill.quality is ChangeChapterVerify.ContentQuality.Hijack,
+        )
+        assertTrue(
+            trustedKill.reason == "stitch_weak_ref" || trustedKill.reason == "ref_sim",
+        )
+
+        val untrustedKeep = ChangeChapterVerify.evaluateContentDiag(
+            candidate,
+            ChangeChapterVerify.ContentEvalContext(
+                expectedChars = null,
+                referenceContent = localPage,
+                referenceTrusted = false,
+            ),
+        )
+        assertTrue(
+            "untrusted must not Hijack: reason=${untrustedKeep.reason}",
+            untrustedKeep.quality is ChangeChapterVerify.ContentQuality.Ok,
+        )
+        assertTrue(
+            untrustedKeep.reason == "stitch_soft_unref" || untrustedKeep.reason == "ok_unref_peer",
+        )
+    }
+
+    @Test
+    fun untrustedMultiSourceAllowsPeerAuthorityDespiteBadLocal() {
+        val badLocal = "　　按键盘上方向键 ← 或 → 可快速上下翻页\n" + "分页".repeat(300)
+        val peerA = "白烨默念一声学霸附体，脑海瞬间通透起来。" + "修炼".repeat(40)
+        val peerB = "白烨默念一声学霸附体，脑海忽然通透起来。" + "修炼".repeat(38)
+        val peerC = "白烨默念学霸附体成功，剩余时间显示在眼前。" + "修炼".repeat(36)
+        val stitched = listOf(
+            "萧炎看向药老，异火在体内疯狂咆哮，焚决运转不止一刻。",
+            "叶凡盘坐虚空，圣体符文亮起，帝兵虚影笼罩周身四周。",
+            "韩立掐诀吐纳，周围灵气潮水般涌入，丹田灵力暴涨难抑。",
+        ).joinToString("\n\n")
+        assertTrue(ChangeChapterVerify.looksLikeStitchedParagraphs(stitched))
+
+        // Trusted bad local vetoes peer majority (avgRef too low) ⇒ no authority ⇒ empty.
+        assertTrue(
+            ChangeChapterVerify.multiSourceOutlierOrigins(
+                samples = mapOf("a" to peerA, "b" to peerB, "c" to peerC, "x" to stitched),
+                referenceContent = badLocal,
+                referenceTrusted = true,
+            ).isEmpty()
+        )
+        // Untrusted: peer majority becomes authority; demote stitched outlier.
+        assertEquals(
+            setOf("x"),
+            ChangeChapterVerify.multiSourceOutlierOrigins(
+                samples = mapOf("a" to peerA, "b" to peerB, "c" to peerC, "x" to stitched),
+                referenceContent = badLocal,
+                referenceTrusted = false,
+            ),
+        )
+    }
+
+    @Test
+    fun trustedMultiSourceStillBlocksStitchedSpamAuthority() {
+        val reference = "罗峰站在黑洞边缘，感受宇宙之力。" + "修炼".repeat(120)
+        val spam = listOf(
+            "萧炎看向药老，异火在体内疯狂咆哮，焚决运转不止一刻。",
+            "叶凡盘坐虚空，圣体符文亮起，帝兵虚影笼罩周身四周。",
+            "韩立掐诀吐纳，周围灵气潮水般涌入，丹田灵力暴涨难抑。",
+        ).joinToString("\n\n") + "水".repeat(80)
+        assertTrue(ChangeChapterVerify.looksLikeStitchedParagraphs(spam))
+        val spamB = spam + "忽然。"
+        val spamC = spam + "片刻。"
+        assertTrue(
+            ChangeChapterVerify.multiSourceOutlierOrigins(
+                samples = mapOf("s1" to spam, "s2" to spamB, "s3" to spamC),
+                referenceContent = reference,
+                referenceTrusted = true,
+            ).isEmpty()
+        )
     }
 
     private fun chapter(index: Int, title: String) = BookChapter().apply {

@@ -282,9 +282,11 @@ class ChangeChapterSourceViewModel(application: Application) :
      * agreeing cluster (reference-aware; see [ChangeChapterVerify.multiSourceOutlierOrigins]).
      */
     private fun applyMultiSourceConsensus(chapterKey: String) {
+        val eval = contentEvalContext()
         val outliers = ChangeChapterVerify.multiSourceOutlierOrigins(
             samples = probeContentSamples.toMap(),
-            referenceContent = referenceChapterContent(),
+            referenceContent = eval.referenceContent,
+            referenceTrusted = eval.referenceTrusted,
         )
         if (outliers.isEmpty()) return
         val app = getApplication<Application>()
@@ -398,13 +400,57 @@ class ChangeChapterSourceViewModel(application: Application) :
     }
 
     private fun contentEvalContext(): ChangeChapterVerify.ContentEvalContext {
-        val reference = referenceChapterContent()
-        val expected = expectedChapterChars()
-            ?: reference?.length?.takeIf { it >= ChangeChapterVerify.MIN_CONTENT_CHARS }
+        val book = oldBook
+        val chapters = book?.let { appDb.bookChapterDao.getChapterList(it.bookUrl) }.orEmpty()
+        val idx = if (book != null && chapters.isNotEmpty()) {
+            ChangeChapterVerify.alignIndex(chapterIndex, chapterTitle, chapters)
+                ?: chapterIndex.takeIf { it in chapters.indices }
+        } else {
+            null
+        }
+        val reference = if (book != null && idx != null) {
+            BookHelp.getContent(book, chapters[idx])?.trim()?.takeIf { it.isNotEmpty() }
+        } else {
+            referenceChapterContent()
+        }
+        val localTitle = idx?.let { chapters[it].title } ?: referenceChapterTitle()
+        val siblingLengths = if (book != null && idx != null) {
+            chapters.asSequence()
+                .drop(maxOf(0, idx - 2))
+                .take(8)
+                .mapNotNull { ch ->
+                    BookHelp.getContent(book, ch)?.trim()?.length?.takeIf { it > 0 }
+                }
+                .toList()
+        } else {
+            emptyList()
+        }
+        val trust = ChangeChapterVerify.assessLocalReferenceTrust(
+            localTitle = localTitle,
+            referenceContent = reference,
+            siblingBodyLengths = siblingLengths,
+        )
+        val expected = if (trust.trusted) {
+            expectedChapterChars()
+                ?: reference?.length?.takeIf { it >= ChangeChapterVerify.MIN_CONTENT_CHARS }
+        } else {
+            expectedChapterChars()
+        }
         return ChangeChapterVerify.ContentEvalContext(
             expectedChars = expected,
             referenceContent = reference,
+            referenceTrusted = trust.trusted,
         )
+    }
+
+    private fun referenceChapterTitle(): String? {
+        val book = oldBook ?: return null
+        val chapters = appDb.bookChapterDao.getChapterList(book.bookUrl)
+        if (chapters.isEmpty()) return null
+        val idx = ChangeChapterVerify.alignIndex(chapterIndex, chapterTitle, chapters)
+            ?: chapterIndex.takeIf { it in chapters.indices }
+            ?: return null
+        return chapters[idx].title
     }
 
     /** Cached body of the chapter being replaced, when available on the current book. */

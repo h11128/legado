@@ -1265,6 +1265,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             val outliers = ChangeChapterVerify.multiSourceOutlierOrigins(
                 samples = samples,
                 referenceContent = wordCountEvalContext?.referenceContent,
+                referenceTrusted = wordCountEvalContext?.referenceTrusted != false,
             )
             for (bookUrl in outliers) {
                 val book = searchBooks.find { it.bookUrl == bookUrl } ?: continue
@@ -1418,11 +1419,28 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
             }
         }
-        val ctx = ChangeChapterVerify.ContentEvalContext(
-            expectedChars = reference?.length?.takeIf {
-                it >= ChangeChapterVerify.MIN_CONTENT_CHARS
-            },
+        val siblingLengths = localChapters
+            .asSequence()
+            .drop(maxOf(0, idx - 2))
+            .take(8)
+            .mapNotNull { ch ->
+                BookHelp.getContent(book, ch)?.trim()?.length?.takeIf { it > 0 }
+            }
+            .toList()
+        val trust = ChangeChapterVerify.assessLocalReferenceTrust(
+            localTitle = localChapter.title,
             referenceContent = reference,
+            siblingBodyLengths = siblingLengths,
+        )
+        val expected = if (trust.trusted) {
+            reference?.length?.takeIf { it >= ChangeChapterVerify.MIN_CONTENT_CHARS }
+        } else {
+            null
+        }
+        val ctx = ChangeChapterVerify.ContentEvalContext(
+            expectedChars = expected,
+            referenceContent = reference,
+            referenceTrusted = trust.trusted,
         )
         wordCountEvalByLocalIndex[idx] = ctx
         val durIdx = wordCountChapterIndex(localChapters).coerceIn(0, localChapters.lastIndex)
@@ -1431,7 +1449,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
         ChangeSourceLog.i(
             "ref-cache localIdx=$idx title=${localChapter.title.take(24)} " +
-                "refLen=${reference?.length ?: 0} expected=${ctx.expectedChars ?: "-"}"
+                "refLen=${reference?.length ?: 0} expected=${ctx.expectedChars ?: "-"} " +
+                "trusted=${trust.trusted} trustReason=${trust.reason}"
         )
         return ctx
     }
