@@ -68,6 +68,7 @@ Toolbar **换源** opens 整书 dialog; long-press still offers 单章/整书 wh
 
 | Date | Result | Evidence |
 |---|---|---|
+| 2026-08-06 | PASS menu filters (partial session) | UI overflow shows 过滤非小说源/过滤词典简介/正文不合格时移除; prefs broadcast OK; dropContentBad ON→179 content-bad drops (`142328`); OFF→0 content-bad drops + list+ words=-1 tier=5 kept (`143313`); full early-stop FAIL on 学霸也开挂 (qualityOk≪20) |
 | 2026-08-05 | PASS (partial: earlyStop=false) | pre-fix device run; motivated the 7 fixes below |
 | 2026-08-05b | code fix | hard-cancel Cronet + ask memory demotion + loadWordCount default + early-stop UI + LegadoChangeSource log + prefs deep link/MCP |
 | 2026-08-05c | PASS product / FAIL deep_cap | [self-test report](../reference/change-source-selftest-2026-08-05.md); log `temp/legado_change_source_selftest_2026-08-05.txt`; qualityOk=20 early-stop; max deep=49/16 |

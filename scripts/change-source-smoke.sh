@@ -104,6 +104,8 @@ apply_prefs() {
   sleep 2
   adb shell am broadcast -a io.legado.app.action.SET_CHANGE_SOURCE_PREFS \
     --ez loadWordCount true --ez earlyStop true \
+    --ez filterNonNovelHost true --ez filterNonBookIntro true \
+    --ez dropContentBad true --ez checkAuthor false \
     -n "${PKG}/io.legado.app.receiver.ChangeSourcePrefsReceiver"
   sleep 1
   assert_prefs
