@@ -156,16 +156,20 @@ object ChangeBookSourceQuality {
     }
 
     /**
-     * Empty-latest fallback: search author present (not a placeholder) **and** local
-     * author is known and overlaps. Without a local author, empty-latest is too weak
-     * (bookshelf rows with blank author would flood the list).
+     * Empty-latest fallback helper: non-placeholder search author.
+     * Overlap with [localAuthor] is only applied when that local author is set —
+     * callers decide whether empty-latest needs this signal at all.
      */
     fun hasCredibleAuthorSignal(book: SearchBook, localAuthor: String? = null): Boolean {
-        val local = localAuthor?.trim().orEmpty()
-        if (local.isEmpty()) return false
         val author = meaningfulAuthor(book.author) ?: return false
         if (looksLikeNonBookIntro(book.intro)) return false
-        return authorCompatibleForChangeSource(local, author, requireAuthor = true)
+        val local = localAuthor?.trim().orEmpty()
+        if (local.isNotEmpty() &&
+            !authorCompatibleForChangeSource(local, author, requireAuthor = true)
+        ) {
+            return false
+        }
+        return true
     }
 
     private fun meaningfulAuthor(raw: String?): String? {
@@ -177,11 +181,11 @@ object ChangeBookSourceQuality {
 
     /**
      * Post-search gate for 换源 (beyond exact title match in WebBook filter).
-     * Drops hollow / dictionary / aggregator-label hits before list+ and respondTime success.
      *
-     * Empty latest is OK when search has a non-empty author overlapping the local author.
-     * When the shelf book has an author, overlap is always required (menu toggle still
-     * applies only when local author is blank).
+     * Author overlap follows App 「校验作者」 only — many sources omit author on
+     * search, so never force-filter by author when the toggle is off.
+     * Empty latest is allowed (title already exact-matched); chrome tips are
+     * stripped in [prepareSearchHitForChangeSource].
      */
     fun isAcceptableChangeSourceHit(
         book: SearchBook,
@@ -190,11 +194,7 @@ object ChangeBookSourceQuality {
     ): Boolean {
         if (isNonNovelSearchHost(book.bookUrl) || isNonNovelSearchHost(book.origin)) return false
         if (looksLikeNonBookIntro(book.intro)) return false
-        val usableLatest = hasUsableSearchLatest(book.latestChapterTitle, book.bookUrl)
-        if (!usableLatest && !hasCredibleAuthorSignal(book, localAuthor)) return false
-        val local = localAuthor?.trim().orEmpty()
-        val mustCheckAuthor = local.isNotEmpty() || requireAuthor
-        if (!authorCompatibleForChangeSource(localAuthor, book.author, mustCheckAuthor)) return false
+        if (!authorCompatibleForChangeSource(localAuthor, book.author, requireAuthor)) return false
         return true
     }
 

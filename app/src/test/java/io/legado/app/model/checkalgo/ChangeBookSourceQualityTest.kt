@@ -312,54 +312,30 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
-    fun emptyLatestAllowedWhenAuthorPresent() {
-        val qq = SearchBook(
-            name = "吞噬星空：收徒万倍返还",
-            origin = "https://novel.html5.qq.com",
-            originName = "白浏览器",
-            bookUrl = "https://novel.html5.qq.com/qbread/api/novel/bookInfo?resourceId=1155749461",
-            author = "新乙",
+    fun emptyLatestAndEmptyAuthorAllowedWhenAuthorCheckOff() {
+        val hit = SearchBook(
+            name = "学霸也开挂",
+            origin = "http://www.biduju.net",
+            originName = "必读居",
+            bookUrl = "http://www.biduju.net/txtbook/176452.html",
+            author = "",
             latestChapterTitle = "",
-            intro = "",
+        )
+        // Many sources omit author/latest on search — do not drop when toggle is off.
+        assertTrue(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(hit, "", requireAuthor = false)
         )
         assertTrue(
-            ChangeBookSourceQuality.isAcceptableChangeSourceHit(qq, "新乙", requireAuthor = false)
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(hit, null, requireAuthor = false)
         )
-        assertTrue(
-            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
-                qq.copy(intro = null),
-                "新乙",
-                requireAuthor = false,
-            )
-        )
+        // Toggle on + local author set → empty hit author rejected
         assertFalse(
-            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
-                qq.copy(author = ""),
-                "新乙",
-                requireAuthor = false,
-            )
-        )
-        assertFalse(
-            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
-                qq.copy(author = "别人"),
-                "新乙",
-                requireAuthor = false,
-            )
-        )
-        // No local author → empty-latest path closed (avoid blank-author shelf floods)
-        assertFalse(
-            ChangeBookSourceQuality.isAcceptableChangeSourceHit(qq, null, requireAuthor = false)
-        )
-        assertFalse(
-            ChangeBookSourceQuality.hasCredibleAuthorSignal(
-                qq.copy(author = "", intro = "x".repeat(80)),
-                null,
-            )
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(hit, "手握寸关尺", requireAuthor = true)
         )
     }
 
     @Test
-    fun usableLatestStillRequiresLocalAuthorOverlap() {
+    fun authorOverlapOnlyWhenToggleOn() {
         val hit = SearchBook(
             name = "吞噬星空：收徒万倍返还",
             origin = "https://www.example-novel.com",
@@ -367,15 +343,17 @@ class ChangeBookSourceQualityTest {
             author = "别人",
             latestChapterTitle = "第880章 一亿纪元",
         )
-        // Menu 「校验作者」 off must NOT admit wrong author when shelf has author
-        assertFalse(
+        assertTrue(
             ChangeBookSourceQuality.isAcceptableChangeSourceHit(hit, "新乙", requireAuthor = false)
+        )
+        assertFalse(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(hit, "新乙", requireAuthor = true)
         )
         assertTrue(
             ChangeBookSourceQuality.isAcceptableChangeSourceHit(
                 hit.copy(author = "新乙"),
                 "新乙",
-                requireAuthor = false,
+                requireAuthor = true,
             )
         )
     }
@@ -409,6 +387,7 @@ class ChangeBookSourceQualityTest {
 
     @Test
     fun prepareSearchHitDecoratesAndRejects() {
+        // Empty author + chrome tip: still accepted when author-check off; tip stripped.
         val backendOnlyNoAuthor = SearchBook(
             name = "吞噬星空：收徒万倍返还",
             origin = "https://v1.gyks.cf/#小说/",
@@ -417,9 +396,15 @@ class ChangeBookSourceQualityTest {
             latestChapterTitle = "猫眼",
             author = "",
         )
-        assertFalse(
-            ChangeBookSourceQuality.prepareSearchHitForChangeSource(backendOnlyNoAuthor, "新乙")
+        assertTrue(
+            ChangeBookSourceQuality.prepareSearchHitForChangeSource(
+                backendOnlyNoAuthor,
+                "新乙",
+                requireAuthor = false,
+            )
         )
+        assertNull(backendOnlyNoAuthor.latestChapterTitle)
+        assertEquals("🌞晴天小说5.0 · 猫眼", backendOnlyNoAuthor.originName)
 
         val backendOnlyWithAuthor = SearchBook(
             name = "吞噬星空：收徒万倍返还",
@@ -465,7 +450,7 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
-    fun rejectsPlaceholderAuthorOnEmptyLatest() {
+    fun placeholderAuthorIsNotCredibleSignal() {
         for (placeholder in listOf("佚名", "无名氏", "作者不详", "未知", "unknown")) {
             val hit = SearchBook(
                 name = "书",
@@ -476,13 +461,17 @@ class ChangeBookSourceQualityTest {
             )
             assertFalse(
                 "placeholder=$placeholder",
-                ChangeBookSourceQuality.isAcceptableChangeSourceHit(hit, null, requireAuthor = false),
+                ChangeBookSourceQuality.hasCredibleAuthorSignal(hit, "新乙"),
+            )
+            // Gate itself does not require author signal when toggle is off
+            assertTrue(
+                ChangeBookSourceQuality.isAcceptableChangeSourceHit(hit, "新乙", requireAuthor = false)
             )
         }
     }
 
     @Test
-    fun rejectsShortBackendTipWithoutSourceParam() {
+    fun shortBackendTipStrippedEvenWhenAccepted() {
         val hit = SearchBook(
             name = "吞噬星空：收徒万倍返还",
             origin = "https://www.example-novel.com",
@@ -490,22 +479,12 @@ class ChangeBookSourceQualityTest {
             author = "",
             latestChapterTitle = "猫眼",
         )
-        assertFalse(
+        assertTrue(
             ChangeBookSourceQuality.isAcceptableChangeSourceHit(hit, "新乙", requireAuthor = false)
         )
-        val withAuthor = hit.copy(author = "新乙")
-        assertTrue(
-            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
-                withAuthor,
-                "新乙",
-                requireAuthor = false,
-            )
-        )
-        assertTrue(
-            ChangeBookSourceQuality.prepareSearchHitForChangeSource(withAuthor, "新乙")
-        )
-        // "猫眼" is not a usable chapter tip → stripped
-        assertNull(withAuthor.latestChapterTitle)
+        assertTrue(ChangeBookSourceQuality.prepareSearchHitForChangeSource(hit, "新乙"))
+        assertNull(hit.latestChapterTitle)
+        assertFalse(ChangeBookSourceQuality.hasUsableSearchLatest("猫眼", null))
     }
 }
 
