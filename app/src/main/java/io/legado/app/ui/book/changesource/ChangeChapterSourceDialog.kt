@@ -203,8 +203,12 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
     }
 
     private fun initBottomBar() {
-        binding.tvDur.text = callBack?.oldBook?.originName
-        binding.tvDur.setOnClickListener {
+        binding.tvProgressMetrics.text = callBack?.oldBook?.originName.orEmpty()
+        binding.tvProgressCurrent.text = getString(R.string.change_source_progress_idle)
+        binding.tvProgressMetrics.setOnClickListener {
+            scrollToDurSource()
+        }
+        binding.tvProgressCurrent.setOnClickListener {
             scrollToDurSource()
         }
         binding.ivTop.setOnClickListener {
@@ -263,21 +267,31 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                             completed = progress.completed,
                             total = total,
                         )
-                        binding.tvDur.text = when {
+                        when {
                             // Search early-stop wind-down only — not during 单章校验.
                             progress.earlyStopped && !viewModel.isChapterVerifying ->
-                                requireContext().formatChangeSourceProgress(
+                                bindChangeSourceProgressStrip(
+                                    metricsView = binding.tvProgressMetrics,
+                                    currentView = binding.tvProgressCurrent,
                                     resultCount = searchBookAdapter.itemCount,
                                     progress = progress,
                                     total = viewModel.totalSourceCount,
                                 )
-                            viewModel.isChapterVerifying -> getString(
-                                R.string.change_source_verify_progress,
-                                progress.completed,
-                                searchBookAdapter.itemCount.coerceAtLeast(1),
-                                progress.label
-                            )
-                            else -> requireContext().formatChangeSourceProgress(
+                            viewModel.isChapterVerifying -> {
+                                binding.tvProgressMetrics.text = getString(
+                                    R.string.change_source_verify_progress_metrics,
+                                    progress.completed,
+                                    searchBookAdapter.itemCount.coerceAtLeast(1),
+                                )
+                                binding.tvProgressCurrent.text =
+                                    progress.label.ifBlank {
+                                        getString(R.string.change_source_progress_idle)
+                                    }
+                                binding.tvProgressCurrent.isSelected = true
+                            }
+                            else -> bindChangeSourceProgressStrip(
+                                metricsView = binding.tvProgressMetrics,
+                                currentView = binding.tvProgressCurrent,
                                 resultCount = searchBookAdapter.itemCount,
                                 progress = progress,
                                 total = viewModel.totalSourceCount,

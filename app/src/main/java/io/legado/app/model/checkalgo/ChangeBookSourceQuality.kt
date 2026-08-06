@@ -56,8 +56,10 @@ object ChangeBookSourceQuality {
         "translate.google.",
     )
 
-    /** Min intro length to treat empty-latest search hits as real books (QQ/百度 API). */
-    private const val CREDIBLE_INTRO_MIN_CHARS = 40
+    /** Authors that mean “missing” on search pages — treat as empty for empty-latest gate. */
+    private val placeholderAuthors = setOf(
+        "未知", "无", "佚名", "未知作者", "作者未知", "暂无", "无名", "none", "null", "unknown", "n/a",
+    )
 
     /**
      * Aggregator backends often put `source=` on [SearchBook.bookUrl]
@@ -150,26 +152,35 @@ object ChangeBookSourceQuality {
     }
 
     /**
-     * QQ / 百度小说 API often omit lastChapter on search JSON but still return
-     * author + long synopsis. Allow those through when host is not a shell.
-     * When [localAuthor] is set, hit author must overlap (even if App 「校验作者」off).
+     * Empty-latest fallback: search author present (not a placeholder), and overlaps
+     * [localAuthor] when set (even if App 「校验作者」 is off).
+     * No-author + no-latest shells stay rejected.
      */
-    fun hasCredibleAuthorIntro(book: SearchBook, localAuthor: String? = null): Boolean {
-        val author = book.author.trim()
-        if (author.isEmpty()) return false
-        val intro = book.intro?.trim().orEmpty()
-        if (intro.length < CREDIBLE_INTRO_MIN_CHARS) return false
-        if (looksLikeNonBookIntro(intro)) return false
+    fun hasCredibleAuthorSignal(book: SearchBook, localAuthor: String? = null): Boolean {
+        val author = meaningfulAuthor(book.author) ?: return false
+        if (looksLikeNonBookIntro(book.intro)) return false
         val local = localAuthor?.trim().orEmpty()
-        if (local.isNotEmpty() && !authorCompatibleForChangeSource(local, author, requireAuthor = true)) {
+        if (local.isNotEmpty() &&
+            !authorCompatibleForChangeSource(local, author, requireAuthor = true)
+        ) {
             return false
         }
         return true
     }
 
+    private fun meaningfulAuthor(raw: String?): String? {
+        val author = raw?.trim().orEmpty()
+        if (author.isEmpty()) return null
+        if (author.lowercase() in placeholderAuthors) return null
+        return author
+    }
+
     /**
      * Post-search gate for 换源 (beyond exact title match in WebBook filter).
      * Drops hollow / dictionary / aggregator-label hits before list+ and respondTime success.
+     *
+     * Empty latest is OK when search has a non-empty author (most novel sources omit
+     * lastChapter until bookInfo). Still rejects no-author + no-latest shells.
      */
     fun isAcceptableChangeSourceHit(
         book: SearchBook,
@@ -179,7 +190,7 @@ object ChangeBookSourceQuality {
         if (isNonNovelSearchHost(book.bookUrl) || isNonNovelSearchHost(book.origin)) return false
         if (looksLikeNonBookIntro(book.intro)) return false
         val usableLatest = hasUsableSearchLatest(book.latestChapterTitle, book.bookUrl)
-        if (!usableLatest && !hasCredibleAuthorIntro(book, localAuthor)) return false
+        if (!usableLatest && !hasCredibleAuthorSignal(book, localAuthor)) return false
         if (!authorCompatibleForChangeSource(localAuthor, book.author, requireAuthor)) return false
         return true
     }
@@ -202,9 +213,8 @@ object ChangeBookSourceQuality {
     ): Boolean {
         if (!isAcceptableChangeSourceHit(book, localAuthor, requireAuthor)) return false
         val effective = effectiveLatestChapterTitle(book.latestChapterTitle, book.bookUrl)
-        if (effective.isNotEmpty()) {
-            book.latestChapterTitle = effective
-        }
+        // Strip aggregator-label-only tips so the list does not show "猫眼" as a chapter.
+        book.latestChapterTitle = effective.ifEmpty { null }
         book.originName = displayOriginName(book.originName, book.bookUrl)
         return true
     }

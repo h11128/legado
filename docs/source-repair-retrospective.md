@@ -10,8 +10,9 @@
 
 ### 过滤（ChangeBookSourceQuality）
 - `isNonNovelSearchHost`：image/zhidao/tieba/baike/wenku/dict.cn 等硬拒。
-- `hasCredibleAuthorIntro`：空最新章时，作者非空 + 简介≥40 且非词典壳 → 可进换源列表（覆盖 QQ/百度小说 API）。
-- 单测：`ChangeBookSourceQualityTest` BUILD SUCCESSFUL。
+- `hasCredibleAuthorSignal`：空最新章时，有效作者非空（拒佚名/未知等占位）且与本地作者重叠（本地有作者时）→ 可进列表；简介≥40 不再强制。
+- 进度 UI：底部两行（指标含「命中」+ 当前源名跑马灯）。
+- 单测：`ChangeBookSourceQualityTest`。
 
 
 ## 2026-08-06 肉文小说 author

@@ -1341,9 +1341,16 @@
     <string name="change_source_progress">Result %1$d · asked %2$d/%3$d · asking %4$d/%5$d · %6$s</string>
     <string name="change_source_early_stop_done">Result %1$d · enough good sources (%2$d) · stopped at %3$d / %4$d</string>
     <string name="change_source_early_stop_running">Result %1$d · enough good sources (%2$d) · stopping %3$d / %4$d: %5$s</string>
+    <string name="change_source_progress_metrics">Result %1$d · hits %2$d · asked %3$d/%4$d · asking %5$d/%6$d</string>
+    <string name="change_source_progress_metrics_early_done">Result %1$d · hits %2$d · enough good (%3$d) · stopped %4$d/%5$d</string>
+    <string name="change_source_progress_metrics_early_running">Result %1$d · hits %2$d · enough good (%3$d) · stopping %4$d/%5$d</string>
+    <string name="change_source_progress_idle">Idle</string>
+    <string name="change_source_progress_done">Done</string>
+    <string name="change_source_progress_stopping">Stopping…</string>
     <string name="change_source_verify_chapter">Verifying chapter</string>
     <string name="change_source_verify_done">Chapter verify done</string>
     <string name="change_source_verify_progress">Verify %1$d / %2$d: %3$s</string>
+    <string name="change_source_verify_progress_metrics">Verify %1$d / %2$d</string>
     <string name="change_source_chapter_ok">Chapter OK · %1$d chars</string>
     <string name="change_source_chapter_toc_ok">Chapter matched</string>
     <string name="change_source_chapter_missing">Chapter not found</string>

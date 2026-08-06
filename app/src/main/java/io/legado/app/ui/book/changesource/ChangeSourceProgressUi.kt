@@ -1,10 +1,11 @@
 package io.legado.app.ui.book.changesource
 
 /**
- * Progress payload for 整书/单章换源 toolbar subtitle.
+ * Progress payload for 整书/单章换源 status strip.
  *
  * [completed] = ask-phase finished (search returned), NOT deep word-count done.
  * [inFlight] = ask currently running. [deepInFlight] = toc/content probes still running.
+ * [hitCount] = title-matched sources that passed search-quality (≠ list size after content drop).
  */
 data class ChangeSourceProgressUi(
     val completed: Int = 0,
@@ -16,6 +17,8 @@ data class ChangeSourceProgressUi(
     val deepInFlight: Int = 0,
     val label: String = "",
     val qualityOk: Int = 0,
+    /** Search hits that passed quality gate (may exceed visible list after content-bad). */
+    val hitCount: Int = 0,
     val earlyStopped: Boolean = false,
     val finished: Boolean = false,
 )

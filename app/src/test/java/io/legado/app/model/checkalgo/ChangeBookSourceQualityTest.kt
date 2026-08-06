@@ -308,8 +308,7 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
-    fun emptyLatestAllowedWhenAuthorAndIntroCredible() {
-        val intro = "（起点第一本万订吞噬同人，质量保证。）意外穿越到吞噬星空世界，陆青山本以为自己能够成为强者。"
+    fun emptyLatestAllowedWhenAuthorPresent() {
         val qq = SearchBook(
             name = "吞噬星空：收徒万倍返还",
             origin = "https://novel.html5.qq.com",
@@ -317,21 +316,22 @@ class ChangeBookSourceQualityTest {
             bookUrl = "https://novel.html5.qq.com/qbread/api/novel/bookInfo?resourceId=1155749461",
             author = "新乙",
             latestChapterTitle = "",
-            intro = intro,
+            intro = "",
         )
         assertTrue(
             ChangeBookSourceQuality.isAcceptableChangeSourceHit(qq, "新乙", requireAuthor = false)
         )
-        assertFalse(
+        // Typical novel search: author only, no intro
+        assertTrue(
             ChangeBookSourceQuality.isAcceptableChangeSourceHit(
-                qq.copy(author = "", intro = intro),
+                qq.copy(intro = null),
                 "新乙",
                 requireAuthor = false,
             )
         )
         assertFalse(
             ChangeBookSourceQuality.isAcceptableChangeSourceHit(
-                qq.copy(intro = "短"),
+                qq.copy(author = ""),
                 "新乙",
                 requireAuthor = false,
             )
@@ -344,17 +344,11 @@ class ChangeBookSourceQualityTest {
                 requireAuthor = false,
             )
         )
-        assertEquals(40, intro.take(40).length)
-        assertTrue(
-            ChangeBookSourceQuality.hasCredibleAuthorIntro(
-                qq.copy(intro = "x".repeat(40)),
-                "新乙",
-            )
-        )
+        // No author + no latest stays rejected (even with long intro)
         assertFalse(
-            ChangeBookSourceQuality.hasCredibleAuthorIntro(
-                qq.copy(intro = "x".repeat(39)),
-                "新乙",
+            ChangeBookSourceQuality.hasCredibleAuthorSignal(
+                qq.copy(author = "", intro = "x".repeat(80)),
+                null,
             )
         )
     }
@@ -388,7 +382,19 @@ class ChangeBookSourceQualityTest {
 
     @Test
     fun prepareSearchHitDecoratesAndRejects() {
-        val bad = SearchBook(
+        val backendOnlyNoAuthor = SearchBook(
+            name = "吞噬星空：收徒万倍返还",
+            origin = "https://v1.gyks.cf/#小说/",
+            originName = "🌞晴天小说5.0",
+            bookUrl = "https://v1.gyks.cf/detail?book_id=x&source=猫眼",
+            latestChapterTitle = "猫眼",
+            author = "",
+        )
+        assertFalse(
+            ChangeBookSourceQuality.prepareSearchHitForChangeSource(backendOnlyNoAuthor, "新乙")
+        )
+
+        val backendOnlyWithAuthor = SearchBook(
             name = "吞噬星空：收徒万倍返还",
             origin = "https://v1.gyks.cf/#小说/",
             originName = "🌞晴天小说5.0",
@@ -396,7 +402,11 @@ class ChangeBookSourceQualityTest {
             latestChapterTitle = "猫眼",
             author = "新乙",
         )
-        assertFalse(ChangeBookSourceQuality.prepareSearchHitForChangeSource(bad, "新乙"))
+        assertTrue(
+            ChangeBookSourceQuality.prepareSearchHitForChangeSource(backendOnlyWithAuthor, "新乙")
+        )
+        assertNull(backendOnlyWithAuthor.latestChapterTitle)
+        assertEquals("🌞晴天小说5.0 · 猫眼", backendOnlyWithAuthor.originName)
 
         val good = SearchBook(
             name = "吞噬星空：收徒万倍返还",
@@ -409,5 +419,35 @@ class ChangeBookSourceQualityTest {
         assertTrue(ChangeBookSourceQuality.prepareSearchHitForChangeSource(good, "新乙"))
         assertEquals("🌞晴天小说5.0 · 69书吧", good.originName)
         assertEquals("第382章 一等天才，万倍返还！", good.latestChapterTitle)
+    }
+
+    @Test
+    fun rejectsDictIntroEvenOnNovelHost() {
+        val hit = SearchBook(
+            name = "吞噬星空：收徒万倍返还",
+            origin = "https://www.example-novel.com",
+            originName = "某小说站",
+            bookUrl = "https://www.example-novel.com/book/1",
+            author = "新乙",
+            latestChapterTitle = "",
+            intro = "该词条未找到_海词词典",
+        )
+        assertFalse(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(hit, "新乙", requireAuthor = false)
+        )
+    }
+
+    @Test
+    fun rejectsPlaceholderAuthorOnEmptyLatest() {
+        val hit = SearchBook(
+            name = "书",
+            origin = "https://www.example-novel.com",
+            bookUrl = "https://www.example-novel.com/book/1",
+            author = "佚名",
+            latestChapterTitle = "",
+        )
+        assertFalse(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(hit, null, requireAuthor = false)
+        )
     }
 }

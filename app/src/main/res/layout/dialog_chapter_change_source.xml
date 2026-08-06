@@ -36,32 +36,53 @@
     <LinearLayout
         android:id="@+id/ll_bottom_bar"
         android:layout_width="match_parent"
-        android:layout_height="36dp"
+        android:layout_height="wrap_content"
         android:background="@color/background"
         android:gravity="center_vertical"
+        android:minHeight="56dp"
         android:orientation="horizontal"
         android:paddingLeft="10dp"
+        android:paddingTop="4dp"
         android:paddingRight="10dp"
+        android:paddingBottom="4dp"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <TextView
-            android:id="@+id/tv_dur"
+        <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:ellipsize="middle"
-            android:gravity="center_vertical"
+            android:orientation="vertical"
             android:paddingLeft="10dp"
-            android:paddingRight="10dp"
-            android:singleLine="true"
-            android:textColor="@color/primaryText"
-            android:textSize="12sp" />
+            android:paddingRight="10dp">
+
+            <TextView
+                android:id="@+id/tv_progress_metrics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/primaryText"
+                android:textSize="12sp"
+                tools:text="结果 3 · 命中 28 · 已问 1133/1500 · 问中 12/50" />
+
+            <TextView
+                android:id="@+id/tv_progress_current"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="marquee"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:marqueeRepeatLimit="marquee_forever"
+                android:singleLine="true"
+                android:textColor="@color/secondaryText"
+                android:textSize="11sp"
+                tools:text="询问中 某某书源" />
+        </LinearLayout>
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/iv_top"
             android:layout_width="36dp"
-            android:layout_height="match_parent"
+            android:layout_height="36dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/go_to_top"
             android:src="@drawable/ic_arrow_drop_up"
@@ -72,7 +93,7 @@
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/iv_bottom"
             android:layout_width="36dp"
-            android:layout_height="match_parent"
+            android:layout_height="36dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/go_to_bottom"
             android:src="@drawable/ic_arrow_drop_down"

@@ -352,6 +352,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             deepInFlight = deepInFlightNames.size,
             label = label,
             qualityOk = qualityOkCount.get(),
+            hitCount = searchHitCount.get(),
             earlyStopped = earlyStopped.get(),
             finished = false,
         )
@@ -694,6 +695,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             deepInFlight = deepInFlight,
             label = label,
             qualityOk = qualityOkCount.get(),
+            hitCount = searchHitCount.get(),
             earlyStopped = early,
             finished = finished,
         )
