@@ -15,7 +15,7 @@ import kotlinx.serialization.json.putJsonObject
 internal fun Server.registerMcpChangeSourceTools() {
     addTool(
         name = "set_change_source_prefs",
-        description = "设置换源相关偏好（加载字数 / 足够好源后提前停止）。供 agent 自动化；与菜单「加载字数」「足够好源后提前停止」同路径。",
+        description = "设置换源相关偏好（加载字数 / 提前停止 / 过滤开关）。供 agent 自动化；与换源菜单同路径。",
         inputSchema = ToolSchema(
             properties = buildJsonObject {
                 putJsonObject("loadWordCount") {
@@ -30,6 +30,22 @@ internal fun Server.registerMcpChangeSourceTools() {
                     put("type", "integer")
                     put("description", "提前停止所需质量 OK 数；缺省不改")
                 }
+                putJsonObject("filterNonNovelHost") {
+                    put("type", "boolean")
+                    put("description", "是否过滤非小说源（图片/知道/词典 host）；缺省不改")
+                }
+                putJsonObject("filterNonBookIntro") {
+                    put("type", "boolean")
+                    put("description", "是否过滤词典/无效简介；缺省不改")
+                }
+                putJsonObject("dropContentBad") {
+                    put("type", "boolean")
+                    put("description", "正文不合格时是否从列表移除；缺省不改")
+                }
+                putJsonObject("checkAuthor") {
+                    put("type", "boolean")
+                    put("description", "是否校验作者；缺省不改")
+                }
             },
             required = emptyList(),
         ),
@@ -39,6 +55,10 @@ internal fun Server.registerMcpChangeSourceTools() {
                 loadWordCount = request.arguments.bool("loadWordCount"),
                 earlyStop = request.arguments.bool("earlyStop"),
                 earlyStopCount = request.arguments.int("earlyStopCount"),
+                filterNonNovelHost = request.arguments.bool("filterNonNovelHost"),
+                filterNonBookIntro = request.arguments.bool("filterNonBookIntro"),
+                dropContentBad = request.arguments.bool("dropContentBad"),
+                checkAuthor = request.arguments.bool("checkAuthor"),
             )
             ok("$msg\n${ChangeSourcePrefsApply.snapshot()}")
         } catch (error: CancellationException) {

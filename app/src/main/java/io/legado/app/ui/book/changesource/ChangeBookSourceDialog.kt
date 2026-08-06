@@ -296,6 +296,24 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
                 viewModel.refresh()
             }
 
+            R.id.menu_filter_non_novel -> {
+                AppConfig.changeSourceFilterNonNovelHost = !item.isChecked
+                binding.toolBar.menu.syncChangeSourceResultOptions()
+                viewModel.refresh()
+            }
+
+            R.id.menu_filter_non_book_intro -> {
+                AppConfig.changeSourceFilterNonBookIntro = !item.isChecked
+                binding.toolBar.menu.syncChangeSourceResultOptions()
+                viewModel.refresh()
+            }
+
+            R.id.menu_drop_content_bad -> {
+                AppConfig.changeSourceDropContentBad = !item.isChecked
+                binding.toolBar.menu.syncChangeSourceResultOptions()
+                viewModel.applyDropContentBadPreference()
+            }
+
             R.id.menu_load_info -> {
                 AppConfig.changeSourceLoadInfo = !item.isChecked
                 item.isChecked = !item.isChecked

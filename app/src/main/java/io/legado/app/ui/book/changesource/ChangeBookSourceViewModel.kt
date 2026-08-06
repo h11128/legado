@@ -175,12 +175,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             override fun searchSuccess(searchBook: SearchBook) {
                 // Early-stop: never re-accept unfinished pending rows after dropPending.
                 if (earlyStopped.get() && searchBook.chapterWordCount == 0) return
-                if (!ChangeBookSourceQuality.prepareSearchHitForChangeSource(
-                        searchBook,
-                        author,
-                        requireAuthor = AppConfig.changeSourceCheckAuthor,
-                    )
-                ) {
+                if (!prepareChangeSourceHit(searchBook)) {
                     ChangeSourceLog.i(
                         "list- skip origin=${searchBook.origin} reason=search-quality " +
                             "url=${searchBook.bookUrl.take(80)}"
@@ -229,15 +224,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
         getDbSearchBooks().let { rows ->
             searchBooks.clear()
-            searchBooks.addAll(
-                rows.filter {
-                    ChangeBookSourceQuality.prepareSearchHitForChangeSource(
-                        it,
-                        author,
-                        requireAuthor = AppConfig.changeSourceCheckAuthor,
-                    )
-                }
-            )
+            searchBooks.addAll(rows.filter { prepareChangeSourceHit(it) })
             trySend(arrayOf(searchBooks))
         }
 
@@ -455,16 +442,29 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         const val DEEP_PARALLEL_CAP = 16
     }
 
+    /** Gate flags from 换源 menu — never hard-force when a toggle is off. */
+    private fun prepareChangeSourceHit(book: SearchBook): Boolean =
+        ChangeBookSourceQuality.prepareSearchHitForChangeSource(
+            book,
+            author,
+            requireAuthor = AppConfig.changeSourceCheckAuthor,
+            filterNonNovelHost = AppConfig.changeSourceFilterNonNovelHost,
+            filterNonBookIntro = AppConfig.changeSourceFilterNonBookIntro,
+        )
+
+    private fun isAcceptableChangeSourceHit(book: SearchBook, requireAuthor: Boolean): Boolean =
+        ChangeBookSourceQuality.isAcceptableChangeSourceHit(
+            book,
+            author,
+            requireAuthor = requireAuthor,
+            filterNonNovelHost = AppConfig.changeSourceFilterNonNovelHost,
+            filterNonBookIntro = AppConfig.changeSourceFilterNonBookIntro,
+        )
+
     open fun refresh(): Boolean {
         getDbSearchBooks().let { rows ->
             searchBooks.clear()
-            searchBooks.addAll(rows.filter {
-                ChangeBookSourceQuality.prepareSearchHitForChangeSource(
-                    it,
-                    author,
-                    requireAuthor = AppConfig.changeSourceCheckAuthor,
-                )
-            })
+            searchBooks.addAll(rows.filter { prepareChangeSourceHit(it) })
             searchCallback?.upAdapter()
         }
         return searchBooks.isEmpty().also { isEmpty ->
@@ -880,11 +880,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 return@withTimeoutOrNull true
             }
             val resultBooks = rawBooks.filter {
-                ChangeBookSourceQuality.isAcceptableChangeSourceHit(
-                    it,
-                    author,
-                    requireAuthor = checkAuthor,
-                )
+                isAcceptableChangeSourceHit(it, requireAuthor = checkAuthor)
             }
             if (resultBooks.isEmpty()) {
                 // Title matched but tip/author/intro failed quality gate — not a title miss.
@@ -1130,8 +1126,15 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 "list=${searchBooks.size}"
         )
         if (pair.first < 0) {
-            // Drop this hit only (aggregators share origin across backends).
-            dropSearchBookHit(searchBook, "content-bad")
+            // Drop this hit only when menu 「正文不合格时移除」 is on.
+            if (AppConfig.changeSourceDropContentBad) {
+                dropSearchBookHit(searchBook, "content-bad")
+            } else {
+                mergeTier(searchBook.bookUrl, ChangeBookSourceQuality.TIER_CONTENT_BAD)
+                missContentBadCount.incrementAndGet()
+                publishSearchBook(searchBook, tocSize = chapters.size)
+                applyBookQualityGates(force = false)
+            }
         } else {
             if (ChangeBookSourceQuality.isQualityOkWordCount(pair.first) && processedContent != null) {
                 probeContentSamples[searchBook.bookUrl] = processedContent
@@ -1305,7 +1308,52 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private fun demoteSearchHitContent(searchBook: SearchBook, badge: String) {
         mergeTier(searchBook.bookUrl, ChangeBookSourceQuality.TIER_CONTENT_BAD)
         probeContentSamples.remove(searchBook.bookUrl)
-        dropSearchBookHit(searchBook, "consensus:$badge")
+        if (AppConfig.changeSourceDropContentBad) {
+            dropSearchBookHit(searchBook, "consensus:$badge")
+            return
+        }
+        val wasOk = ChangeBookSourceQuality.isQualityOkWordCount(searchBook.chapterWordCount)
+        if (wasOk) {
+            qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
+        }
+        // Force content-bad sort tier (contentSortTier needs count<0 + non-blank text).
+        searchBook.chapterWordCount = -1
+        searchBook.chapterWordCountText = appendBadge(searchBook.chapterWordCountText, badge)
+        missContentBadCount.incrementAndGet()
+        // Persist so refresh() / DB reload keeps the badge.
+        runCatching { appDb.searchBookDao.insert(searchBook) }
+        synchronized(searchBooks) {
+            val idx = searchBooks.indexOfFirst { it.bookUrl == searchBook.bookUrl }
+            if (idx >= 0) searchBooks[idx] = searchBook
+        }
+        searchCallback?.upAdapter()
+        ChangeSourceLog.i(
+            "list~ demote hit origin=${searchBook.origin} reason=consensus:$badge keep=true " +
+                "wasOk=$wasOk url=${searchBook.bookUrl.take(80)} size=${searchBooks.size}"
+        )
+    }
+
+    /**
+     * Apply menu 「正文不合格时移除」 to already-measured rows.
+     * When enabled: drop rows with chapterWordCount &lt; 0. When disabled: resort only
+     * (already-dropped hits need a full re-search to return).
+     */
+    fun applyDropContentBadPreference() {
+        if (!AppConfig.changeSourceDropContentBad) {
+            searchCallback?.upAdapter()
+            return
+        }
+        val doomed = synchronized(searchBooks) {
+            searchBooks.filter { it.chapterWordCount < 0 }.toList()
+        }
+        for (hit in doomed) {
+            // Prefer a non-content-bad reason so missContentBadCount is not double-counted
+            // (these rows already incremented when first marked bad).
+            dropSearchBookHit(hit, "pref-drop-content-bad")
+        }
+        if (doomed.isEmpty()) {
+            searchCallback?.upAdapter()
+        }
     }
 
     private fun demoteOriginContent(origin: String, badge: String) {
@@ -1590,13 +1638,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             getDbSearchBooks().let { rows ->
                 searchBooks.clear()
                 searchBooks.addAll(
-                    rows.filter {
-                    ChangeBookSourceQuality.prepareSearchHitForChangeSource(
-                        it,
-                        author,
-                        requireAuthor = AppConfig.changeSourceCheckAuthor,
-                    )
-                }
+                    rows.filter { prepareChangeSourceHit(it) }
                 )
                 searchCallback?.upAdapter()
             }

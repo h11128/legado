@@ -479,6 +479,30 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.changeSourceCheckAuthor, value)
         }
 
+    /** Drop image/zhidao/dict.cn-style hosts from 换源 (menu; default on). */
+    var changeSourceFilterNonNovelHost: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.changeSourceFilterNonNovelHost, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.changeSourceFilterNonNovelHost, value)
+        }
+
+    /** Drop dictionary / non-book intro hits from 换源 (menu; default on). */
+    var changeSourceFilterNonBookIntro: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.changeSourceFilterNonBookIntro, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.changeSourceFilterNonBookIntro, value)
+        }
+
+    /**
+     * When loading word count, remove content-bad / consensus-outlier hits
+     * instead of keeping them with a badge (menu; default on).
+     */
+    var changeSourceDropContentBad: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.changeSourceDropContentBad, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.changeSourceDropContentBad, value)
+        }
+
     var ttsEngine: String?
         get() = appCtx.getPrefString(PreferKey.ttsEngine)
         set(value) {

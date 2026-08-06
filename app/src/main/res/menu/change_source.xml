@@ -35,6 +35,24 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/menu_filter_non_novel"
+        android:title="@string/change_source_filter_non_novel"
+        android:checkable="true"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_filter_non_book_intro"
+        android:title="@string/change_source_filter_non_book_intro"
+        android:checkable="true"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_drop_content_bad"
+        android:title="@string/change_source_drop_content_bad"
+        android:checkable="true"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/menu_load_word_count"
         android:title="@string/load_word_count"
         android:checkable="true"

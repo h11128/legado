@@ -991,6 +991,9 @@
     <string name="system_tts">System tts</string>
     <string name="export_type">Exported file format</string>
     <string name="checkAuthor">Check by author</string>
+    <string name="change_source_filter_non_novel">Filter non-novel sources</string>
+    <string name="change_source_filter_non_book_intro">Filter dictionary intros</string>
+    <string name="change_source_drop_content_bad">Remove bad chapter content</string>
     <string name="url_already">This URL has subscribed</string>
     <string name="high_brush_title">High screen refresh rate</string>
     <string name="high_brush_summary">Use maximum screen refresh rate</string>

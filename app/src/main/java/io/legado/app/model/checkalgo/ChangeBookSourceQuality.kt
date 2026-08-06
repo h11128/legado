@@ -182,18 +182,24 @@ object ChangeBookSourceQuality {
     /**
      * Post-search gate for 换源 (beyond exact title match in WebBook filter).
      *
-     * Author overlap follows App 「校验作者」 only — many sources omit author on
-     * search, so never force-filter by author when the toggle is off.
-     * Empty latest is allowed (title already exact-matched); chrome tips are
+     * Every filter here is a menu toggle — do not hard-force when the user turned it off.
+     * Author overlap follows 「校验作者」; non-novel hosts / dictionary intros follow their
+     * own items. Empty latest is allowed (title already exact-matched); chrome tips are
      * stripped in [prepareSearchHitForChangeSource].
      */
     fun isAcceptableChangeSourceHit(
         book: SearchBook,
         localAuthor: String?,
         requireAuthor: Boolean = false,
+        filterNonNovelHost: Boolean = true,
+        filterNonBookIntro: Boolean = true,
     ): Boolean {
-        if (isNonNovelSearchHost(book.bookUrl) || isNonNovelSearchHost(book.origin)) return false
-        if (looksLikeNonBookIntro(book.intro)) return false
+        if (filterNonNovelHost &&
+            (isNonNovelSearchHost(book.bookUrl) || isNonNovelSearchHost(book.origin))
+        ) {
+            return false
+        }
+        if (filterNonBookIntro && looksLikeNonBookIntro(book.intro)) return false
         if (!authorCompatibleForChangeSource(localAuthor, book.author, requireAuthor)) return false
         return true
     }
@@ -213,8 +219,19 @@ object ChangeBookSourceQuality {
         book: SearchBook,
         localAuthor: String? = null,
         requireAuthor: Boolean = false,
+        filterNonNovelHost: Boolean = true,
+        filterNonBookIntro: Boolean = true,
     ): Boolean {
-        if (!isAcceptableChangeSourceHit(book, localAuthor, requireAuthor)) return false
+        if (!isAcceptableChangeSourceHit(
+                book,
+                localAuthor,
+                requireAuthor = requireAuthor,
+                filterNonNovelHost = filterNonNovelHost,
+                filterNonBookIntro = filterNonBookIntro,
+            )
+        ) {
+            return false
+        }
         val effective = effectiveLatestChapterTitle(book.latestChapterTitle, book.bookUrl)
         // Drop chrome tips (「猫眼」) even when author signal let the hit through.
         book.latestChapterTitle = when {

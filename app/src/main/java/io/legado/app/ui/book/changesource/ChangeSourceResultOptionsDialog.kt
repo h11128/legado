@@ -12,6 +12,10 @@ import io.legado.app.lib.dialogs.selector
 import io.legado.app.utils.visible
 
 internal fun Menu.syncChangeSourceResultOptions() {
+    findItem(R.id.menu_filter_non_novel)?.isChecked = AppConfig.changeSourceFilterNonNovelHost
+    findItem(R.id.menu_filter_non_book_intro)?.isChecked =
+        AppConfig.changeSourceFilterNonBookIntro
+    findItem(R.id.menu_drop_content_bad)?.isChecked = AppConfig.changeSourceDropContentBad
     findItem(R.id.menu_load_word_count)?.isChecked = AppConfig.changeSourceLoadWordCount
     findItem(R.id.menu_early_stop)?.isChecked = AppConfig.changeSourceEarlyStop
     findItem(R.id.menu_sort_respond_time)?.isChecked = AppConfig.changeSourceSortRespondTime

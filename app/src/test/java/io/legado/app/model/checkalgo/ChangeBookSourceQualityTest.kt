@@ -293,7 +293,7 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
-    fun nonNovelHostAlwaysRejected() {
+    fun nonNovelHostRejectedWhenFilterOn() {
         assertTrue(ChangeBookSourceQuality.isNonNovelSearchHost("https://image.baidu.com/search/flip?word=x"))
         assertTrue(ChangeBookSourceQuality.isNonNovelSearchHost("https://zhidao.baidu.com/msearch?word=x"))
         assertFalse(ChangeBookSourceQuality.isNonNovelSearchHost("https://novel.html5.qq.com/book/1"))
@@ -308,6 +308,14 @@ class ChangeBookSourceQualityTest {
         )
         assertFalse(
             ChangeBookSourceQuality.isAcceptableChangeSourceHit(img, "新乙", requireAuthor = false)
+        )
+        assertTrue(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
+                img,
+                "新乙",
+                requireAuthor = false,
+                filterNonNovelHost = false,
+            )
         )
     }
 
@@ -446,6 +454,57 @@ class ChangeBookSourceQualityTest {
         )
         assertFalse(
             ChangeBookSourceQuality.isAcceptableChangeSourceHit(hit, "新乙", requireAuthor = false)
+        )
+        assertTrue(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
+                hit,
+                "新乙",
+                requireAuthor = false,
+                filterNonBookIntro = false,
+            )
+        )
+    }
+
+    @Test
+    fun menuTogglesIndependently() {
+        val shell = SearchBook(
+            name = "吞噬星空：收徒万倍返还",
+            origin = "http://dict.cn",
+            originName = "海词",
+            bookUrl = "http://dict.cn/%E5%90%9E%E5%99%AC",
+            author = "别人",
+            latestChapterTitle = "第1章",
+            intro = "该词条未找到_海词词典",
+        )
+        // Both filters off + author check off → shell allowed through gate
+        assertTrue(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
+                shell,
+                "新乙",
+                requireAuthor = false,
+                filterNonNovelHost = false,
+                filterNonBookIntro = false,
+            )
+        )
+        // Host filter alone still blocks
+        assertFalse(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
+                shell,
+                "新乙",
+                requireAuthor = false,
+                filterNonNovelHost = true,
+                filterNonBookIntro = false,
+            )
+        )
+        // Intro filter alone still blocks when host filter is off
+        assertFalse(
+            ChangeBookSourceQuality.isAcceptableChangeSourceHit(
+                shell.copy(origin = "https://www.example-novel.com", bookUrl = "https://www.example-novel.com/1"),
+                "新乙",
+                requireAuthor = false,
+                filterNonNovelHost = false,
+                filterNonBookIntro = true,
+            )
         )
     }
 

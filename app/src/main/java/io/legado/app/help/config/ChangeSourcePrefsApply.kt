@@ -14,6 +14,10 @@ object ChangeSourcePrefsApply {
         loadWordCount: Boolean? = null,
         earlyStop: Boolean? = null,
         earlyStopCount: Int? = null,
+        filterNonNovelHost: Boolean? = null,
+        filterNonBookIntro: Boolean? = null,
+        dropContentBad: Boolean? = null,
+        checkAuthor: Boolean? = null,
     ): String {
         val applied = mutableListOf<String>()
         loadWordCount?.let {
@@ -29,6 +33,22 @@ object ChangeSourcePrefsApply {
             AppConfig.changeSourceEarlyStopCount = n
             applied += "changeSourceEarlyStopCount=$n"
         }
+        filterNonNovelHost?.let {
+            AppConfig.changeSourceFilterNonNovelHost = it
+            applied += "changeSourceFilterNonNovelHost=$it"
+        }
+        filterNonBookIntro?.let {
+            AppConfig.changeSourceFilterNonBookIntro = it
+            applied += "changeSourceFilterNonBookIntro=$it"
+        }
+        dropContentBad?.let {
+            AppConfig.changeSourceDropContentBad = it
+            applied += "changeSourceDropContentBad=$it"
+        }
+        checkAuthor?.let {
+            AppConfig.changeSourceCheckAuthor = it
+            applied += "changeSourceCheckAuthor=$it"
+        }
         val msg = if (applied.isEmpty()) {
             "no prefs changed"
         } else {
@@ -43,6 +63,12 @@ object ChangeSourcePrefsApply {
             loadWordCount = uri.getQueryParameter("loadWordCount")?.toBooleanStrictOrNull(),
             earlyStop = uri.getQueryParameter("earlyStop")?.toBooleanStrictOrNull(),
             earlyStopCount = uri.getQueryParameter("earlyStopCount")?.toIntOrNull(),
+            filterNonNovelHost = uri.getQueryParameter("filterNonNovelHost")
+                ?.toBooleanStrictOrNull(),
+            filterNonBookIntro = uri.getQueryParameter("filterNonBookIntro")
+                ?.toBooleanStrictOrNull(),
+            dropContentBad = uri.getQueryParameter("dropContentBad")?.toBooleanStrictOrNull(),
+            checkAuthor = uri.getQueryParameter("checkAuthor")?.toBooleanStrictOrNull(),
         )
     }
 
@@ -50,5 +76,11 @@ object ChangeSourcePrefsApply {
         append("changeSourceLoadWordCount=").append(AppConfig.changeSourceLoadWordCount)
         append(", changeSourceEarlyStop=").append(AppConfig.changeSourceEarlyStop)
         append(", changeSourceEarlyStopCount=").append(AppConfig.changeSourceEarlyStopCount)
+        append(", changeSourceCheckAuthor=").append(AppConfig.changeSourceCheckAuthor)
+        append(", changeSourceFilterNonNovelHost=")
+            .append(AppConfig.changeSourceFilterNonNovelHost)
+        append(", changeSourceFilterNonBookIntro=")
+            .append(AppConfig.changeSourceFilterNonBookIntro)
+        append(", changeSourceDropContentBad=").append(AppConfig.changeSourceDropContentBad)
     }
 }
