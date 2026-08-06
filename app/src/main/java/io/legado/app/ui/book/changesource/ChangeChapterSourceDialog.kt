@@ -203,8 +203,13 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
     }
 
     private fun initBottomBar() {
-        binding.tvProgressMetrics.text = callBack?.oldBook?.originName.orEmpty()
-        binding.tvProgressCurrent.text = getString(R.string.change_source_progress_idle)
+        binding.tvProgressMetrics.text = getString(
+            R.string.change_source_progress_metrics,
+            0, 0, 0, viewModel.totalSourceCount.coerceAtLeast(1), 0, 1,
+        )
+        binding.tvProgressCurrent.text =
+            callBack?.oldBook?.originName?.takeIf { it.isNotBlank() }
+                ?: getString(R.string.change_source_progress_idle)
         binding.tvProgressMetrics.setOnClickListener {
             scrollToDurSource()
         }
@@ -275,7 +280,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                                     currentView = binding.tvProgressCurrent,
                                     resultCount = searchBookAdapter.itemCount,
                                     progress = progress,
-                                    total = viewModel.totalSourceCount,
+                                    total = viewModel.totalSourceCount.coerceAtLeast(1),
                                 )
                             viewModel.isChapterVerifying -> {
                                 binding.tvProgressMetrics.text = getString(
@@ -294,7 +299,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                                 currentView = binding.tvProgressCurrent,
                                 resultCount = searchBookAdapter.itemCount,
                                 progress = progress,
-                                total = viewModel.totalSourceCount,
+                                total = viewModel.totalSourceCount.coerceAtLeast(1),
                             )
                         }
                         delay(100)

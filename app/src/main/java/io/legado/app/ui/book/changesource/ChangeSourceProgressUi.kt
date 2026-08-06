@@ -17,7 +17,7 @@ data class ChangeSourceProgressUi(
     val deepInFlight: Int = 0,
     val label: String = "",
     val qualityOk: Int = 0,
-    /** Search hits that passed quality gate (may exceed visible list after content-bad). */
+    /** Search hits that passed quality gate (book count, not unique origins). */
     val hitCount: Int = 0,
     val earlyStopped: Boolean = false,
     val finished: Boolean = false,

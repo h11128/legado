@@ -58,7 +58,8 @@ object ChangeBookSourceQuality {
 
     /** Authors that mean “missing” on search pages — treat as empty for empty-latest gate. */
     private val placeholderAuthors = setOf(
-        "未知", "无", "佚名", "未知作者", "作者未知", "暂无", "无名", "none", "null", "unknown", "n/a",
+        "未知", "无", "佚名", "无名氏", "无名", "未知作者", "作者未知", "作者不详", "不详",
+        "暂无", "暂无作者", "none", "null", "unknown", "n/a", "na",
     )
 
     /**
@@ -93,6 +94,7 @@ object ChangeBookSourceQuality {
 
     /**
      * Change-source list needs a tip that looks like a chapter, not chrome / backend label.
+     * Bare short labels (「猫眼」「百度」) without `source=` must not count as usable.
      */
     fun hasUsableSearchLatest(latest: String?, bookUrl: String?): Boolean {
         val tip = effectiveLatestChapterTitle(latest, bookUrl)
@@ -103,6 +105,8 @@ object ChangeBookSourceQuality {
         }
         if (chapterTipHint.containsMatchIn(tip)) return true
         if (tip in softChapterTips) return true
+        // Short non-numeric tips are almost always site/backend chrome, not chapter titles.
+        if (tip.length <= 6 && tip.none { it.isDigit() }) return false
         return tip.length >= 2
     }
 
@@ -152,20 +156,16 @@ object ChangeBookSourceQuality {
     }
 
     /**
-     * Empty-latest fallback: search author present (not a placeholder), and overlaps
-     * [localAuthor] when set (even if App 「校验作者」 is off).
-     * No-author + no-latest shells stay rejected.
+     * Empty-latest fallback: search author present (not a placeholder) **and** local
+     * author is known and overlaps. Without a local author, empty-latest is too weak
+     * (bookshelf rows with blank author would flood the list).
      */
     fun hasCredibleAuthorSignal(book: SearchBook, localAuthor: String? = null): Boolean {
+        val local = localAuthor?.trim().orEmpty()
+        if (local.isEmpty()) return false
         val author = meaningfulAuthor(book.author) ?: return false
         if (looksLikeNonBookIntro(book.intro)) return false
-        val local = localAuthor?.trim().orEmpty()
-        if (local.isNotEmpty() &&
-            !authorCompatibleForChangeSource(local, author, requireAuthor = true)
-        ) {
-            return false
-        }
-        return true
+        return authorCompatibleForChangeSource(local, author, requireAuthor = true)
     }
 
     private fun meaningfulAuthor(raw: String?): String? {
@@ -179,8 +179,9 @@ object ChangeBookSourceQuality {
      * Post-search gate for 换源 (beyond exact title match in WebBook filter).
      * Drops hollow / dictionary / aggregator-label hits before list+ and respondTime success.
      *
-     * Empty latest is OK when search has a non-empty author (most novel sources omit
-     * lastChapter until bookInfo). Still rejects no-author + no-latest shells.
+     * Empty latest is OK when search has a non-empty author overlapping the local author.
+     * When the shelf book has an author, overlap is always required (menu toggle still
+     * applies only when local author is blank).
      */
     fun isAcceptableChangeSourceHit(
         book: SearchBook,
@@ -191,7 +192,9 @@ object ChangeBookSourceQuality {
         if (looksLikeNonBookIntro(book.intro)) return false
         val usableLatest = hasUsableSearchLatest(book.latestChapterTitle, book.bookUrl)
         if (!usableLatest && !hasCredibleAuthorSignal(book, localAuthor)) return false
-        if (!authorCompatibleForChangeSource(localAuthor, book.author, requireAuthor)) return false
+        val local = localAuthor?.trim().orEmpty()
+        val mustCheckAuthor = local.isNotEmpty() || requireAuthor
+        if (!authorCompatibleForChangeSource(localAuthor, book.author, mustCheckAuthor)) return false
         return true
     }
 
@@ -213,8 +216,12 @@ object ChangeBookSourceQuality {
     ): Boolean {
         if (!isAcceptableChangeSourceHit(book, localAuthor, requireAuthor)) return false
         val effective = effectiveLatestChapterTitle(book.latestChapterTitle, book.bookUrl)
-        // Strip aggregator-label-only tips so the list does not show "猫眼" as a chapter.
-        book.latestChapterTitle = effective.ifEmpty { null }
+        // Drop chrome tips (「猫眼」) even when author signal let the hit through.
+        book.latestChapterTitle = when {
+            effective.isEmpty() -> null
+            hasUsableSearchLatest(effective, null) -> effective
+            else -> null
+        }
         book.originName = displayOriginName(book.originName, book.bookUrl)
         return true
     }

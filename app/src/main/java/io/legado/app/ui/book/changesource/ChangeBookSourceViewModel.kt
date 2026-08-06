@@ -611,6 +611,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 )
                 bookSourceParts.add(appDb.bookSourceDao.getBookSourcePart(origin)!!)
                 searchBooks.removeIf { it.origin == origin }
+                // Keep 「命中」aligned with remaining list; new hits add on ask.
+                searchHitCount.set(synchronized(searchBooks) { searchBooks.size })
+                listPublishCount.set(searchHitCount.get())
                 operationState.startTaskIfCurrent(operation) {
                     initSearchPool()
                     initDeepPool()
@@ -891,7 +894,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 )
                 return@withTimeoutOrNull true
             }
-            searchHitCount.incrementAndGet()
+            searchHitCount.addAndGet(resultBooks.size)
             RespondTimeUpdater.noteSuccessAndMaybeFlush(
                 source.bookSourceUrl,
                 searchElapsed,
@@ -1175,6 +1178,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             Pair(doomed, ok)
         }
         if (removed.isEmpty()) return
+        if (reason == "content-bad" || reason.startsWith("consensus:")) {
+            missContentBadCount.incrementAndGet()
+        }
         if (wasOk) {
             qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
         }

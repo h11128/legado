@@ -202,8 +202,13 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
     }
 
     private fun initBottomBar() {
-        binding.tvProgressMetrics.text = callBack?.oldBook?.originName.orEmpty()
-        binding.tvProgressCurrent.text = getString(R.string.change_source_progress_idle)
+        binding.tvProgressMetrics.text = getString(
+            R.string.change_source_progress_metrics,
+            0, 0, 0, viewModel.totalSourceCount.coerceAtLeast(1), 0, 1,
+        )
+        binding.tvProgressCurrent.text =
+            callBack?.oldBook?.originName?.takeIf { it.isNotBlank() }
+                ?: getString(R.string.change_source_progress_idle)
         binding.tvProgressMetrics.setOnClickListener {
             scrollToDurSource()
         }
