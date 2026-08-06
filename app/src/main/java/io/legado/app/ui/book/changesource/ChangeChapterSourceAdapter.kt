@@ -38,6 +38,7 @@ class ChangeChapterSourceAdapter(
                     && oldItem.getDisplayLastChapterTitle() == newItem.getDisplayLastChapterTitle()
                     && oldItem.chapterWordCountText == newItem.chapterWordCountText
                     && oldItem.chapterWordCount == newItem.chapterWordCount
+                    && oldItem.respondTime == newItem.respondTime
         }
 
     }

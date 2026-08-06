@@ -549,9 +549,40 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     /** Default on: quality badges / content-first sort need word-count probes. */
     var changeSourceLoadWordCount: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.changeSourceLoadWordCount, true)
+        get() = appCtx.getPrefBoolean(PreferKey.changeSourceLoadWordCount, true) ||
+                appCtx.getPrefBoolean(PreferKey.changeSourceSortRespondTime) ||
+                appCtx.getPrefInt(PreferKey.changeSourceWordCountFilterMode) != 0
         set(value) {
             appCtx.putPrefBoolean(PreferKey.changeSourceLoadWordCount, value)
+            if (!value) {
+                changeSourceSortRespondTime = false
+                changeSourceWordCountFilterMode = 0
+            }
+        }
+
+    var changeSourceSortRespondTime: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.changeSourceSortRespondTime)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.changeSourceSortRespondTime, value)
+        }
+
+    var changeSourceWordCountFilterMode: Int
+        get() = appCtx.getPrefInt(PreferKey.changeSourceWordCountFilterMode).coerceIn(0, 2)
+        set(value) {
+            val mode = value.coerceIn(0, 2)
+            appCtx.putPrefInt(PreferKey.changeSourceWordCountFilterMode, mode)
+        }
+
+    var changeSourceWordCountFilterMin: Int
+        get() = appCtx.getPrefInt(PreferKey.changeSourceWordCountFilterMin)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.changeSourceWordCountFilterMin, value.coerceAtLeast(0))
+        }
+
+    var changeSourceWordCountFilterMax: Int
+        get() = appCtx.getPrefInt(PreferKey.changeSourceWordCountFilterMax)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.changeSourceWordCountFilterMax, value.coerceAtLeast(0))
         }
 
     /** Stop 整书换源 after enough quality-OK hits (default on). */
@@ -637,6 +668,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     val webDavDeviceName get() = appCtx.getPrefString(PreferKey.webDavDeviceName, Build.MODEL)
 
+    val webDavBookAutoRestore
+        get() = appCtx.getPrefBoolean(PreferKey.webDavBookAutoRestore, false)
+
     val recordHeapDump get() = appCtx.getPrefBoolean(PreferKey.recordHeapDump, false)
 
     val loadCoverOnlyWifi get() = appCtx.getPrefBoolean(PreferKey.loadCoverOnlyWifi, false)
@@ -652,6 +686,8 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val onlyLatestBackup get() = appCtx.getPrefBoolean(PreferKey.onlyLatestBackup, true)
 
     val autoCheckNewBackup get() = appCtx.getPrefBoolean(PreferKey.autoCheckNewBackup, true)
+
+    val autoBackup get() = appCtx.getPrefBoolean(PreferKey.autoBackup, true)
 
     val defaultHomePage get() = appCtx.getPrefString(PreferKey.defaultHomePage, "bookshelf")
 

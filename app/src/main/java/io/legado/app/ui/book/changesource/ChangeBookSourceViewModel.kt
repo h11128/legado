@@ -75,7 +75,9 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.Closeable
@@ -103,11 +105,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     var author: String = ""
     private var fromReadBookActivity = false
     protected var oldBook: Book? = null
+    private var referenceWordCount: Int? = null
+    private var relativeFilterWarningShown = false
     private var screenKey: String = ""
     private var bookSourceParts = arrayListOf<BookSourcePart>()
     val totalSourceCount: Int
         get() = bookSourceParts.size
-    private var searchBookList = arrayListOf<SearchBook>()
     protected val searchBooks = Collections.synchronizedList(arrayListOf<SearchBook>())
     protected val tocMap = ConcurrentHashMap<String, List<BookChapter>>()
     protected val _changeSourceProgress = MutableStateFlow(ChangeSourceProgressUi())
@@ -162,6 +165,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private val httpLimitsEpoch = AtomicInteger(0)
     /** Per-host ask pacing (RFC-002 companion) — same defaults as bulk check. */
     private var askHostBucket: CheckHostTokenBucket? = null
+    private val operationState = ChangeSourceOperationState()
+    private val operationPreparation = Mutex()
     val bookMap = ConcurrentHashMap<String, Book>()
     val searchDataFlow = callbackFlow {
 
@@ -215,10 +220,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             trySend(arrayOf(searchBooks))
         }
 
-        if (searchBooks.isEmpty()) {
-            startSearch()
-        } else {
-            onCachedSearchReady()
+        when {
+            searchBooks.isEmpty() -> startSearch()
+            AppConfig.changeSourceLoadWordCount -> startRefreshList(true)
+            else -> onCachedSearchReady()
         }
 
         awaitClose {
@@ -226,11 +231,17 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }.map {
         kotlin.runCatching {
-            sortSearchBooks(searchBooks.toList())
+            currentResults()
         }.onFailure {
             AppLog.put("换源排序出错\n${it.localizedMessage}", it)
         }.getOrDefault(searchBooks)
     }.flowOn(IO)
+
+    /** Sorted/filtered snapshot for UI + autoChangeSource (same policy). */
+    private fun currentResults(): List<SearchBook> {
+        val books = synchronized(searchBooks) { searchBooks.toList() }
+        return sortSearchBooks(books)
+    }
 
     /** Called when DB already has searchBooks — book mode keeps list; chapter mode verifies. */
     protected open fun onCachedSearchReady() = Unit
@@ -238,29 +249,49 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     protected open fun sortSearchBooks(books: List<SearchBook>): List<SearchBook> {
         val expected = wordCountEvalContext?.expectedChars
         // Content first → length band → likes → probe respondTime → soft latest/TOC hint.
-        return books.sortedWith(
-            compareBy<SearchBook> {
-                ChangeBookSourceQuality.contentSortTier(
+        val qualityComparator = compareBy<SearchBook> {
+            ChangeBookSourceQuality.contentSortTier(
+                chapterWordCount = it.chapterWordCount,
+                wordCountText = it.chapterWordCountText,
+                softFailed = it.origin in sessionSoftFail,
+            )
+        }
+            .thenByDescending {
+                ChangeBookSourceQuality.lengthBandScore(it.chapterWordCount, expected)
+            }
+            .thenByDescending { getBookScore(it) }
+            .thenByDescending { SourceConfig.getSourceScore(it.origin) }
+            .thenBy {
+                ChangeBookSourceQuality.respondTimeSortKey(it.respondTime)
+            }
+            .thenBy {
+                ChangeBookSourceQuality.softMetaPenalty(
+                    qualityTiers[it.origin] ?: ChangeBookSourceQuality.TIER_UNKNOWN,
                     chapterWordCount = it.chapterWordCount,
-                    wordCountText = it.chapterWordCountText,
-                    softFailed = it.origin in sessionSoftFail,
                 )
             }
-                .thenByDescending {
-                    ChangeBookSourceQuality.lengthBandScore(it.chapterWordCount, expected)
-                }
-                .thenByDescending { getBookScore(it) }
-                .thenByDescending { SourceConfig.getSourceScore(it.origin) }
-                .thenBy {
-                    ChangeBookSourceQuality.respondTimeSortKey(it.respondTime)
-                }
-                .thenBy {
-                    ChangeBookSourceQuality.softMetaPenalty(
-                        qualityTiers[it.origin] ?: ChangeBookSourceQuality.TIER_UNKNOWN,
-                        chapterWordCount = it.chapterWordCount,
-                    )
-                }
-                .thenBy { it.originOrder }
+            .thenBy { it.originOrder }
+        val filterMode = if (AppConfig.changeSourceLoadWordCount) {
+            AppConfig.changeSourceWordCountFilterMode
+        } else {
+            ChangeSourceResultOptions.FILTER_OFF
+        }
+        val comparator = when {
+            AppConfig.changeSourceSortRespondTime ->
+                ChangeSourceResultOptions.responseTimeComparator(qualityComparator)
+
+            filterMode != ChangeSourceResultOptions.FILTER_OFF ->
+                ChangeSourceResultOptions.measuredFirstComparator(qualityComparator)
+
+            else -> qualityComparator
+        }
+        return ChangeSourceResultOptions.apply(
+            books = books,
+            filterMode = filterMode,
+            minimum = AppConfig.changeSourceWordCountFilterMin,
+            maximum = AppConfig.changeSourceWordCountFilterMax,
+            referenceWordCount = getReferenceWordCount(books),
+            comparator = comparator,
         )
     }
 
@@ -406,137 +437,160 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             searchBooks.addAll(it)
             searchCallback?.upAdapter()
         }
-        return searchBooks.isEmpty()
+        return searchBooks.isEmpty().also { isEmpty ->
+            if (!isEmpty && AppConfig.changeSourceLoadWordCount) {
+                refreshResultMeasurements()
+            }
+        }
     }
 
     /**
      * 搜索书籍
      */
     open fun startSearch() {
+        val operation = operationState.reserveOperation()
         execute {
-            stopSearch()
-            if (searchBooks.isNotEmpty()) {
-                appDb.searchBookDao.delete(*searchBooks.toTypedArray())
-                searchBooks.clear()
-            }
-            searchCallback?.upAdapter()
-            bookSourceParts.clear()
-            tocMap.clear()
-            bookMap.clear()
-            tocMapChapterCount = 0
-            wordCountEvalContext = null
-            wordCountEvalByLocalIndex.clear()
-            probeContentSamples.clear()
-            contentRefSimByOrigin.clear()
-            qualityTiers.clear()
-            sessionSoftFail.clear()
-            probingNames.clear()
-            deepInFlightNames.clear()
-            deepJobs.clear()
-            completedProbeCount.set(0)
-            qualityOkCount.set(0)
-            earlyStopped.set(false)
-            searchHitCount.set(0)
-            listPublishCount.set(0)
-            missEmptyCount.set(0)
-            missTimeoutCount.set(0)
-            missErrorCount.set(0)
-            missContentBadCount.set(0)
-            lastProgressLogCompleted.set(-1)
-            lastProgressPublishMs.set(0L)
-            _changeSourceProgress.value = ChangeSourceProgressUi()
-            // Disk title-empty (TTL) → memory before ask-order / skips.
-            runCatching { ChangeSourceTitleEmptyPrefs.hydrate(name, author) }
-            askHostBucket = CheckHostTokenBucket(
-                maxTokensPerHost = CheckHostTokenBucket.DEFAULT_MAX_TOKENS,
-                refillPerSecond = CheckHostTokenBucket.DEFAULT_REFILL_PER_SECOND,
-            )
-            val t0 = System.currentTimeMillis()
-            val searchGroup = AppConfig.searchGroup
-            val loaded = if (searchGroup.isBlank()) {
-                appDb.bookSourceDao.allEnabledPart
-            } else {
-                val sources = appDb.bookSourceDao.getEnabledPartByGroup(searchGroup)
-                if (sources.isEmpty()) {
-                    AppConfig.searchGroup = ""
+            operationPreparation.withLock {
+                if (!operationState.runIfCurrent(operation, ::stopCurrentTask)) {
+                    return@withLock
+                }
+                referenceWordCount = getCachedReferenceWordCount()
+                relativeFilterWarningShown = false
+                if (searchBooks.isNotEmpty()) {
+                    appDb.searchBookDao.delete(*searchBooks.toTypedArray())
+                    searchBooks.clear()
+                }
+                searchCallback?.upAdapter()
+                bookSourceParts.clear()
+                tocMap.clear()
+                bookMap.clear()
+                tocMapChapterCount = 0
+                wordCountEvalContext = null
+                wordCountEvalByLocalIndex.clear()
+                probeContentSamples.clear()
+                contentRefSimByOrigin.clear()
+                qualityTiers.clear()
+                sessionSoftFail.clear()
+                probingNames.clear()
+                deepInFlightNames.clear()
+                deepJobs.clear()
+                completedProbeCount.set(0)
+                qualityOkCount.set(0)
+                earlyStopped.set(false)
+                searchHitCount.set(0)
+                listPublishCount.set(0)
+                missEmptyCount.set(0)
+                missTimeoutCount.set(0)
+                missErrorCount.set(0)
+                missContentBadCount.set(0)
+                lastProgressLogCompleted.set(-1)
+                lastProgressPublishMs.set(0L)
+                _changeSourceProgress.value = ChangeSourceProgressUi()
+                // Disk title-empty (TTL) → memory before ask-order / skips.
+                runCatching { ChangeSourceTitleEmptyPrefs.hydrate(name, author) }
+                askHostBucket = CheckHostTokenBucket(
+                    maxTokensPerHost = CheckHostTokenBucket.DEFAULT_MAX_TOKENS,
+                    refillPerSecond = CheckHostTokenBucket.DEFAULT_REFILL_PER_SECOND,
+                )
+                val t0 = System.currentTimeMillis()
+                val searchGroup = AppConfig.searchGroup
+                val loaded = if (searchGroup.isBlank()) {
                     appDb.bookSourceDao.allEnabledPart
                 } else {
-                    sources
+                    val sources = appDb.bookSourceDao.getEnabledPartByGroup(searchGroup)
+                    if (sources.isEmpty()) {
+                        AppConfig.searchGroup = ""
+                        appDb.bookSourceDao.allEnabledPart
+                    } else {
+                        sources
+                    }
+                }
+                val tLoad = System.currentTimeMillis()
+                SourceHelp.ensureRespondTimeHealed()
+                val tHeal = System.currentTimeMillis()
+                val threads = threadCount()
+                val typed = oldBook?.let {
+                    BookSourceTypeMapper.filterSameType(loaded, it.type)
+                } ?: loaded
+                bookSourceParts.addAll(
+                    AskSourceOrder.order(
+                        typed,
+                        threadCount = threads,
+                        demoteUrls = ChangeSourceAskMemory.snapshot(),
+                    )
+                )
+                val tOrder = System.currentTimeMillis()
+                if (!AppConfig.changeSourceEarlyStop) {
+                    ChangeSourceLog.i("early-stop pref off; will ask all ${bookSourceParts.size} sources")
+                }
+                operationState.startTaskIfCurrent(operation) {
+                    initSearchPool()
+                    initDeepPool()
+                    val httpEpoch = raiseHttpLimitsForSearch()
+                    val tPool = System.currentTimeMillis()
+                    val headSample = bookSourceParts.take(5).joinToString(" | ") {
+                        "${it.bookSourceName}(${it.respondTime})"
+                    }
+                    ChangeSourceLog.i(
+                        "start book=$name author=$author sources=${bookSourceParts.size} " +
+                            "threads=$threads deepParallel=${deepParallel()} " +
+                            "demoted=${ChangeSourceAskMemory.snapshot().size} " +
+                            "loadInfo=${AppConfig.changeSourceLoadInfo} " +
+                            "loadToc=${AppConfig.changeSourceLoadToc} " +
+                            "loadWordCount=${AppConfig.changeSourceLoadWordCount} " +
+                            "earlyStop=${AppConfig.changeSourceEarlyStop} " +
+                            "earlyStopTarget=${AppConfig.changeSourceEarlyStopCount} " +
+                            "group=${searchGroup.ifBlank { "(all)" }} " +
+                            "timing load=${tLoad - t0}ms heal=${tHeal - tLoad}ms " +
+                            "order=${tOrder - tHeal}ms pool=${tPool - tOrder}ms total=${tPool - t0}ms " +
+                            "askHead=[$headSample]"
+                    )
+                    search(httpLimitsEpoch = httpEpoch, operation = operation)
                 }
             }
-            val tLoad = System.currentTimeMillis()
-            SourceHelp.ensureRespondTimeHealed()
-            val tHeal = System.currentTimeMillis()
-            val threads = threadCount()
-            val typed = oldBook?.let {
-                BookSourceTypeMapper.filterSameType(loaded, it.type)
-            } ?: loaded
-            bookSourceParts.addAll(
-                AskSourceOrder.order(
-                    typed,
-                    threadCount = threads,
-                    demoteUrls = ChangeSourceAskMemory.snapshot(),
-                )
-            )
-            val tOrder = System.currentTimeMillis()
-            if (!AppConfig.changeSourceEarlyStop) {
-                ChangeSourceLog.i("early-stop pref off; will ask all ${bookSourceParts.size} sources")
-            }
-            initSearchPool()
-            initDeepPool()
-            val httpEpoch = raiseHttpLimitsForSearch()
-            val tPool = System.currentTimeMillis()
-            val headSample = bookSourceParts.take(5).joinToString(" | ") {
-                "${it.bookSourceName}(${it.respondTime})"
-            }
-            ChangeSourceLog.i(
-                "start book=$name author=$author sources=${bookSourceParts.size} " +
-                    "threads=$threads deepParallel=${deepParallel()} " +
-                    "demoted=${ChangeSourceAskMemory.snapshot().size} " +
-                    "loadInfo=${AppConfig.changeSourceLoadInfo} " +
-                    "loadToc=${AppConfig.changeSourceLoadToc} " +
-                    "loadWordCount=${AppConfig.changeSourceLoadWordCount} " +
-                    "earlyStop=${AppConfig.changeSourceEarlyStop} " +
-                    "earlyStopTarget=${AppConfig.changeSourceEarlyStopCount} " +
-                    "group=${searchGroup.ifBlank { "(all)" }} " +
-                    "timing load=${tLoad - t0}ms heal=${tHeal - tLoad}ms " +
-                    "order=${tOrder - tHeal}ms pool=${tPool - tOrder}ms total=${tPool - t0}ms " +
-                    "askHead=[$headSample]"
-            )
-            search(httpLimitsEpoch = httpEpoch)
-        }
+        }.invokeOnCompletion { finishPreparingOperation(operation) }
     }
 
     fun startSearch(origin: String) {
+        val operation = operationState.reserveOperation()
         execute {
-            stopSearch()
-            bookSourceParts.clear()
-            tocMap.clear()
-            bookMap.clear()
-            tocMapChapterCount = 0
-            wordCountEvalContext = null
-            wordCountEvalByLocalIndex.clear()
-            probeContentSamples.clear()
-            contentRefSimByOrigin.clear()
-            qualityTiers.clear()
-            sessionSoftFail.clear()
-            probingNames.clear()
-            deepInFlightNames.clear()
-            deepJobs.clear()
-            completedProbeCount.set(0)
-            qualityOkCount.set(0)
-            earlyStopped.set(false)
-            _changeSourceProgress.value = ChangeSourceProgressUi()
-            askHostBucket = CheckHostTokenBucket(
-                maxTokensPerHost = CheckHostTokenBucket.DEFAULT_MAX_TOKENS,
-                refillPerSecond = CheckHostTokenBucket.DEFAULT_REFILL_PER_SECOND,
-            )
-            bookSourceParts.add(appDb.bookSourceDao.getBookSourcePart(origin)!!)
-            searchBooks.removeIf { it.origin == origin }
-            initSearchPool()
-            initDeepPool()
-            search(httpLimitsEpoch = raiseHttpLimitsForSearch())
-        }
+            operationPreparation.withLock {
+                if (!operationState.runIfCurrent(operation, ::stopCurrentTask)) {
+                    return@withLock
+                }
+                bookSourceParts.clear()
+                tocMap.clear()
+                bookMap.clear()
+                tocMapChapterCount = 0
+                wordCountEvalContext = null
+                wordCountEvalByLocalIndex.clear()
+                probeContentSamples.clear()
+                contentRefSimByOrigin.clear()
+                qualityTiers.clear()
+                sessionSoftFail.clear()
+                probingNames.clear()
+                deepInFlightNames.clear()
+                deepJobs.clear()
+                completedProbeCount.set(0)
+                qualityOkCount.set(0)
+                earlyStopped.set(false)
+                _changeSourceProgress.value = ChangeSourceProgressUi()
+                askHostBucket = CheckHostTokenBucket(
+                    maxTokensPerHost = CheckHostTokenBucket.DEFAULT_MAX_TOKENS,
+                    refillPerSecond = CheckHostTokenBucket.DEFAULT_REFILL_PER_SECOND,
+                )
+                bookSourceParts.add(appDb.bookSourceDao.getBookSourcePart(origin)!!)
+                searchBooks.removeIf { it.origin == origin }
+                operationState.startTaskIfCurrent(operation) {
+                    initSearchPool()
+                    initDeepPool()
+                    search(
+                        httpLimitsEpoch = raiseHttpLimitsForSearch(),
+                        operation = operation,
+                    )
+                }
+            }
+        }.invokeOnCompletion { finishPreparingOperation(operation) }
     }
 
     protected fun clearEarlyStopped() {
@@ -629,7 +683,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }
 
-    private fun search(httpLimitsEpoch: Int) {
+    private fun search(httpLimitsEpoch: Int, operation: Long) {
         val parts = bookSourceParts.toList()
         val parallelism = threadCount()
         task = viewModelScope.launch(searchPool!!) {
@@ -736,6 +790,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                                     "top=[$top]"
                             )
                             searchStateData.postValue(false)
+                            warnIfRelativeReferenceUnavailable()
                             if (cause == null || earlyStopped.get()) {
                                 onSearchTaskFinished(searchBooks.isEmpty())
                             }
@@ -748,6 +803,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     AppLog.put("换源搜索出错\n${it.localizedMessage}", it)
                 }.collect()
             }
+        }.also { task ->
+            task.invokeOnCompletion { refreshPendingMeasurements(operation) }
         }
     }
 
@@ -1237,9 +1294,92 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         return ctx
     }
 
+    private fun getReferenceWordCount(
+        books: List<SearchBook> = synchronized(searchBooks) { searchBooks.toList() },
+    ): Int? {
+        referenceWordCount?.let { return it }
+        val book = oldBook ?: return null
+        val measured = books.firstOrNull {
+            it.origin == book.origin && it.bookUrl == book.bookUrl
+        }?.chapterWordCount?.takeIf { it > 0 }
+        if (measured != null) referenceWordCount = measured
+        return measured
+    }
+
+    private fun getCachedReferenceWordCount(): Int? {
+        if (AppConfig.changeSourceWordCountFilterMode !=
+            ChangeSourceResultOptions.FILTER_RELATIVE
+        ) {
+            return null
+        }
+        val book = oldBook ?: return null
+        val chapterIndex = if (fromReadBookActivity) {
+            book.durChapterIndex
+        } else {
+            book.totalChapterNum - 1
+        }
+        if (chapterIndex < 0) return null
+        val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, chapterIndex) ?: return null
+        val content = BookHelp.getContent(book, chapter) ?: return null
+        return kotlin.runCatching {
+            contentProcessor.getContent(book, chapter, content, false).toString().length
+        }.getOrNull()?.takeIf { it > 0 }
+    }
+
+    private fun warnIfRelativeReferenceUnavailable() {
+        if (
+            AppConfig.changeSourceWordCountFilterMode ==
+            ChangeSourceResultOptions.FILTER_RELATIVE &&
+            getReferenceWordCount() == null &&
+            !operationState.hasPendingMeasurementRefresh() &&
+            !relativeFilterWarningShown
+        ) {
+            relativeFilterWarningShown = true
+            context.toastOnUi(R.string.change_source_relative_word_count_unavailable)
+        }
+    }
+
+    fun onLoadWordCountChecked() {
+        onLoadWordCountChecked(AppConfig.changeSourceLoadWordCount)
+    }
+
     fun onLoadWordCountChecked(isChecked: Boolean) {
         if (isChecked) {
-            startRefreshList(true)
+            refreshResultMeasurements()
+        } else {
+            searchCallback?.upAdapter()
+        }
+    }
+
+    fun onResultOptionsChanged(reloadMeasurements: Boolean) {
+        if (reloadMeasurements) {
+            refreshResultMeasurements()
+        } else {
+            searchCallback?.upAdapter()
+        }
+    }
+
+    private fun refreshResultMeasurements() {
+        val operation = operationState.reserveMeasurementRefresh(
+            enabled = AppConfig.changeSourceLoadWordCount,
+            hasResults = searchBooks.isNotEmpty(),
+        )
+        if (operation == null) {
+            searchCallback?.upAdapter()
+        } else {
+            startRefreshList(true, operation)
+        }
+    }
+
+    private fun refreshPendingMeasurements(operation: Long) {
+        operationState.finishTask(operation)?.let {
+            startRefreshList(true, it)
+        }
+    }
+
+    private fun finishPreparingOperation(operation: Long) {
+        operationState.finishPreparation(operation)?.let {
+            startRefreshList(true, it)
         }
     }
 
@@ -1247,29 +1387,53 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
      * 刷新列表
      */
     fun startRefreshList(onlyRefreshNoWordCountBook: Boolean = false) {
-        execute {
-            stopSearch()
-            searchBookList.clear()
-            if (onlyRefreshNoWordCountBook) {
-                searchBooks.filterTo(searchBookList) {
-                    it.chapterWordCountText == null
-                }
-                searchBooks.removeIf { it.chapterWordCountText == null }
-            } else {
-                searchBookList.addAll(searchBooks)
-                searchBooks.clear()
-            }
-            searchCallback?.upAdapter()
-            initSearchPool()
-            val httpEpoch = raiseHttpLimitsForSearch()
-            refreshList(httpLimitsEpoch = httpEpoch)
-        }
+        startRefreshList(onlyRefreshNoWordCountBook, operationState.reserveOperation())
     }
 
-    private fun refreshList(httpLimitsEpoch: Int) {
+    private fun startRefreshList(
+        onlyRefreshNoWordCountBook: Boolean,
+        operation: Long,
+    ) {
+        execute {
+            operationPreparation.withLock {
+                if (!operationState.runIfCurrent(operation, ::stopCurrentTask)) {
+                    return@withLock
+                }
+                if (onlyRefreshNoWordCountBook && !AppConfig.changeSourceLoadWordCount) {
+                    return@withLock
+                }
+                referenceWordCount = getCachedReferenceWordCount()
+                relativeFilterWarningShown = false
+                val books = arrayListOf<SearchBook>()
+                if (onlyRefreshNoWordCountBook) {
+                    searchBooks.filterTo(books) {
+                        it.chapterWordCountText == null
+                    }
+                    searchBooks.removeIf { it.chapterWordCountText == null }
+                } else {
+                    books.addAll(searchBooks)
+                    searchBooks.clear()
+                }
+                searchCallback?.upAdapter()
+                if (books.isEmpty()) {
+                    operationState.runIfCurrent(operation) {
+                        warnIfRelativeReferenceUnavailable()
+                    }
+                    return@withLock
+                }
+                operationState.startTaskIfCurrent(operation) {
+                    initSearchPool()
+                    refreshList(books, operation)
+                }
+            }
+        }.invokeOnCompletion { finishPreparingOperation(operation) }
+    }
+
+    private fun refreshList(books: List<SearchBook>, operation: Long) {
+        val httpLimitsEpoch = raiseHttpLimitsForSearch()
         task = viewModelScope.launch(searchPool!!) {
             flow {
-                for (searchBook in searchBookList) {
+                for (searchBook in books) {
                     emit(searchBook)
                 }
             }.onStart {
@@ -1287,12 +1451,15 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             }.onCompletion {
                 try {
                     searchStateData.postValue(false)
+                    warnIfRelativeReferenceUnavailable()
                 } finally {
                     restoreHttpLimitsIfNeeded(httpLimitsEpoch)
                 }
             }.catch {
                 AppLog.put("换源刷新列表出错\n${it.localizedMessage}", it)
             }.collect()
+        }.also { task ->
+            task.invokeOnCompletion { refreshPendingMeasurements(operation) }
         }
     }
 
@@ -1335,14 +1502,18 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     fun startOrStopSearch() {
-        if (task == null || !task!!.isActive) {
-            startSearch()
-        } else {
+        if (operationState.isRunning()) {
             stopSearch()
+        } else {
+            startSearch()
         }
     }
 
     fun stopSearch() {
+        operationState.cancel(::stopCurrentTask)
+    }
+
+    private fun stopCurrentTask() {
         val wasActive = task?.isActive == true || deepJobs.any { it.isActive }
         task?.cancel()
         deepJobs.forEach { it.cancel() }
@@ -1450,7 +1621,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         onSuccess: (book: Book, toc: List<BookChapter>, source: BookSource) -> Unit
     ) {
         execute {
-            searchBooks.forEach {
+            currentResults().forEach {
                 if (it.type == bookType) {
                     val book = it.toBook()
                     val result = getToc(book).getOrNull()
