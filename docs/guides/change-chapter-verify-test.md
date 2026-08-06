@@ -76,6 +76,7 @@ Toolbar **换源** opens 整书 dialog; long-press still offers 单章/整书 wh
 | 2026-08-05f | PASS | UX/perf on device; log `temp/legado_change_source_session_2026-08-05_114404.txt`; finish list=20=qualityOk; UI no latest/pending badges; max deep=16/16; label 好源 k/20 |
 | 2026-08-05g | PASS | RFC-002 + host pace + title-empty TTL + TOC badge; log `temp/legado_change_source_session_2026-08-05_131638.txt`; `ask-budget` present; list=20; UI latest/toc=0 |
 | 2026-08-05h | PASS | OkHttp `maxRequests` raise during 换源 (was 64 vs threads=100 → 正文假慢 40–60s); log `temp/legado_change_source_session_2026-08-05_163812.txt`; bqquge word `ms=1654` (was 57573); word_ok contentMs p50/p90 ≈352/850 |
+| 2026-08-05i | PASS | UI「响应时间」= workMs（content−OkHttp queue）；queueMs / deep-gate-wait 仅日志；log `temp/legado_change_source_session_2026-08-05_172955.txt`; bqquge respondMs=1279=workMs; queue p50≈2ms |
 
 
 ## Fixes landed (was improvement backlog)

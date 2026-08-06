@@ -32,6 +32,7 @@ suspend fun OkHttpClient.newCallResponse(
 ): Response {
     val requestBuilder = Request.Builder()
     requestBuilder.apply(builder)
+    HttpCallTiming.tagRequest(requestBuilder)
     var retriesRemaining = retry.coerceAtLeast(0)
     while (true) {
         val response = newCall(requestBuilder.build()).await()

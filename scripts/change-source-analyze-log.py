@@ -37,7 +37,11 @@ RE_EARLY = re.compile(r"early-stop qualityOk=(?P<qualityOk>\d+) target=(?P<targe
 RE_WORD = re.compile(r"phase word-eval origin=\S+ reason=(?P<reason>\S+)")
 RE_WORD_MS = re.compile(
     r"phase word origin=\S+ chars=(?P<chars>-?\d+) .*?"
-    r"ms=(?P<ms>\d+)(?: contentMs=(?P<contentMs>-?\d+) evalMs=(?P<evalMs>-?\d+))?"
+    r"ms=(?P<ms>\d+)"
+    r"(?: contentMs=(?P<contentMs>-?\d+))?"
+    r"(?: queueMs=(?P<queueMs>-?\d+))?"
+    r"(?: workMs=(?P<workMs>-?\d+))?"
+    r"(?: evalMs=(?P<evalMs>-?\d+))?"
 )
 RE_HTTP_LIMITS = re.compile(
     r"http-limits raised(?: epoch=(?P<epoch>\d+))? maxRequests=(?P<max>\d+) perHost=(?P<perHost>\d+)"
@@ -59,6 +63,8 @@ def parse(text: str) -> dict:
     http_limits = RE_HTTP_LIMITS.search(text)
 
     content_ms_ok = []
+    work_ms_ok = []
+    queue_ms_ok = []
     total_ms_ok = []
     for m in RE_WORD_MS.finditer(text):
         if int(m.group("chars")) < 0:
@@ -67,6 +73,12 @@ def parse(text: str) -> dict:
         cms = m.group("contentMs")
         if cms is not None and int(cms) >= 0:
             content_ms_ok.append(int(cms))
+        wms = m.group("workMs")
+        if wms is not None and int(wms) >= 0:
+            work_ms_ok.append(int(wms))
+        qms = m.group("queueMs")
+        if qms is not None and int(qms) >= 0:
+            queue_ms_ok.append(int(qms))
 
     def _pct(vals: list[int], p: float) -> int | None:
         if not vals:
@@ -134,6 +146,13 @@ def parse(text: str) -> dict:
             "contentMs_n": len(content_ms_ok),
             "contentMs_p50": _pct(content_ms_ok, 0.5),
             "contentMs_p90": _pct(content_ms_ok, 0.9),
+            "workMs_n": len(work_ms_ok),
+            "workMs_p50": _pct(work_ms_ok, 0.5),
+            "workMs_p90": _pct(work_ms_ok, 0.9),
+            "queueMs_n": len(queue_ms_ok),
+            "queueMs_p50": _pct(queue_ms_ok, 0.5),
+            "queueMs_p90": _pct(queue_ms_ok, 0.9),
+            "queueMs_sum": sum(queue_ms_ok) if queue_ms_ok else None,
         },
         "progress_samples": [
             {k: m.group(k) for k in m.groupdict()}
@@ -169,6 +188,8 @@ def to_markdown(data: dict, log_path: str) -> str:
         f"| http-limits | {data.get('http_limits') or '(none)'} |",
         f"| word_ok ms p50/p90 | {t.get('ms_p50')}/{t.get('ms_p90')} (n={t.get('n')}) |",
         f"| word_ok contentMs p50/p90 | {t.get('contentMs_p50')}/{t.get('contentMs_p90')} (n={t.get('contentMs_n')}) |",
+        f"| word_ok workMs p50/p90 | {t.get('workMs_p50')}/{t.get('workMs_p90')} (n={t.get('workMs_n')}) |",
+        f"| word_ok queueMs p50/p90/sum | {t.get('queueMs_p50')}/{t.get('queueMs_p90')}/{t.get('queueMs_sum')} |",
         f"| early-stop | {e or '(none)'} |",
         f"| finish | {f or '(none)'} |",
         "",

@@ -61,12 +61,15 @@ val okHttpClient: OkHttpClient by lazy {
         .readTimeout(60, TimeUnit.SECONDS)
         .callTimeout(60, TimeUnit.SECONDS)
         //.cookieJar(cookieJar = cookieJar)
+        .eventListenerFactory(HttpCallTiming.eventListenerFactory)
         .sslSocketFactory(SSLHelper.unsafeSSLSocketFactory, SSLHelper.unsafeTrustManager)
         .retryOnConnectionFailure(true)
         .hostnameVerifier(SSLHelper.unsafeHostnameVerifier)
         .connectionSpecs(specs)
         .followRedirects(true)
         .followSslRedirects(true)
+        // Must be first: marks dispatcher-queue end before Cronet / other app interceptors.
+        .addInterceptor(HttpCallTiming.dispatcherReleaseInterceptor)
         .addInterceptor(OkHttpExceptionInterceptor)
         .addInterceptor { chain ->
             val request = chain.request()

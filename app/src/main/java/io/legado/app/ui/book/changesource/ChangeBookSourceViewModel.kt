@@ -39,6 +39,7 @@ import io.legado.app.model.checkalgo.CheckAlgoRuntime
 import io.legado.app.model.checkalgo.CheckHostTokenBucket
 import io.legado.app.help.config.ChangeSourceTitleEmptyPrefs
 import io.legado.app.help.http.configureCheckHttpLimits
+import io.legado.app.help.http.HttpCallTiming
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.restoreDefaultHttpLimits
 import io.legado.app.model.webBook.WebBook
@@ -831,8 +832,15 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             viewModelScope.launch(pool + deepJob) {
                 var held = false
                 try {
+                    val tGate = System.currentTimeMillis()
                     gate?.acquire()
                     held = gate != null
+                    val gateWaitMs = System.currentTimeMillis() - tGate
+                    if (gateWaitMs >= 100) {
+                        ChangeSourceLog.i(
+                            "deep-gate-wait ms=$gateWaitMs origin=${source.bookSourceUrl}"
+                        )
+                    }
                     if (earlyStopped.get()) return@launch
                     deepInFlightNames.add(source.bookSourceUrl)
                     publishProgress()
@@ -921,18 +929,32 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
         val startTime = System.currentTimeMillis()
         var contentMs = -1L
+        var queueMs = 0L
         var evalMs = -1L
         var processedContent: String? = null
         val pair = try {
             val nextChapterUrl = chapters.getOrNull(chapterIndex + 1)?.url
             val tContent0 = System.currentTimeMillis()
-            var content = WebBook.getContentAwait(source, book, bookChapter, nextChapterUrl, false)
-            content = contentProcessor.getContent(oldBook!!, bookChapter, content, false).toString()
+            // contentMs = network+processor wall (may include OkHttp queue);
+            // queueMs stripped for UI respondTime via HttpCallTiming.
+            val (contentRaw, httpTiming) = HttpCallTiming.measure {
+                var content = WebBook.getContentAwait(
+                    source, book, bookChapter, nextChapterUrl, false
+                )
+                contentProcessor.getContent(oldBook!!, bookChapter, content, false).toString()
+            }
             contentMs = System.currentTimeMillis() - tContent0
-            processedContent = content
+            queueMs = httpTiming.queueMs
+            if (httpTiming.callCount == 0L && contentMs >= 200) {
+                ChangeSourceLog.i(
+                    "http-timing-miss origin=${source.bookSourceUrl} contentMs=$contentMs " +
+                        "(no tagged calls — queue not subtracted)"
+                )
+            }
+            processedContent = contentRaw
             val tEval0 = System.currentTimeMillis()
             val evalCtx = bookChangeContentEvalContext(chapterIndex, bookChapter.title)
-            val diag = ChangeChapterVerify.evaluateContentDiag(content, evalCtx)
+            val diag = ChangeChapterVerify.evaluateContentDiag(contentRaw, evalCtx)
             evalMs = System.currentTimeMillis() - tEval0
             diag.refSim?.let { contentRefSimByOrigin[source.bookSourceUrl] = it }
             ChangeSourceLog.i(
@@ -940,7 +962,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     "len=${diag.contentLen} stitch=${diag.stitch} " +
                     "refSim=${diag.refSim?.let { "%.4f".format(it) } ?: "-"} " +
                     "expected=${diag.expectedChars ?: "-"} " +
-                    "contentMs=$contentMs evalMs=$evalMs " +
+                    "contentMs=$contentMs queueMs=$queueMs evalMs=$evalMs " +
                     "chapter=[$chapterIndex] ${title.take(24)}"
             )
             when (val quality = diag.quality) {
@@ -964,16 +986,21 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             if (t is CancellationException) throw t
             ChangeSourceLog.i(
                 "phase word-eval origin=${source.bookSourceUrl} reason=fetch_error " +
-                    "contentMs=$contentMs evalMs=$evalMs " +
+                    "contentMs=$contentMs queueMs=$queueMs evalMs=$evalMs " +
                     "err=${t.javaClass.simpleName}:${t.localizedMessage?.take(80)}"
             )
             -1 to "[${chapterIndex + 1}] ${title}\n获取字数失败：${t.localizedMessage}"
         }
         val endTime = System.currentTimeMillis()
+        // UI respondTime = source fetch work only (exclude OkHttp dispatcher queue + local eval).
+        val workMs = when {
+            contentMs >= 0 -> (contentMs - queueMs).coerceAtLeast(0L)
+            else -> (endTime - startTime).coerceAtLeast(0L)
+        }
         val searchBook = book.toSearchBook().apply {
             chapterWordCountText = pair.second
             chapterWordCount = pair.first
-            respondTime = (endTime - startTime).toInt()
+            respondTime = workMs.toInt()
         }
         val tier = ChangeBookSourceQuality.contentSortTier(
             chapterWordCount = pair.first,
@@ -982,7 +1009,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         )
         ChangeSourceLog.i(
             "phase word origin=${source.bookSourceUrl} chars=${pair.first} " +
-                "tier=$tier ms=${endTime - startTime} contentMs=$contentMs evalMs=$evalMs " +
+                "tier=$tier ms=${endTime - startTime} contentMs=$contentMs " +
+                "queueMs=$queueMs workMs=$workMs evalMs=$evalMs " +
                 "ok=${ChangeBookSourceQuality.isQualityOkWordCount(pair.first)} " +
                 "list=${searchBooks.size}"
         )
