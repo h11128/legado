@@ -160,6 +160,7 @@ object PreferKey {
     const val welcomeShowIconDark = "welcomeShowIconDark"
     const val pageTouchSlop = "pageTouchSlop"
     const val pageTouchClick = "pageTouchClick"
+    const val pullToToggleBookmark = "pullToToggleBookmark"
     const val showAddToShelfAlert = "showAddToShelfAlert"
     const val ignoreAudioFocus = "ignoreAudioFocus"
     const val parallelExportBook = "parallelExportBook"

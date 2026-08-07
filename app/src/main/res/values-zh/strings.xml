@@ -312,6 +312,11 @@
     <string name="group_yf">养肥区</string>
     <string name="bookmark">书签</string>
     <string name="bookmark_add">添加书签</string>
+    <string name="bookmark_added">已添加书签</string>
+    <string name="bookmark_removed">已删除书签</string>
+    <string name="delete_page_bookmarks">当前页有 %1$d 个书签，是否全部删除？</string>
+    <string name="pull_to_toggle_bookmark">下拉切换书签</string>
+    <string name="pull_to_toggle_bookmark_summary">适用于翻页模式；滚动模式仅在章节顶部触发</string>
     <string name="highlight">高亮</string>
     <string name="highlight_tab">标注</string>
     <string name="highlight_bg_color">背景色</string>
@@ -783,6 +788,8 @@
     <string name="plus">加</string>
     <string name="system_typeface">系统内置字体样式</string>
     <string name="delete_book_file">删除源文件</string>
+    <string name="delete_webdav_book_file">同时删除 WebDAV 同名文件</string>
+    <string name="delete_webdav_book_file_fail">删除 WebDAV 同名文件失败</string>
     <string name="text_default">默认</string>
     <string name="default1">预设一</string>
     <string name="default2">预设二</string>
