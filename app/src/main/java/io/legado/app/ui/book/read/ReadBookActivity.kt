@@ -100,6 +100,8 @@ import io.legado.app.ui.book.read.config.MoreConfigDialog
 import io.legado.app.ui.book.read.config.ReadAloudDialog
 import io.legado.app.ui.book.read.config.ReadStyleDialog
 import io.legado.app.ui.book.read.config.TextSelectMenuConfigDialog
+import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TITLE_COLOR
+import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TITLE_NUMBER_COLOR
 import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TIP_COLOR
 import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TIP_DIVIDER_COLOR
 import io.legado.app.ui.book.read.page.ContentTextView
@@ -1820,13 +1822,8 @@ class ReadBookActivity : BaseReadBookActivity(),
             clearReviewSummaryProviders()
             return
         }
-        val summaryUrl = rule.reviewSummaryUrl?.takeIf { it.isNotBlank() }
-        if (!rule.enabled ||
-            summaryUrl == null ||
-            rule.summaryListRule.isNullOrBlank() ||
-            rule.summaryParagraphIndexRule.isNullOrBlank() ||
-            rule.summaryCountRule.isNullOrBlank()
-        ) {
+        val summaryUrl = rule.configuredSummaryUrl()
+        if (summaryUrl == null) {
             clearReviewSummaryProviders()
             return
         }
@@ -1988,7 +1985,8 @@ class ReadBookActivity : BaseReadBookActivity(),
             },
             keyProvider = { targetChapterIndex, reviewId ->
                 if (targetChapterIndex == chapterIndex) result.keys[reviewId] else null
-            }
+            },
+            chapterIndex = chapterIndex,
         )
         reviewSummaryAppliedKey = key
         binding.readView.upContent(relativePosition = 0, resetPageOffset = false)
@@ -2243,6 +2241,18 @@ class ReadBookActivity : BaseReadBookActivity(),
                 ReadTipConfig.tipDividerColor = color
                 postEvent(EventBus.TIP_COLOR, "")
                 postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+            }
+
+            TITLE_NUMBER_COLOR -> {
+                ReadBookConfig.titleNumberColor = color
+                postEvent(EventBus.TIP_COLOR, "")
+                postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
+            }
+
+            TITLE_COLOR -> {
+                ReadBookConfig.titleColor = color
+                postEvent(EventBus.TIP_COLOR, "")
+                postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
             }
         }
     }
