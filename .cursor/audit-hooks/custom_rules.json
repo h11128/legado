@@ -227,5 +227,101 @@
     "created_at": "2026-08-04",
     "reviewed_at": null,
     "reviewed_version": null
+  },
+  {
+    "id": "legado_temp_script_write_deny",
+    "source": "prefer-reusable-scripts.mdc + postmortem 2026-08-08-temp-one-off-scripts",
+    "events": [
+      "preToolUse"
+    ],
+    "severity": "violation",
+    "message": "Do not write workflow scripts under temp/. Put reusable automation in scripts/ + docs/guides/; last-resort throwaways only in .local-scripts/.",
+    "check": {
+      "type": "all_of",
+      "checks": [
+        {
+          "type": "regex",
+          "field": "tool_name",
+          "pattern": "^(Write|StrReplace)$"
+        },
+        {
+          "type": "regex",
+          "field": "tool_input.path",
+          "pattern": "(^|[/\\\\])temp([/\\\\].*)?[/\\\\][^/\\\\]+\\.(py|sh|bash|ps1|zsh|cmd|bat)$"
+        }
+      ]
+    },
+    "intercept": {
+      "events": [
+        "preToolUse"
+      ],
+      "action": "deny",
+      "agent_message": "DENY: workflow script under temp/ is banned (prefer-reusable-scripts). Put code in scripts/ (or scripts/<area>/), document in docs/guides/, keep temp/ for logs/DBs/JSON only. True throwaway → .local-scripts/ then delete. See docs/postmortem/2026-08-08-temp-one-off-scripts.md.",
+      "user_message": null,
+      "plugin": null
+    },
+    "side_effect": null,
+    "always_record": null,
+    "order": 12,
+    "min_length": 0,
+    "min_length_field": "",
+    "disabled": false,
+    "trial_until": null,
+    "platform": null,
+    "experiment": null,
+    "workspace_filter": "legado",
+    "file_pattern_exclude": null,
+    "version": 1,
+    "created_at": "2026-08-08",
+    "reviewed_at": null,
+    "reviewed_version": null
+  },
+  {
+    "id": "legado_temp_script_shell_deny",
+    "source": "prefer-reusable-scripts.mdc + postmortem 2026-08-08-temp-one-off-scripts",
+    "events": [
+      "beforeShellExecution"
+    ],
+    "severity": "violation",
+    "message": "Shell must not create workflow scripts under temp/ (redirect/tee/cp/mv of .py/.sh/.ps1).",
+    "check": {
+      "type": "all_of",
+      "checks": [
+        {
+          "type": "regex",
+          "field": "command",
+          "pattern": "(^|[/\\\\]|\\s)temp([/\\\\]|\\\\\\\\)[^\\n]*\\.(py|sh|bash|ps1|zsh|cmd|bat)\\b"
+        },
+        {
+          "type": "regex",
+          "field": "command",
+          "pattern": "(>|>>|tee\\s|\\bcp\\s|\\bmv\\s|\\binstall\\s|cat\\s*>|printf\\s.*>|\\bWrite-Output\\b|Out-File|Set-Content|New-Item)"
+        }
+      ]
+    },
+    "intercept": {
+      "events": [
+        "beforeShellExecution"
+      ],
+      "action": "deny",
+      "agent_message": "DENY: creating a script under temp/ via shell (prefer-reusable-scripts). Use scripts/ + docs/guides/. Escape hatch: .local-scripts/ only, delete before end of turn.",
+      "user_message": null,
+      "plugin": null
+    },
+    "side_effect": null,
+    "always_record": null,
+    "order": 12,
+    "min_length": 0,
+    "min_length_field": "",
+    "disabled": false,
+    "trial_until": null,
+    "platform": null,
+    "experiment": null,
+    "workspace_filter": "legado",
+    "file_pattern_exclude": null,
+    "version": 1,
+    "created_at": "2026-08-08",
+    "reviewed_at": null,
+    "reviewed_version": null
   }
 ]

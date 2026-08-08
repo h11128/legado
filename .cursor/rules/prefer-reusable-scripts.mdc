@@ -1,0 +1,34 @@
+---
+description: Prefer reusable scripts/ + docs/guides runbooks; ban disposable workflow scripts under temp/ unless last resort.
+alwaysApply: true
+---
+
+# Prefer reusable scripts and runbooks
+
+Agents must not park repeatable procedures as one-off scripts under temp/. That pattern loses the next session and forces a rewrite.
+
+## MUST
+
+1. **Default for any procedure you will re-run (or another agent may re-run):**
+   - Code → project scripts/ (or a scripts/subfolder)
+   - How-to → docs/guides (extend an existing guide when one owns the domain)
+   - Prefer extending an existing smoke/session entrypoint over a parallel one-off
+2. **Do not create** workflow automation under temp/ (no disposable .py / .sh / .ps1 workflow scripts there).
+3. **temp/ is runtime artifacts only** (logs, DBs, JSON/HTML captures) — never the how-to or the durable script.
+4. **Last-resort throwaway only:** .local-scripts/ (gitignored), delete before end of turn, and state why scripts/ was not viable.
+5. Before writing a new script: search existing scripts/ owners and **extend** them.
+
+## Good / bad
+
+| Bad | Good |
+|---|---|
+| One-off device probe script dumped under temp/ | Named session script under scripts/ plus a guide section |
+| Hard-coded machine/DHCP URLs in a queue script | Shared helper + env / config file |
+| “I’ll promote it later” under temp/ | Ship the reusable path in the same turn |
+
+## Enforcement
+
+- This MDC (shared alwaysApply)
+- Project HookRules when present (legado: legado_temp_script_write_deny / legado_temp_script_shell_deny)
+- Escape hatch remains .local-scripts/ only
+- Lesson write-up (legado): docs/postmortem dated 2026-08-08 about temp one-off scripts
