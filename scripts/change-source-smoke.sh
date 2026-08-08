@@ -7,8 +7,10 @@
 #   ./scripts/change-source-smoke.sh --apply-prefs
 #   ./scripts/change-source-smoke.sh --unit-only
 #   ./scripts/change-source-smoke.sh --install-only
-#   ./scripts/change-source-smoke.sh --device-session [--no-install]   # full UI + log analyze
+#   ./scripts/change-source-smoke.sh --device-session [--no-install]   # manual 换源 dialog
+#   ./scripts/change-source-smoke.sh --auto-change-session [--no-install]  # auto-换源 on open
 #   ./scripts/change-source-smoke.sh --analyze-log PATH
+#   ./scripts/change-source-smoke.sh --analyze-auto-log PATH
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,12 +43,21 @@ case "${1:-}" in
     shift
     DEVICE_EXTRA=("$@")
     ;;
+  --auto-change-session)
+    MODE="auto-change-session"
+    shift
+    DEVICE_EXTRA=("$@")
+    ;;
   --analyze-log)
     MODE="analyze-log"
     ANALYZE_LOG="${2:-}"
     ;;
+  --analyze-auto-log)
+    MODE="analyze-auto-log"
+    ANALYZE_LOG="${2:-}"
+    ;;
   -h|--help)
-    sed -n '2,14p' "$0"
+    sed -n '2,16p' "$0"
     exit 0
     ;;
 esac
@@ -131,9 +142,16 @@ case "$MODE" in
   device-session)
     exec "$ROOT/scripts/change-source-device-session.sh" "${DEVICE_EXTRA[@]}"
     ;;
+  auto-change-session)
+    exec "$ROOT/scripts/auto-change-device-session.sh" "${DEVICE_EXTRA[@]}"
+    ;;
   analyze-log)
     [[ -n "$ANALYZE_LOG" ]] || { echo "usage: --analyze-log PATH" >&2; exit 2; }
     python "$ROOT/scripts/change-source-analyze-log.py" "$ANALYZE_LOG" --expect-deep-cap
+    ;;
+  analyze-auto-log)
+    [[ -n "$ANALYZE_LOG" ]] || { echo "usage: --analyze-auto-log PATH" >&2; exit 2; }
+    python "$ROOT/scripts/auto-change-analyze-log.py" "$ANALYZE_LOG"
     ;;
   all)
     unit
@@ -143,7 +161,9 @@ case "$MODE" in
       dump_prefs || echo "WARN: prefs unread — run --apply-prefs or MCP set_change_source_prefs" >&2
     fi
     echo "OK: unit+install done. Device UI: docs/guides/change-chapter-verify-test.md"
-    echo "Full session: ./scripts/change-source-smoke.sh --device-session"
+    echo "Manual 换源: ./scripts/change-source-smoke.sh --device-session"
+    echo "Auto-换源:   ./scripts/change-source-smoke.sh --auto-change-session"
+    echo "Shelf:       docs/guides/shelf-restore.md"
     echo "Logcat: adb logcat -s LegadoChangeSource"
     ;;
 esac

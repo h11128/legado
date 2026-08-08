@@ -6,6 +6,9 @@ Scripts:
 - `scripts/change-source-smoke.sh` — unit / install / prefs / wrappers
 - `scripts/change-source-device-session.sh` — open book → 换源 → logcat → analyze
 - `scripts/change-source-analyze-log.py` — gate report from `LegadoChangeSource` dump
+- `scripts/auto-change-device-session.sh` — open dead/empty-toc book → auto-换源 logcat
+- `scripts/auto-change-pick-book.py` — list/pick `missing_source` / `empty_toc` candidates
+- `scripts/auto-change-analyze-log.py` — gate `trigger` + `ask` + `cap≤30`
 
 Package: `com.legado.app.debug`
 
@@ -23,11 +26,15 @@ Covers **整书换源** / **单章换源** quality + ask-order + early-stop + MC
 export GRADLE_USER_HOME="${GRADLE_USER_HOME:-/e/.gradle}"   # or /mnt/e/.gradle on WSL
 ./scripts/change-source-smoke.sh --unit-only
 ./scripts/change-source-smoke.sh --apply-prefs
-./scripts/change-source-smoke.sh --device-session          # preferred agent path
+./scripts/change-source-smoke.sh --device-session          # preferred agent path (manual 换源 dialog)
+./scripts/change-source-smoke.sh --auto-change-session     # auto-换源 on open
 # or stepwise:
 ./scripts/change-source-smoke.sh --install-only
 ./scripts/change-source-device-session.sh --no-install --book-url 'http://…'
+./scripts/auto-change-device-session.sh --no-install --kind missing_source
+python scripts/auto-change-pick-book.py --kind all --limit 10
 ./scripts/change-source-smoke.sh --analyze-log temp/legado_change_source_session_*.txt
+python scripts/auto-change-analyze-log.py temp/legado_auto_change_session_*.txt
 adb logcat -s LegadoChangeSource
 ```
 
@@ -88,6 +95,22 @@ Ask budget (not a full-catalog scan):
 
 Logcat: `LegadoChangeSource` lines `auto-change trigger=…` / `auto-change ask … candidates=N cap=30`. Unit: `AutoChangeSourceTest`.
 
+### Device session (reusable)
+
+```bash
+# List candidates on phone (prefer missing_source)
+python scripts/auto-change-pick-book.py --kind missing_source --limit 10
+# Full session: optional install → open book → capture → analyze
+./scripts/auto-change-device-session.sh --no-install --kind missing_source
+# Or pin a book:
+./scripts/auto-change-device-session.sh --no-install --book-url 'http://…'
+```
+
+PASS when analyzer reports `has_trigger` + `has_ask` + `cap_ok` (candidates ≤ 30).  
+UI check (manual): top determinate bar + bottom `自动换源 · 已问 a/b · 问中 x/y` + `询问中 源名…`.
+
+Known good probe book (when present): **《信仰诸天》朝不保夕** with origin `https://www.9txs.com/` (`missing_source`).
+
 ## Agent run record
 
 | Date | Result | Evidence |
@@ -95,6 +118,7 @@ Logcat: `LegadoChangeSource` lines `auto-change trigger=…` / `auto-change ask 
 | 2026-08-08 | code: auto-change on info/toc fail | `AutoChangeSource` helper + ReadBook/ReadManga hooks; unit `AutoChangeSourceTest`; no device session this step |
 | 2026-08-08b | auto-change cap=30 + progress UI | `limitCandidates(30)`; `AUTO_CHANGE_MS=45s`; read `upMsg` / manga loading `done/total` |
 | 2026-08-08c | auto-change live strip UI | top `RefreshProgressBar` + bottom metrics/current strip; `AutoChangeProgressUi` + inFlight source names |
+| 2026-08-08d | harness: auto-change + shelf-restore scripts | promoted `temp/` one-offs → `scripts/auto-change-*`, `scripts/shelf-restore-*`, `docs/guides/shelf-restore.md` |
 | 2026-08-06b | PASS untrusted-ref soft gate | 学霸也开挂/必读居: `trusted=false trustReason=page_toc`; `stitch_weak_ref=0`; `stitch_soft_unref` kept; `qualityOk=20` early-stop (`temp/legado_cs_trust_xueba_2026-08-06_145414.txt`). 吞噬: `trusted=true` on real TOC title (`temp/legado_cs_trust_tunshi_2026-08-06_150133.txt`; local body login-walled refLen=32 so early-stop N/A). |
 | 2026-08-06 | PASS menu filters (partial session) | UI overflow shows 过滤非小说源/过滤词典简介/正文不合格时移除; prefs broadcast OK; dropContentBad ON→179 content-bad drops (`142328`); OFF→0 content-bad drops + list+ words=-1 tier=5 kept (`143313`); full early-stop FAIL on 学霸也开挂 (qualityOk≪20) |
 | 2026-08-05 | PASS (partial: earlyStop=false) | pre-fix device run; motivated the 7 fixes below |

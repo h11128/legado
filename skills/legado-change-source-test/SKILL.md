@@ -15,6 +15,8 @@ Scripts:
 - `scripts/change-source-smoke.sh`
 - `scripts/change-source-device-session.sh`
 - `scripts/change-source-analyze-log.py`
+- `scripts/auto-change-device-session.sh` / `auto-change-pick-book.py` / `auto-change-analyze-log.py`
+- Shelf orphans: `docs/guides/shelf-restore.md` + `scripts/shelf-restore-*.py`
 
 Debug package: `com.legado.app.debug` (override `LEGADO_DEBUG_PKG`)
 
@@ -33,8 +35,10 @@ export GRADLE_USER_HOME="${GRADLE_USER_HOME:-/e/.gradle}"
 ./scripts/change-source-smoke.sh --unit-only
 ./scripts/change-source-smoke.sh --apply-prefs
 ./scripts/change-source-smoke.sh --device-session
+./scripts/change-source-smoke.sh --auto-change-session --no-install
 # Re-analyze a saved dump:
 ./scripts/change-source-smoke.sh --analyze-log temp/legado_change_source_session_*.txt
+./scripts/change-source-smoke.sh --analyze-auto-log temp/legado_auto_change_session_*.txt
 adb logcat -s LegadoChangeSource
 ```
 
