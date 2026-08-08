@@ -511,7 +511,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
                         putString(JS_SOURCE_API_TOKEN, normalizedValue)
                     }
                 }
-                .apply()
+                .commit()
         }
 
     var tocUiUseReplace: Boolean
