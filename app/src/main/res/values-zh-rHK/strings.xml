@@ -717,6 +717,7 @@
     <string name="thanks">你的支持是我更新的動力</string>
     <string name="about_official_account">公眾號[开源阅读]</string>
     <string name="source_auto_changing">正在自動換源</string>
+    <string name="source_auto_changing_progress">正在自動換源 %1$d/%2$d</string>
     <string name="click_to_apply">點擊加入</string>
     <string name="middle">中</string>
     <string name="information">信息</string>

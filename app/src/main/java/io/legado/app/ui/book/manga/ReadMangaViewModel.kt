@@ -170,7 +170,12 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
                 author = book.author,
                 excludeOrigin = excludeOrigin,
                 onStart = {
-                    context.toastOnUi(R.string.source_auto_changing)
+                    ReadManga.showLoading()
+                },
+                onProgress = { done, total ->
+                    ReadManga.upLoadingMessage(
+                        context.getString(R.string.source_auto_changing_progress, done, total)
+                    )
                 },
             )
             ReadManga.autoChangeAttemptedFor = newBook.bookUrl
@@ -178,6 +183,9 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
         }.onError {
             AppLog.put("自动换源失败\n${it.localizedMessage}", it)
             context.toastOnUi("自动换源失败\n${it.localizedMessage}")
+            ReadManga.loadFail(
+                context.getString(R.string.source_auto_changing) + "\n${it.localizedMessage}"
+            )
         }
     }
 

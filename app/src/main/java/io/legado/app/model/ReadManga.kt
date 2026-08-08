@@ -561,6 +561,10 @@ object ReadManga : CoroutineScope by MainScope() {
         mCallback?.showLoading()
     }
 
+    fun upLoadingMessage(msg: String) {
+        mCallback?.upLoadingMessage(msg)
+    }
+
     fun loadFail(msg: String, retry: Boolean = true) {
         mCallback?.loadFail(msg, retry)
     }
@@ -641,6 +645,7 @@ object ReadManga : CoroutineScope by MainScope() {
         fun loadFail(msg: String, retry: Boolean = true)
         fun sureNewProgress(progress: BookProgress)
         fun showLoading()
+        fun upLoadingMessage(msg: String)
         fun startLoad()
     }
 }

@@ -448,6 +448,17 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     override fun showLoading() {
         lifecycleScope.launch {
             binding.flLoading.isVisible = true
+            binding.llLoading.isVisible = true
+            binding.llRetry.isGone = true
+        }
+    }
+
+    override fun upLoadingMessage(msg: String) {
+        lifecycleScope.launch {
+            binding.flLoading.isVisible = true
+            binding.llLoading.isVisible = true
+            binding.llRetry.isGone = true
+            binding.tvLoadingMessage.text = msg
         }
     }
 

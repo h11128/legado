@@ -28,4 +28,23 @@ class AutoChangeSourceTest {
         assertEquals(2, AutoChangeSource.filterParts(parts, null).size)
         assertEquals(2, AutoChangeSource.filterParts(parts, "  ").size)
     }
+
+    @Test
+    fun limitCandidates_capsAtThirty() {
+        assertEquals(30, AutoChangeSource.CANDIDATE_CAP)
+        val parts = (1..80).map { BookSourcePart(bookSourceUrl = "https://s$it.example/") }
+        val limited = AutoChangeSource.limitCandidates(parts)
+        assertEquals(30, limited.size)
+        assertEquals("https://s1.example/", limited.first().bookSourceUrl)
+        assertEquals("https://s30.example/", limited.last().bookSourceUrl)
+    }
+
+    @Test
+    fun limitCandidates_keepsShortList() {
+        val parts = listOf(
+            BookSourcePart(bookSourceUrl = "a"),
+            BookSourcePart(bookSourceUrl = "b"),
+        )
+        assertEquals(2, AutoChangeSource.limitCandidates(parts).size)
+    }
 }

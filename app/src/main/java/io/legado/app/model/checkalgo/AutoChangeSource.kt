@@ -11,19 +11,27 @@ import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.RespondTimeUpdater
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.mapParallelSafe
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.min
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEmpty
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withTimeout
+import kotlin.coroutines.coroutineContext
 
 /**
  * Shared auto-换源 ask path for read / manga (precise search + toc + content).
  *
  * Callers own UI msgs, prefs gate, session once-per-book, and [changeTo].
+ * Candidate list is hard-capped — this is not a full-catalog scan.
  */
 object AutoChangeSource {
+
+    /** Max enabled sources to ask on one auto-换源 attempt. */
+    const val CANDIDATE_CAP = 30
 
     enum class Trigger {
         MISSING_SOURCE,
@@ -41,9 +49,20 @@ object AutoChangeSource {
         return parts.filter { it.bookSourceUrl != exclude }
     }
 
+    /** Keep ask-order head only; auto path must not scan the whole catalog. */
+    fun limitCandidates(
+        parts: List<BookSourcePart>,
+        cap: Int = CANDIDATE_CAP,
+    ): List<BookSourcePart> {
+        if (cap <= 0 || parts.size <= cap) return parts
+        return parts.take(cap)
+    }
+
     /**
      * First source that precise-matches [name]/[author] and yields toc+content.
      * Throws [NoStackTraceException] when none succeed.
+     *
+     * [onProgress] reports finished asks (success or fail) vs capped total.
      */
     suspend fun findFirst(
         name: String,
@@ -52,41 +71,56 @@ object AutoChangeSource {
         threadCount: Int = AppConfig.threadCount,
         timeoutMs: Long = AskTimeout.AUTO_CHANGE_MS,
         onStart: (() -> Unit)? = null,
+        onProgress: ((done: Int, total: Int) -> Unit)? = null,
         onCompletion: (() -> Unit)? = null,
     ): Triple<Book, List<BookChapter>, BookSource> {
         SourceHelp.ensureRespondTimeHealed()
-        val ordered = AskSourceOrder.order(
-            filterParts(appDb.bookSourceDao.allTextEnabledPart, excludeOrigin),
-            threadCount = threadCount,
-            demoteUrls = ChangeSourceAskMemory.snapshot(),
+        val ordered = limitCandidates(
+            AskSourceOrder.order(
+                filterParts(appDb.bookSourceDao.allTextEnabledPart, excludeOrigin),
+                threadCount = threadCount,
+                demoteUrls = ChangeSourceAskMemory.snapshot(),
+            ),
         )
+        val total = ordered.size
+        val done = AtomicInteger(0)
+        val concurrency = min(threadCount.coerceAtLeast(1), total.coerceAtLeast(1))
         ChangeSourceLog.i(
             "auto-change ask name=$name author=$author exclude=${excludeOrigin.orEmpty()} " +
-                "candidates=${ordered.size} threads=$threadCount"
+                "candidates=$total cap=$CANDIDATE_CAP threads=$concurrency"
         )
+        onProgress?.invoke(0, total)
         return AskSourcePrefetch.emitSources(ordered)
             .onStart { onStart?.invoke() }
-            .mapParallelSafe(threadCount) { source ->
-                val startTime = System.currentTimeMillis()
-                withTimeout(timeoutMs) {
-                    val book = WebBook.preciseSearchAwait(source, name, author).getOrThrow()
-                    if (book.tocUrl.isEmpty()) {
-                        WebBook.getBookInfoAwait(source, book)
+            .mapParallelSafe(concurrency) { source ->
+                try {
+                    val startTime = System.currentTimeMillis()
+                    withTimeout(timeoutMs) {
+                        val book = WebBook.preciseSearchAwait(source, name, author).getOrThrow()
+                        if (book.tocUrl.isEmpty()) {
+                            WebBook.getBookInfoAwait(source, book)
+                        }
+                        val toc = WebBook.getChapterListAwait(source, book).getOrThrow()
+                        val chapter = toc.getOrElse(book.durChapterIndex) { toc.last() }
+                        val nextChapterUrl = toc.getOrNull(chapter.index + 1)?.url
+                        WebBook.getContentAwait(
+                            bookSource = source,
+                            book = book,
+                            bookChapter = chapter,
+                            nextChapterUrl = nextChapterUrl
+                        )
+                        Triple(
+                            book,
+                            toc,
+                            System.currentTimeMillis() - startTime to source,
+                        )
                     }
-                    val toc = WebBook.getChapterListAwait(source, book).getOrThrow()
-                    val chapter = toc.getOrElse(book.durChapterIndex) { toc.last() }
-                    val nextChapterUrl = toc.getOrNull(chapter.index + 1)?.url
-                    WebBook.getContentAwait(
-                        bookSource = source,
-                        book = book,
-                        bookChapter = chapter,
-                        nextChapterUrl = nextChapterUrl
-                    )
-                    Triple(
-                        book,
-                        toc,
-                        System.currentTimeMillis() - startTime to source,
-                    )
+                } finally {
+                    // skip when take(1) cancelled siblings — avoid fighting onCompletion UI clear.
+                    // TimeoutCancellationException leaves the outer job active, so still counts.
+                    if (coroutineContext.isActive) {
+                        onProgress?.invoke(done.incrementAndGet(), total)
+                    }
                 }
             }
             .take(1)

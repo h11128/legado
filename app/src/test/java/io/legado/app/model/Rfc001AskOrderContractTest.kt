@@ -72,7 +72,10 @@ class Rfc001AskOrderContractTest {
         assertTrue(auto.contains("AskTimeout.AUTO_CHANGE_MS"))
         assertTrue(auto.contains("ensureRespondTimeHealed()"))
         assertTrue(auto.contains("filterParts("))
+        assertTrue(auto.contains("limitCandidates("))
+        assertTrue(auto.contains("CANDIDATE_CAP"))
         assertTrue(auto.contains("chapter.index + 1"))
+        assertTrue(auto.contains("onProgress"))
     }
 
     @Test

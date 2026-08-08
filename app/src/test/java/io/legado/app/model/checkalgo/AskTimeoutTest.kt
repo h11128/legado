@@ -6,9 +6,9 @@ import org.junit.Test
 class AskTimeoutTest {
 
     @Test
-    fun fixedBudgetsMatchPreRfcDefaults() {
+    fun fixedBudgetsForSearchChangeAndAuto() {
         assertEquals(30_000L, AskTimeout.SEARCH_MS)
         assertEquals(60_000L, AskTimeout.CHANGE_SOURCE_MS)
-        assertEquals(180_000L, AskTimeout.AUTO_CHANGE_MS)
+        assertEquals(45_000L, AskTimeout.AUTO_CHANGE_MS)
     }
 }

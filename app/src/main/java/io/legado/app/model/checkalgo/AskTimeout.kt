@@ -17,6 +17,10 @@ object AskTimeout {
     /** Manual / chapter 换源 base budget (full). Grace path: [AskTimeoutBudget.GRACE_MS]. */
     const val CHANGE_SOURCE_MS = 60_000L
 
-    /** Multi-step auto 换源 (search+info+toc+content). */
-    const val AUTO_CHANGE_MS = 180_000L
+    /**
+     * Multi-step auto 换源 (search+info+toc+content) per candidate.
+     * Kept below manual 换源 base: auto asks a hard-capped head only
+     * ([AutoChangeSource.CANDIDATE_CAP]), not the full catalog.
+     */
+    const val AUTO_CHANGE_MS = 45_000L
 }

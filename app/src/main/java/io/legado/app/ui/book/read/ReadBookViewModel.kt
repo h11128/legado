@@ -325,16 +325,16 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                 name = book.name,
                 author = book.author,
                 excludeOrigin = excludeOrigin,
-                onStart = {
-                    ReadBook.upMsg(context.getString(R.string.source_auto_changing))
-                },
-                onCompletion = {
-                    ReadBook.upMsg(null)
+                onProgress = { done, total ->
+                    ReadBook.upMsg(
+                        context.getString(R.string.source_auto_changing_progress, done, total)
+                    )
                 },
             )
             // Stick once-per-session to the replacement URL so changeTo→resetData
             // does not re-arm auto for the migrated book in this reading session.
             ReadBook.autoChangeAttemptedFor = newBook.bookUrl
+            ReadBook.upMsg(null)
             changeTo(newBook, toc)
         }.onError {
             ReadBook.upMsg(null)
