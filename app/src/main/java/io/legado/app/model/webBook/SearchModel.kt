@@ -209,56 +209,28 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                     otherData.add(it)
                 }
             }
+            suspend fun mergeIntoBucket(bucket: MutableList<SearchBook>, nBook: SearchBook) {
+                var hasSame = false
+                for (pBook in bucket) {
+                    currentCoroutineContext().ensureActive()
+                    if (SearchBookMerge.sameBookForMerge(pBook, nBook, bucket)) {
+                        SearchBookMerge.absorb(pBook, nBook)
+                        hasSame = true
+                        break
+                    }
+                }
+                if (!hasSame) {
+                    bucket.add(nBook)
+                }
+            }
             newDataS.forEach { nBook ->
                 currentCoroutineContext().ensureActive()
-                if (nBook.name == key || nBook.author == key) {
-                    var hasSame = false
-                    equalData.forEach { pBook ->
-                        currentCoroutineContext().ensureActive()
-                        if (pBook.name == nBook.name && pBook.author == nBook.author) {
-                            pBook.addOrigin(nBook.origin)
-                            hasSame = true
-                        }
-                    }
-                    if (!hasSame) {
-                        equalData.add(nBook)
-                    }
-                } else if (nBook.kind?.contains(key) == true) {
-                    var hasSame = false
-                    tagsData.forEach { pBook ->
-                        currentCoroutineContext().ensureActive()
-                        if (pBook.name == nBook.name && pBook.author == nBook.author) {
-                            pBook.addOrigin(nBook.origin)
-                            hasSame = true
-                        }
-                    }
-                    if (!hasSame) {
-                        tagsData.add(nBook)
-                    }
-                } else if (nBook.name.contains(key) || nBook.author.contains(key)) {
-                    var hasSame = false
-                    containsData.forEach { pBook ->
-                        currentCoroutineContext().ensureActive()
-                        if (pBook.name == nBook.name && pBook.author == nBook.author) {
-                            pBook.addOrigin(nBook.origin)
-                            hasSame = true
-                        }
-                    }
-                    if (!hasSame) {
-                        containsData.add(nBook)
-                    }
-                } else if (!precision) {
-                    var hasSame = false
-                    otherData.forEach { pBook ->
-                        currentCoroutineContext().ensureActive()
-                        if (pBook.name == nBook.name && pBook.author == nBook.author) {
-                            pBook.addOrigin(nBook.origin)
-                            hasSame = true
-                        }
-                    }
-                    if (!hasSame) {
-                        otherData.add(nBook)
-                    }
+                when {
+                    nBook.name == key || nBook.author == key -> mergeIntoBucket(equalData, nBook)
+                    nBook.kind?.contains(key) == true -> mergeIntoBucket(tagsData, nBook)
+                    nBook.name.contains(key) || nBook.author.contains(key) ->
+                        mergeIntoBucket(containsData, nBook)
+                    !precision -> mergeIntoBucket(otherData, nBook)
                 }
             }
             currentCoroutineContext().ensureActive()
