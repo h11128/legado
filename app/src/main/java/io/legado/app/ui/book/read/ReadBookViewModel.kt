@@ -27,6 +27,7 @@ import io.legado.app.model.ImageProvider
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.SourceCallBack
+import io.legado.app.model.checkalgo.AutoChangeProgressUi
 import io.legado.app.model.checkalgo.AutoChangeSource
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
@@ -52,6 +53,8 @@ import java.io.FileOutputStream
  */
 class ReadBookViewModel(application: Application) : BaseViewModel(application) {
     val permissionDenialLiveData = MutableLiveData<Int>()
+    /** null = hide overlay; non-null = show live auto-换源 strip. */
+    val autoChangeProgressLiveData = MutableLiveData<AutoChangeProgressUi?>()
     var isInitFinish = false
     var searchContentQuery = ""
     var searchResultList: List<SearchResult>? = null
@@ -320,26 +323,27 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         ReadBook.autoChangeAttemptedFor = book.bookUrl
         AutoChangeSource.logTrigger(trigger, book.origin, book.bookUrl)
         val excludeOrigin = book.origin.takeIf { it.isNotBlank() }
+        // Clear full-page error placeholder so the strip overlay is the live UI.
+        ReadBook.upMsg(null)
         execute {
             val (newBook, toc, _) = AutoChangeSource.findFirst(
                 name = book.name,
                 author = book.author,
                 excludeOrigin = excludeOrigin,
-                onProgress = { done, total ->
-                    ReadBook.upMsg(
-                        context.getString(R.string.source_auto_changing_progress, done, total)
-                    )
+                onProgress = { progress ->
+                    autoChangeProgressLiveData.postValue(progress)
                 },
             )
             // Stick once-per-session to the replacement URL so changeTo→resetData
             // does not re-arm auto for the migrated book in this reading session.
             ReadBook.autoChangeAttemptedFor = newBook.bookUrl
-            ReadBook.upMsg(null)
             changeTo(newBook, toc)
         }.onError {
-            ReadBook.upMsg(null)
             AppLog.put("自动换源失败\n${it.localizedMessage}", it)
             context.toastOnUi("自动换源失败\n${it.localizedMessage}")
+        }.onFinally {
+            // Covers success / error / cancel — cancel does not call onError.
+            autoChangeProgressLiveData.postValue(null)
         }
     }
 

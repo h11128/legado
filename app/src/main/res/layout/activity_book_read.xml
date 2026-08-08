@@ -54,4 +54,48 @@
         android:id="@+id/read_aloud_float_bar_container"
         layout="@layout/view_read_aloud_float_bar" />
 
+    <!-- Auto-换源 live strip (same language as manual 换源 dialog). -->
+    <io.legado.app.ui.widget.anima.RefreshProgressBar
+        android:id="@+id/auto_change_progress_bar"
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:layout_gravity="top"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/ll_auto_change_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@color/background_menu"
+        android:elevation="4dp"
+        android:orientation="vertical"
+        android:paddingLeft="16dp"
+        android:paddingTop="8dp"
+        android:paddingRight="16dp"
+        android:paddingBottom="0dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tv_auto_change_metrics"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/primaryText"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tv_auto_change_current"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="marquee"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:singleLine="true"
+            android:textColor="@color/secondaryText"
+            android:textSize="11sp" />
+    </LinearLayout>
+
 </FrameLayout>

@@ -11,7 +11,10 @@ import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.RespondTimeUpdater
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.mapParallelSafe
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.coroutines.coroutineContext
 import kotlin.math.min
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onCompletion
@@ -20,18 +23,20 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withTimeout
-import kotlin.coroutines.coroutineContext
 
 /**
  * Shared auto-换源 ask path for read / manga (precise search + toc + content).
  *
- * Callers own UI msgs, prefs gate, session once-per-book, and [changeTo].
+ * Callers own UI overlay, prefs gate, session once-per-book, and [changeTo].
  * Candidate list is hard-capped — this is not a full-catalog scan.
  */
 object AutoChangeSource {
 
     /** Max enabled sources to ask on one auto-换源 attempt. */
     const val CANDIDATE_CAP = 30
+
+    /** Match manual 换源 publish throttle (~12.5fps). */
+    private const val PROGRESS_THROTTLE_MS = 80L
 
     enum class Trigger {
         MISSING_SOURCE,
@@ -62,7 +67,7 @@ object AutoChangeSource {
      * First source that precise-matches [name]/[author] and yields toc+content.
      * Throws [NoStackTraceException] when none succeed.
      *
-     * [onProgress] reports finished asks (success or fail) vs capped total.
+     * [onProgress] reports live ask strip (completed / inFlight / probing names).
      */
     suspend fun findFirst(
         name: String,
@@ -71,7 +76,7 @@ object AutoChangeSource {
         threadCount: Int = AppConfig.threadCount,
         timeoutMs: Long = AskTimeout.AUTO_CHANGE_MS,
         onStart: (() -> Unit)? = null,
-        onProgress: ((done: Int, total: Int) -> Unit)? = null,
+        onProgress: ((AutoChangeProgressUi) -> Unit)? = null,
         onCompletion: (() -> Unit)? = null,
     ): Triple<Book, List<BookChapter>, BookSource> {
         SourceHelp.ensureRespondTimeHealed()
@@ -85,14 +90,50 @@ object AutoChangeSource {
         val total = ordered.size
         val done = AtomicInteger(0)
         val concurrency = min(threadCount.coerceAtLeast(1), total.coerceAtLeast(1))
+        val probingByUrl = ConcurrentHashMap<String, String>()
+        val lastPublishMs = AtomicLong(0L)
         ChangeSourceLog.i(
             "auto-change ask name=$name author=$author exclude=${excludeOrigin.orEmpty()} " +
                 "candidates=$total cap=$CANDIDATE_CAP threads=$concurrency"
         )
-        onProgress?.invoke(0, total)
+
+        fun publish(force: Boolean = false, finished: Boolean = false) {
+            if (onProgress == null) return
+            val now = System.currentTimeMillis()
+            if (!force && !finished) {
+                val prev = lastPublishMs.get()
+                if (now - prev < PROGRESS_THROTTLE_MS) return
+                if (!lastPublishMs.compareAndSet(prev, now)) return
+            } else {
+                lastPublishMs.set(now)
+            }
+            val names = probingByUrl.values.toList()
+            val sample = names.take(3).joinToString("、")
+            val more = (names.size - 3).coerceAtLeast(0)
+            val label = when {
+                names.isEmpty() -> ""
+                more > 0 -> "询问中 $sample 等${more}个"
+                else -> "询问中 $sample"
+            }
+            onProgress(
+                AutoChangeProgressUi(
+                    completed = done.get(),
+                    total = total,
+                    inFlight = probingByUrl.size,
+                    concurrency = concurrency,
+                    label = label,
+                    finished = finished,
+                )
+            )
+        }
+
+        publish(force = true)
         return AskSourcePrefetch.emitSources(ordered)
             .onStart { onStart?.invoke() }
             .mapParallelSafe(concurrency) { source ->
+                val displayName = source.bookSourceName.ifBlank { source.bookSourceUrl }
+                probingByUrl[source.bookSourceUrl] = displayName
+                publish()
                 try {
                     val startTime = System.currentTimeMillis()
                     withTimeout(timeoutMs) {
@@ -116,16 +157,23 @@ object AutoChangeSource {
                         )
                     }
                 } finally {
-                    // skip when take(1) cancelled siblings — avoid fighting onCompletion UI clear.
-                    // TimeoutCancellationException leaves the outer job active, so still counts.
+                    probingByUrl.remove(source.bookSourceUrl)
+                    // Count finished asks only while still active; cancelled siblings
+                    // still refresh inFlight so the strip does not freeze on old names.
                     if (coroutineContext.isActive) {
-                        onProgress?.invoke(done.incrementAndGet(), total)
+                        done.incrementAndGet()
+                        publish(force = true)
+                    } else {
+                        publish()
                     }
                 }
             }
             .take(1)
             .onEmpty { throw NoStackTraceException("没有合适书源") }
-            .onCompletion { onCompletion?.invoke() }
+            .onCompletion {
+                publish(force = true, finished = true)
+                onCompletion?.invoke()
+            }
             .first()
             .let { (book, toc, timing) ->
                 val (elapsed, source) = timing

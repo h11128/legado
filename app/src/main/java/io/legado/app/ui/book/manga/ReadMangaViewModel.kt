@@ -24,6 +24,8 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.ReadManga
 import io.legado.app.model.checkalgo.AutoChangeSource
+import io.legado.app.model.checkalgo.formatAutoChangeProgressCurrent
+import io.legado.app.model.checkalgo.formatAutoChangeProgressMetrics
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.ACache
@@ -172,10 +174,10 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
                 onStart = {
                     ReadManga.showLoading()
                 },
-                onProgress = { done, total ->
-                    ReadManga.upLoadingMessage(
-                        context.getString(R.string.source_auto_changing_progress, done, total)
-                    )
+                onProgress = { progress ->
+                    val metrics = context.formatAutoChangeProgressMetrics(progress)
+                    val current = context.formatAutoChangeProgressCurrent(progress)
+                    ReadManga.upLoadingMessage("$metrics\n$current")
                 },
             )
             ReadManga.autoChangeAttemptedFor = newBook.bookUrl
@@ -185,6 +187,10 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
             context.toastOnUi("自动换源失败\n${it.localizedMessage}")
             ReadManga.loadFail(
                 context.getString(R.string.source_auto_changing) + "\n${it.localizedMessage}"
+            )
+        }.onCancel {
+            ReadManga.loadFail(
+                context.getString(R.string.source_auto_changing)
             )
         }
     }

@@ -22,7 +22,9 @@ import androidx.core.view.get
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.core.view.size
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
+import androidx.core.view.WindowInsetsCompat
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.BuildConfig
@@ -71,6 +73,8 @@ import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
+import io.legado.app.model.checkalgo.bindAutoChangeProgress
+import io.legado.app.model.checkalgo.bindAutoChangeProgressStrip
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
@@ -149,6 +153,7 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
+import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.sysScreenOffTime
@@ -338,6 +343,30 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
         binding.readAloudFloatBarContainer.llReadFromHere.setOnClickListener {
             ReadBook.readAloud()
+        }
+        binding.llAutoChangeStatus.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            // Keep XML horizontal/top padding; lift above system nav / gesture bar.
+            view.updatePadding(bottom = insets.bottom + 12.dpToPx())
+            windowInsets
+        }
+        viewModel.autoChangeProgressLiveData.observe(this) { progress ->
+            if (progress == null) {
+                binding.autoChangeProgressBar.isGone = true
+                binding.llAutoChangeStatus.isGone = true
+                return@observe
+            }
+            binding.autoChangeProgressBar.isVisible = true
+            binding.llAutoChangeStatus.isVisible = true
+            binding.autoChangeProgressBar.bindAutoChangeProgress(
+                progress.completed,
+                progress.total,
+            )
+            bindAutoChangeProgressStrip(
+                metricsView = binding.tvAutoChangeMetrics,
+                currentView = binding.tvAutoChangeCurrent,
+                progress = progress,
+            )
         }
         window.setBackgroundDrawable(null)
         upScreenTimeOut()

@@ -822,6 +822,7 @@
     <string name="about_official_account">Official Accounts[开源阅读]</string>
     <string name="source_auto_changing">Changing source</string>
     <string name="source_auto_changing_progress">Changing source %1$d/%2$d</string>
+    <string name="source_auto_change_metrics">Auto change · asked %1$d/%2$d · asking %3$d/%4$d</string>
     <string name="click_to_apply">Tap to join</string>
     <string name="middle">Middle</string>
     <string name="information">Information</string>

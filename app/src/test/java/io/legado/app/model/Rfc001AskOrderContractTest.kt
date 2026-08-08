@@ -76,6 +76,8 @@ class Rfc001AskOrderContractTest {
         assertTrue(auto.contains("CANDIDATE_CAP"))
         assertTrue(auto.contains("chapter.index + 1"))
         assertTrue(auto.contains("onProgress"))
+        assertTrue(auto.contains("AutoChangeProgressUi("))
+        assertTrue(auto.contains("询问中"))
     }
 
     @Test
