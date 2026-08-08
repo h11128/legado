@@ -83,4 +83,4 @@ Plan: rebuild precise `origin` when possible; otherwise change-source / fallback
 3. Phase 4: **604** books bound to fallback `http://api.lemiyigou.com`（猫眼看书）with intro tag `needs_manual_reshelve` (dead / non-URL / failed rebuild / niche titles with no MCP search hit). Real search pass on 120 titles: **0** remaps.
 4. Phase 5: report `temp/shelf_restore/shelf_zero_missing_report.json`; pulled `temp/shelf_restore/backup_after_zero.zip` from phone `Download/legado/backup.zip`. Smoke: 2/3 trxs shelf books had non-empty TOC via `debug_source`.
 
-**Residual:** ~604 books have an enabled origin but need manual 换源 for correct `bookUrl`/正文. Structural zero is met; content verify for that cohort is intentionally deferred.
+**Residual (corrected 2026-08-08 evening):** First pass only rewrote `origin` → **not readable** (`bookUrl` still dead). 120 “search misses” were a **parser bug** (debug timestamps between `┌`/`└`). After fix: real search remaps landed (~231+ in batches); smoke showed DragonQuest hits with TOC+正文; **~170** still `needs_manual_reshelve` (no title hit on probed sources). See `temp/shelf_restore/queue/honesty_reshelve_report.json`.
