@@ -57,3 +57,11 @@
 3. 书架仍引用的 origin：**不要批量 `enabled=false`**，除非已 remap 或用户确认可换源。
 4. 大批量删源前强制导出 `bookSource.json` + `bookshelf.json`（或菜单「导出所有书的书源」）。
 5. 用 MCP 改启用状态时显式传 `preserveEnabled=false`；若手机 build 忽略该参数，用 **delete→save**（本次 re-enable 即如此）。
+
+## Correct recovery policy (user 2026-08-08)
+
+1. **True URL twins** (slash / `#frag` / `##tag`, same site, cleanup `covered_by_enabled` / `twin_of:`):
+   **remap** `books.origin` (+ `originName`) to the surviving enabled source; then delete the unused dup source.
+   Do **not** keep restoring the duplicate permanently.
+2. **Different host / rules that cannot open the book after remap**: **restore** that source (or change-source).
+3. Example: 佩蒲斐榕 `https://m.popofree.com#🎃` → remap 19 books to `https://m.popofree.com`，再删 `#🎃` 源。
