@@ -65,3 +65,22 @@
    Do **not** keep restoring the duplicate permanently.
 2. **Different host / rules that cannot open the book after remap**: **restore** that source (or change-source).
 3. Example: 佩蒲斐榕 `https://m.popofree.com#🎃` → remap 19 books to `https://m.popofree.com`，再删 `#🎃` 源。
+
+## Follow-up 2026-08-08 — shelf zero-missing (rebuild then change-source)
+
+Plan: rebuild precise `origin` when possible; otherwise change-source / fallback bind.
+
+**Structural acceptance (device `com.legado.app.debug`):**
+
+- `books` missing origin (non-`loc_%`) = **0**
+- origins all `enabled=1`
+- 养肥1/2/3 missing = **0**
+
+**Actions:**
+
+1. Phase 0–1: site-probe buckets; `A_same_domain` empty.
+2. Phase 2–3: cloned **31** family / AES-template origins onto exact shelf URLs; sample `start_check_sources` mostly failed (search/TLS/host) → not counted as functional rebuild.
+3. Phase 4: **604** books bound to fallback `http://api.lemiyigou.com`（猫眼看书）with intro tag `needs_manual_reshelve` (dead / non-URL / failed rebuild / niche titles with no MCP search hit). Real search pass on 120 titles: **0** remaps.
+4. Phase 5: report `temp/shelf_restore/shelf_zero_missing_report.json`; pulled `temp/shelf_restore/backup_after_zero.zip` from phone `Download/legado/backup.zip`. Smoke: 2/3 trxs shelf books had non-empty TOC via `debug_source`.
+
+**Residual:** ~604 books have an enabled origin but need manual 换源 for correct `bookUrl`/正文. Structural zero is met; content verify for that cohort is intentionally deferred.
