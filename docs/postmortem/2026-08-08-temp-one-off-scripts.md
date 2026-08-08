@@ -27,6 +27,10 @@ Device verification for auto-换源 and shelf-restore was implemented as one-off
 - Legado HookRules: `legado_temp_script_write_deny`, `legado_temp_script_shell_deny`
 - Promoted scripts: auto-change + shelf-restore under `scripts/` + guides
 - agent-harness skill: common pattern “Agent keeps writing one-off scripts under temp/”
+- **2026-08-08 later:** deleted `legacy_phase234` / `legacy_phase5_finalize`; replaced with reusable
+  `shelf-restore-clone-donors` / `shelf-restore-remap` / `shelf-restore-report`. Workers share
+  `scripts/lib/legado_mcp.py` + `legado_adb.py`. Readable worker builds queue from DB when
+  `work_queue_all.json` is absent.
 
 ## Agent takeaway
 

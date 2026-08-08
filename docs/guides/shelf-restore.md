@@ -10,10 +10,11 @@ Restore **readable** shelf books after source delete / dead origin — not just 
 
 Order of preference:
 
-1. Rebind / remap to an existing enabled source that can open the same title  
-2. Restore a donor source **only** if remap cannot open the book  
+1. Clone missing origins from a donor catalog (same registrable domain / exact URL)  
+2. Dedupe when an enabled same-title copy already exists (drop orphan row)  
 3. Change-source search (MCP `debug_source`) with TOC+content proof  
-4. Leave tagged for manual when no hit  
+4. One-by-one readable worker for leftovers  
+5. Leave tagged `[needs_manual_reshelve]` when no hit  
 
 Never claim fixed without device verify (TOC + content). Never delete shelf-referenced sources without bookshelf-origin check (see postmortem).
 
@@ -22,15 +23,13 @@ Never claim fixed without device verify (TOC + content). Never delete shelf-refe
 | Script | Purpose |
 |---|---|
 | `scripts/shelf-restore-pick-books.py` | List `missing_origin` / `disabled_origin` / `empty_toc` candidates from phone DB |
-| `scripts/shelf-restore-readable.py` | One-by-one remount until readable (MCP) |
-| `scripts/shelf-restore-change-source.py` | Batch search remaps (MCP debug parser) |
-| `scripts/lib/legado_adb.py` | Shared adb pull / open book |
+| `scripts/shelf-restore-clone-donors.py` | Clone missing origins from donor `bookSource.json` / all_sources catalogs |
+| `scripts/shelf-restore-remap.py` | Same-title dedupe (delete orphan if enabled copy exists); optional `--tag-manual` (no origin rewrite) |
+| `scripts/shelf-restore-change-source.py` | Batch MCP search remaps for manual-tagged books |
+| `scripts/shelf-restore-readable.py` | One-by-one remount until readable (MCP); always merges live missing/manual from DB |
+| `scripts/shelf-restore-report.py` | Structural missing/disabled/manual counts; optional `--smoke N` |
+| `scripts/lib/legado_adb.py` | Shared adb pull / push / open book |
 | `scripts/lib/legado_mcp.py` | MCP URL from env / `config/mcp_defaults.json` / Cursor mcp.json |
-
-Legacy one-shots (do **not** use daily; need `--i-know-this-is-legacy`):
-
-- `scripts/shelf_restore/legacy_phase234.py`
-- `scripts/shelf_restore/legacy_phase5_finalize.py`
 
 Runtime JSON / pulled DBs stay under `temp/shelf_restore/` (gitignored working area).
 
@@ -53,14 +52,26 @@ export LEGADO_MCP_URL=…   # required for MCP workers
 # 1) Inventory
 python scripts/shelf-restore-pick-books.py --kind all --limit 40
 
-# 2) Prefer auto-换源 UI path for missing_source books (read page):
+# 2) Clone missing origins from a backup / export catalog
+python scripts/shelf-restore-clone-donors.py \
+  --catalog temp/shelf_restore/backup_0726/bookSource.json \
+  --limit 80
+
+# 3) Honest same-title dedupe (drop orphan when enabled copy exists); optional tag only
+python scripts/shelf-restore-remap.py --push
+python scripts/shelf-restore-remap.py --tag-manual --push
+
+# 4) Prefer auto-换源 UI path for missing_source books (read page):
 ./scripts/auto-change-device-session.sh --no-install --kind missing_source
 
-# 3) Batch remaps when many books share dead hosts
-python scripts/shelf-restore-change-source.py
+# 5) Batch search remaps when many books are tagged needs_manual_reshelve
+python scripts/shelf-restore-change-source.py --limit 50
 
-# 4) Strict one-by-one readable worker (slow; MCP single-flight)
+# 6) Strict one-by-one readable worker (slow; MCP single-flight)
 python scripts/shelf-restore-readable.py
+
+# 7) Status / optional smoke
+python scripts/shelf-restore-report.py --smoke 4
 ```
 
 Stop a stuck readable worker: `powershell -File scripts/shelf_restore/stop_readable_worker.ps1` (inspect first).

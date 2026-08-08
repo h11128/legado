@@ -5,24 +5,27 @@ Prefer: python scripts/shelf-restore-change-source.py
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
 import sqlite3
-import subprocess
 import sys
 import time
-import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-ROOT = REPO / "temp" / "shelf_restore" / "queue"
-ROOT.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(REPO / "scripts"))
-from lib.legado_mcp import resolve_mcp_url  # noqa: E402
+from lib.legado_adb import (  # noqa: E402
+    DEFAULT_PKG,
+    pull_legado_db,
+    push_legado_db,
+    shelf_restore_queue,
+)
+from lib.legado_mcp import LegadoMcp  # noqa: E402
 
-MCP, TOKEN = resolve_mcp_url()
-PKG = os.environ.get("LEGADO_DEBUG_PKG", "com.legado.app.debug")
+ROOT = shelf_restore_queue()
+PKG = DEFAULT_PKG
 os.environ["MSYS_NO_PATHCONV"] = "1"
 
 SEARCH_SOURCES = [
@@ -32,80 +35,6 @@ SEARCH_SOURCES = [
     ("https://bookshelf.html5.qq.com/", "松鹤阅读"),
     ("https://trxs.cc", "同人小说trxs.cc"),
 ]
-
-MAX_BOOKS = 450
-MAX_SECONDS = 35 * 60
-
-
-class Mcp:
-    def __init__(self) -> None:
-        self.sess = None
-        self._id = 0
-        last: Exception | None = None
-        for _ in range(20):
-            try:
-                self._post(
-                    {
-                        "jsonrpc": "2.0",
-                        "id": 1,
-                        "method": "initialize",
-                        "params": {
-                            "protocolVersion": "2024-11-05",
-                            "capabilities": {},
-                            "clientInfo": {"name": "chg2", "version": "0"},
-                        },
-                    }
-                )
-                self._post({"jsonrpc": "2.0", "method": "notifications/initialized"})
-                return
-            except Exception as e:
-                last = e
-                time.sleep(2)
-                subprocess.call(
-                    [
-                        "adb",
-                        "shell",
-                        "monkey",
-                        "-p",
-                        PKG,
-                        "-c",
-                        "android.intent.category.LAUNCHER",
-                        "1",
-                    ],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-        raise RuntimeError(last)
-
-    def _post(self, payload: dict, timeout: int = 100) -> str:
-        h = {
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-            "X-Legado-Token": TOKEN,
-        }
-        if self.sess:
-            h["Mcp-Session-Id"] = self.sess
-        req = urllib.request.Request(
-            MCP, data=json.dumps(payload).encode(), headers=h, method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            if not self.sess:
-                self.sess = r.headers.get("Mcp-Session-Id")
-            return r.read().decode()
-
-    def call(self, name: str, args: dict, timeout: int = 100) -> dict:
-        self._id += 1
-        return json.loads(
-            self._post(
-                {
-                    "jsonrpc": "2.0",
-                    "id": self._id,
-                    "method": "tools/call",
-                    "params": {"name": name, "arguments": args},
-                },
-                timeout=timeout,
-            )
-        )
 
 
 def normalize_title(s: str) -> str:
@@ -155,41 +84,37 @@ def pick_hit(hits: list[dict], name: str, author: str) -> dict | None:
             else:
                 fuzzy.append(h)
         elif hn and (nt in hn or hn in nt):
-            # avoid over-short false positives like 华娱
             shorter, longer = (hn, nt) if len(hn) <= len(nt) else (nt, hn)
             if len(shorter) >= 4 and len(shorter) / max(len(longer), 1) >= 0.55:
                 fuzzy.append(h)
     return (exact or fuzzy or [None])[0]
 
 
-def pull_db(dest: Path) -> None:
-    subprocess.check_call(["adb", "shell", "am", "force-stop", PKG])
-    time.sleep(1.0)
-    with open(dest, "wb") as f:
-        subprocess.check_call(
-            ["adb", "exec-out", "run-as", PKG, "cat", "databases/legado.db"], stdout=f
-        )
-
-
-def push_db(src: Path) -> None:
-    subprocess.check_call(["adb", "push", str(src), "/data/local/tmp/legado_work.db"])
-    subprocess.check_call(
-        [
-            "adb",
-            "shell",
-            f"run-as {PKG} cp /data/local/tmp/legado_work.db databases/legado.db "
-            f"&& run-as {PKG} rm -f databases/legado.db-wal databases/legado.db-shm",
-        ]
-    )
-    subprocess.check_call(
-        ["adb", "shell", "monkey", "-p", PKG, "-c", "android.intent.category.LAUNCHER", "1"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+def score_readable(log: str) -> dict:
+    toc = 0
+    m = re.search(r"列表大小:(\d+)", log)
+    if m:
+        toc = int(m.group(1))
+    content = ""
+    m = re.search(r"┌获取正文内容\n└([\s\S]*?)(?:\n\[|$)", log)
+    if m:
+        content = (m.group(1) or "").strip()
+    ok = toc > 0 and len(content) > 50
+    return {"ok": ok, "toc": toc, "content_len": len(content)}
 
 
 def main() -> None:
-    # unit-check parser against saved log if present
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--limit", type=int, default=450)
+    ap.add_argument("--max-seconds", type=int, default=35 * 60)
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument(
+        "--no-push",
+        action="store_true",
+        help="do not push DB to phone after changes",
+    )
+    args = ap.parse_args()
+
     sample = ROOT / "debug_lemi_hypnosis.txt"
     if sample.exists():
         hits = parse_search_hits(sample.read_text(encoding="utf-8"))
@@ -197,7 +122,7 @@ def main() -> None:
         assert hits and hits[0]["name"] == "催眠手机", hits[:1]
 
     db = ROOT / "live_chg2.db"
-    pull_db(db)
+    pull_legado_db(db, pkg=PKG, min_bytes=1000)
     con = sqlite3.connect(str(db))
     rows = con.execute(
         """
@@ -215,18 +140,36 @@ def main() -> None:
             continue
         seen.add(key)
         queue.append(r)
-        if len(queue) >= MAX_BOOKS:
+        if len(queue) >= args.limit:
             break
-    print("queue", len(queue), "of manual", len(rows))
+    print("queue", len(queue), "of manual", len(rows), "dry_run", args.dry_run)
 
-    mcp = Mcp()
+    def wake(_e: Exception, _i: int) -> None:
+        import subprocess
+
+        subprocess.call(
+            [
+                "adb",
+                "shell",
+                "monkey",
+                "-p",
+                PKG,
+                "-c",
+                "android.intent.category.LAUNCHER",
+                "1",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    mcp = LegadoMcp(connect_retries=20, on_retry=wake)
     existing = {r[0] for r in con.execute("select bookUrl from books")}
     changed = []
     failed = []
     t0 = time.time()
 
     for idx, (name, author, origin, origin_name, book_url) in enumerate(queue):
-        if time.time() - t0 > MAX_SECONDS:
+        if time.time() - t0 > args.max_seconds:
             print("time budget stop", idx)
             break
         search_key = re.split(r"[（(]", (name or "").strip())[0].strip() or (name or "")
@@ -237,23 +180,25 @@ def main() -> None:
 
         hit = None
         used = None
-        raw_sizes = {}
+        raw_sizes: dict = {}
         for src_url, src_name in SEARCH_SOURCES:
             try:
-                d = mcp.call(
-                    "debug_source",
-                    {"url": src_url, "key": search_key, "timeoutSec": 35},
-                    timeout=50,
-                )
-                log = d["result"]["content"][0]["text"]
+                log = mcp.debug_source(src_url, search_key, timeout_sec=35)
                 m = re.search(r"列表大小:(\d+)", log.split("开始解析详情页")[0])
                 raw_sizes[src_url] = int(m.group(1)) if m else -1
                 hits = parse_search_hits(log)
                 pick = pick_hit(hits, name or "", author or "")
-                if pick:
-                    hit = pick
-                    used = (src_url, src_name)
-                    break
+                if not pick:
+                    continue
+                # Prove TOC+content on the hit bookUrl before accepting.
+                prove = mcp.debug_source(src_url, pick["bookUrl"], timeout_sec=45)
+                sc = score_readable(prove)
+                if not sc.get("ok"):
+                    raw_sizes[src_url] = f"hit_not_readable:{sc}"
+                    continue
+                hit = {**pick, **sc}
+                used = (src_url, src_name)
+                break
             except Exception as e:
                 raw_sizes[src_url] = f"err:{e}"
                 continue
@@ -276,6 +221,20 @@ def main() -> None:
                 {"name": name, "reason": "bookUrl_conflict", "hit": new_bu}
             )
             print(f"[{idx}] CONFLICT {name}")
+            continue
+
+        if args.dry_run:
+            changed.append(
+                {
+                    "name": name,
+                    "dry_run": True,
+                    "to_origin": used[0],
+                    "to_bookUrl": new_bu,
+                    "toc": hit.get("toc"),
+                    "content_len": hit.get("content_len"),
+                }
+            )
+            print(f"[{idx}] DRY {name} -> {hit['name']} @ {used[0]}")
             continue
 
         intro = con.execute(
@@ -304,13 +263,16 @@ def main() -> None:
                 "to_bookUrl": new_bu,
                 "hit_name": hit["name"],
                 "hit_author": hit.get("author"),
+                "toc": hit.get("toc"),
+                "content_len": hit.get("content_len"),
             }
         )
         print(f"[{idx}] OK {name} -> {hit['name']} @ {used[0]}")
         if idx % 10 == 9:
             con.commit()
 
-    con.commit()
+    if not args.dry_run:
+        con.commit()
     miss = con.execute(
         """
         select count(*) from books
@@ -341,6 +303,7 @@ def main() -> None:
                 "missing": miss,
                 "manual_left": manual,
                 "elapsed_s": round(time.time() - t0, 1),
+                "dry_run": args.dry_run,
             },
             ensure_ascii=False,
             indent=2,
@@ -348,8 +311,13 @@ def main() -> None:
         encoding="utf-8",
     )
     con.close()
-    push_db(db)
-    print("pushed")
+    if not args.dry_run and not args.no_push and changed:
+        push_legado_db(db, pkg=PKG)
+        print("pushed")
+    elif args.dry_run:
+        print("dry-run: no push")
+    else:
+        print("skip push")
 
 
 if __name__ == "__main__":

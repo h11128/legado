@@ -13,21 +13,23 @@ import sqlite3
 import subprocess
 import sys
 import time
-import urllib.request
 from collections import defaultdict
 from copy import deepcopy
 from pathlib import Path
 from urllib.parse import urlparse
 
-# Runtime state stays under temp/; code lives in scripts/shelf_restore/.
 REPO = Path(__file__).resolve().parents[2]
-ROOT = REPO / "temp" / "shelf_restore" / "queue"
-ROOT.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(REPO / "scripts"))
-from lib.legado_mcp import resolve_mcp_url  # noqa: E402
+from lib.legado_adb import (  # noqa: E402
+    DEFAULT_PKG,
+    pull_legado_db,
+    push_legado_db,
+    shelf_restore_queue,
+)
+from lib.legado_mcp import LegadoMcp  # noqa: E402
 
-PKG = os.environ.get("LEGADO_DEBUG_PKG", "com.legado.app.debug")
-MCP, TOKEN = resolve_mcp_url()
+ROOT = shelf_restore_queue()
+PKG = DEFAULT_PKG
 os.environ["MSYS_NO_PATHCONV"] = "1"
 
 SEARCH_SOURCES = [
@@ -51,86 +53,25 @@ MARKER_RE = re.compile(
 )
 
 
-class Mcp:
-    def __init__(self) -> None:
-        self.sess = None
-        self._id = 0
-        self._ensure()
+def _wake_app(_e: Exception, _i: int) -> None:
+    subprocess.call(
+        [
+            "adb",
+            "shell",
+            "monkey",
+            "-p",
+            PKG,
+            "-c",
+            "android.intent.category.LAUNCHER",
+            "1",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
-    def _ensure(self) -> None:
-        last: Exception | None = None
-        for _ in range(25):
-            try:
-                self.sess = None
-                self._post(
-                    {
-                        "jsonrpc": "2.0",
-                        "id": 1,
-                        "method": "initialize",
-                        "params": {
-                            "protocolVersion": "2024-11-05",
-                            "capabilities": {},
-                            "clientInfo": {"name": "readable", "version": "0"},
-                        },
-                    }
-                )
-                self._post({"jsonrpc": "2.0", "method": "notifications/initialized"})
-                return
-            except Exception as e:
-                last = e
-                subprocess.call(
-                    [
-                        "adb",
-                        "shell",
-                        "monkey",
-                        "-p",
-                        PKG,
-                        "-c",
-                        "android.intent.category.LAUNCHER",
-                        "1",
-                    ],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                time.sleep(2)
-        raise RuntimeError(last)
 
-    def _post(self, payload: dict, timeout: int = 120) -> str:
-        h = {
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-            "X-Legado-Token": TOKEN,
-        }
-        if self.sess:
-            h["Mcp-Session-Id"] = self.sess
-        req = urllib.request.Request(
-            MCP, data=json.dumps(payload).encode(), headers=h, method="POST"
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                if not self.sess:
-                    self.sess = r.headers.get("Mcp-Session-Id")
-                return r.read().decode()
-        except Exception:
-            self._ensure()
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                if not self.sess:
-                    self.sess = r.headers.get("Mcp-Session-Id")
-                return r.read().decode()
-
-    def call(self, name: str, args: dict, timeout: int = 120) -> dict:
-        self._id += 1
-        return json.loads(
-            self._post(
-                {
-                    "jsonrpc": "2.0",
-                    "id": self._id,
-                    "method": "tools/call",
-                    "params": {"name": name, "arguments": args},
-                },
-                timeout=timeout,
-            )
-        )
+def connect_mcp() -> LegadoMcp:
+    return LegadoMcp(connect_retries=25, on_retry=_wake_app)
 
 
 def host(u: str) -> str:
@@ -217,27 +158,12 @@ def score_readable(log: str) -> dict:
 
 
 def pull_db() -> sqlite3.Connection:
-    subprocess.check_call(["adb", "shell", "am", "force-stop", PKG])
-    time.sleep(1.0)
-    with open(DB, "wb") as f:
-        subprocess.check_call(
-            ["adb", "exec-out", "run-as", PKG, "cat", "databases/legado.db"], stdout=f
-        )
-    if DB.stat().st_size < 1_000_000:
-        raise RuntimeError(f"pulled DB too small ({DB.stat().st_size}B) — refuse corrupt/empty")
+    pull_legado_db(DB, pkg=PKG, min_bytes=1_000_000)
     con = sqlite3.connect(str(DB))
-    try:
-        ic = con.execute("PRAGMA integrity_check").fetchone()[0]
-        if ic != "ok":
-            con.close()
-            raise RuntimeError(f"pulled DB integrity_check={ic}")
-        books = con.execute("select count(*) from books").fetchone()[0]
-        if books < 10:
-            con.close()
-            raise RuntimeError(f"pulled DB books={books} — refuse empty shelf")
-    except sqlite3.DatabaseError as e:
+    books = con.execute("select count(*) from books").fetchone()[0]
+    if books < 10:
         con.close()
-        raise RuntimeError(f"pulled DB unreadable: {e}") from e
+        raise RuntimeError(f"pulled DB books={books} — refuse empty shelf")
     try:
         con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except Exception:
@@ -256,21 +182,8 @@ def push_db() -> None:
             raise RuntimeError(f"refuse push: integrity={ic} books={books}")
     finally:
         con.close()
-    subprocess.check_call(["adb", "push", str(DB), "/data/local/tmp/legado_work.db"])
-    subprocess.check_call(
-        [
-            "adb",
-            "shell",
-            f"run-as {PKG} cp /data/local/tmp/legado_work.db databases/legado.db "
-            f"&& run-as {PKG} rm -f databases/legado.db-wal databases/legado.db-shm",
-        ]
-    )
-    subprocess.check_call(
-        ["adb", "shell", "monkey", "-p", PKG, "-c", "android.intent.category.LAUNCHER", "1"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    time.sleep(4)
+    push_legado_db(DB, pkg=PKG)
+    time.sleep(2)
 
 
 def append_progress(row: dict) -> None:
@@ -304,19 +217,14 @@ def load_done() -> set[str]:
     return done
 
 
-def verify_book(mcp: Mcp, origin: str, book_url: str, name: str | None = None) -> dict:
+def verify_book(mcp: LegadoMcp, origin: str, book_url: str, name: str | None = None) -> dict:
     # Never verify by name alone — that can open a different book with similar title.
     keys = [book_url, "::" + book_url]
     best = {"ok": False, "toc": -1, "content_len": 0, "key": None}
     for key in keys:
         for attempt in range(4):
             try:
-                d = mcp.call(
-                    "debug_source",
-                    {"url": origin, "key": key, "timeoutSec": 55},
-                    timeout=80,
-                )
-                log = d["result"]["content"][0]["text"]
+                log = mcp.debug_source(origin, key, timeout_sec=55)
                 if "占用" in log or "请稍后" in log:
                     time.sleep(2 + attempt * 2)
                     continue
@@ -343,27 +251,36 @@ def clear_manual_intro(intro: str | None) -> str:
 
 
 def build_catalog() -> dict[str, dict]:
-    backup = json.loads(
-        (ROOT.parent / "backup_0726/bookSource.json").read_text(encoding="utf-8")
-    )
+    by_url: dict[str, dict] = {}
     candidates = [
         Path(os.environ["LEGADO_ALL_SOURCES_JSON"])
         if os.environ.get("LEGADO_ALL_SOURCES_JSON")
         else None,
         REPO.parent / "legadoSkill" / "temp" / "all_sources.json",
         REPO / "temp" / "all_sources.json",
+        ROOT.parent / "backup_0726" / "bookSource.json",
+        ROOT.parent / "backup_now" / "bookSource.json",
     ]
-    all_path = next((p for p in candidates if p and p.is_file()), None)
-    if all_path is None:
+    loaded = 0
+    for path in candidates:
+        if not path or not path.is_file():
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and "data" in data:
+            data = data["data"]
+        if not isinstance(data, list):
+            continue
+        for s in data:
+            if isinstance(s, dict) and s.get("bookSourceUrl"):
+                by_url[s["bookSourceUrl"]] = s
+        loaded += 1
+        print("catalog+", path, flush=True)
+    if not by_url:
         raise FileNotFoundError(
-            "all_sources.json missing; set LEGADO_ALL_SOURCES_JSON or place under "
-            "legadoSkill/temp/ or temp/"
+            "No donor catalog found. Set LEGADO_ALL_SOURCES_JSON or place "
+            "bookSource.json under temp/shelf_restore/backup_*/"
         )
-    all_data = json.loads(all_path.read_text(encoding="utf-8"))["data"]
-    by_url = {}
-    for s in backup + all_data:
-        if isinstance(s, dict) and s.get("bookSourceUrl"):
-            by_url[s["bookSourceUrl"]] = s
+    print("catalog sources", len(by_url), "files", loaded, flush=True)
     return by_url
 
 
@@ -389,11 +306,54 @@ def main() -> None:
             pass
 
 
+def build_items_from_db(con: sqlite3.Connection) -> list[dict]:
+    """Default queue when work_queue_all.json is absent."""
+    items: list[dict] = []
+    seen: set[str] = set()
+
+    def add(row, kind: str) -> None:
+        name, author, origin, origin_name, book_url, intro = row
+        key = book_url or f"{name}|{author}"
+        if key in seen:
+            return
+        seen.add(key)
+        items.append(
+            {
+                "name": name,
+                "author": author,
+                "origin": origin,
+                "originName": origin_name,
+                "bookUrl": book_url,
+                "intro": intro or "",
+                "work_kind": kind,
+            }
+        )
+
+    for row in con.execute(
+        """
+        select name, author, origin, originName, bookUrl, intro from books
+        where intro like '%needs_manual_reshelve%'
+        order by length(ifnull(name,'')) asc
+        """
+    ):
+        add(row, "manual")
+    for row in con.execute(
+        """
+        select name, author, origin, originName, bookUrl, intro from books
+        where origin not like 'loc_%'
+          and origin not in (select bookSourceUrl from book_sources)
+        """
+    ):
+        add(row, "missing")
+    return items
+
+
 def _main_inner() -> None:
-    queues = json.loads((ROOT / "work_queue_all.json").read_text(encoding="utf-8"))
-    # Order: rebind manuals first, then verify remapped, then remaining manuals
-    items = []
-    seen = set()
+    print("pull db…", flush=True)
+    con = pull_db()
+    queue_path = ROOT / "work_queue_all.json"
+    items: list[dict] = []
+    seen: set[str] = set()
 
     def add(item: dict, kind: str) -> None:
         key = item.get("bookUrl") or f"{item.get('name')}|{item.get('author')}"
@@ -402,13 +362,23 @@ def _main_inner() -> None:
         seen.add(key)
         items.append({**item, "work_kind": kind})
 
-    for r in queues.get("rebind_existing") or []:
-        if "needs_manual" in (r.get("intro") or ""):
-            add(r, "rebind")
-    for r in queues.get("verify_remapped") or []:
-        add(r, "verify")
-    for r in queues.get("manual") or []:
-        add(r, "manual")
+    if queue_path.is_file():
+        queues = json.loads(queue_path.read_text(encoding="utf-8"))
+        for r in queues.get("rebind_existing") or []:
+            if "needs_manual" in (r.get("intro") or ""):
+                add(r, "rebind")
+        for r in queues.get("verify_remapped") or []:
+            add(r, "verify")
+        for r in queues.get("manual") or []:
+            add(r, "manual")
+        print("queue file", queue_path, flush=True)
+    # Always merge live missing / manual rows so a stale queue file cannot hide orphans.
+    for row in build_items_from_db(con):
+        add(row, row.get("work_kind") or "db")
+    if not items:
+        print("empty queue", flush=True)
+        return
+    print("merged queue size", len(items), flush=True)
 
     done = load_done()
     print("items", len(items), "already_done_keys", len(done), flush=True)
@@ -417,14 +387,12 @@ def _main_inner() -> None:
     catalog = build_catalog()
     print("catalog", len(catalog), flush=True)
 
-    print("pull db…", flush=True)
-    con = pull_db()
     print("push db / start app…", flush=True)
     push_db()
     print("connect mcp…", flush=True)
-    mcp = Mcp()
+    mcp = connect_mcp()
     try:
-        print(mcp.call("reset_mcp_channel", {}), flush=True)
+        print(mcp.reset_channel(), flush=True)
     except Exception as e:
         print("reset_mcp_channel", e, flush=True)
     print("mcp ready", flush=True)
@@ -467,12 +435,8 @@ def _main_inner() -> None:
             or "未整理"
         )
         s["bookSourceComment"] = (s.get("bookSourceComment") or "") + "\n# shelf-readable-restore"
-        resp = mcp.call(
-            "save_source",
-            {"source": json.dumps(s, ensure_ascii=False), "format": "json"},
-        )
-        msg = resp["result"]["content"][0]["text"]
-        return not (resp["result"].get("isError") or "失败" in msg)
+        msg = mcp.save_source(s)
+        return "失败" not in msg
 
     def apply_update(
         book_url_before: str,
@@ -556,7 +520,7 @@ def _main_inner() -> None:
                 processed += 1
                 if push_needed and processed % 5 == 0:
                     push_db()
-                    mcp = Mcp()
+                    mcp = connect_mcp()
                     push_needed = False
                 continue
 
@@ -653,7 +617,7 @@ def _main_inner() -> None:
                     processed += 1
                     if push_needed and processed % 5 == 0:
                         push_db()
-                        mcp = Mcp()
+                        mcp = connect_mcp()
                         push_needed = False
         if restored:
             continue
@@ -675,22 +639,12 @@ def _main_inner() -> None:
                 break
             for src_url, src_name in SEARCH_SOURCES:
                 try:
-                    d = mcp.call(
-                        "debug_source",
-                        {"url": src_url, "key": search_key, "timeoutSec": 45},
-                        timeout=70,
-                    )
-                    log = d["result"]["content"][0]["text"]
+                    log = mcp.debug_source(src_url, search_key, timeout_sec=40)
                     if "占用" in log:
                         print("  channel busy, sleep", flush=True)
                         time.sleep(5)
-                        mcp.call("reset_mcp_channel", {})
-                        d = mcp.call(
-                            "debug_source",
-                            {"url": src_url, "key": search_key, "timeoutSec": 45},
-                            timeout=70,
-                        )
-                        log = d["result"]["content"][0]["text"]
+                        mcp.reset_channel()
+                        log = mcp.debug_source(src_url, search_key, timeout_sec=40)
                     hits = parse_search_hits(log)
                     hit = pick_hit(hits, name, author)
                     print(
@@ -752,9 +706,9 @@ def _main_inner() -> None:
                     processed += 1
                     if push_needed and processed % 3 == 0:
                         push_db()
-                        mcp = Mcp()
+                        mcp = connect_mcp()
                         try:
-                            mcp.call("reset_mcp_channel", {})
+                            mcp.reset_channel()
                         except Exception:
                             pass
                         push_needed = False
@@ -794,9 +748,9 @@ def _main_inner() -> None:
             processed += 1
             if push_needed and processed % 3 == 0:
                 push_db()
-                mcp = Mcp()
+                mcp = connect_mcp()
                 try:
-                    mcp.call("reset_mcp_channel", {})
+                    mcp.reset_channel()
                 except Exception:
                     pass
                 push_needed = False

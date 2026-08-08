@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 def repo_root() -> Path:
@@ -48,15 +49,48 @@ def resolve_mcp_url(explicit: str | None = None) -> tuple[str, str]:
     )
 
 
+def tool_text(result: Any) -> str:
+    """Extract first text payload from an MCP tools/call result."""
+    if result is None:
+        return ""
+    if isinstance(result, str):
+        return result
+    content = result.get("content") if isinstance(result, dict) else None
+    if isinstance(content, list) and content:
+        first = content[0]
+        if isinstance(first, dict):
+            return str(first.get("text") or "")
+        return str(first)
+    return str(result)
+
+
+def tool_is_error(result: Any) -> bool:
+    if not isinstance(result, dict):
+        return False
+    if result.get("isError"):
+        return True
+    return "失败" in tool_text(result)
+
+
 class LegadoMcp:
-    def __init__(self, url: str | None = None, token: str | None = None, timeout: int = 90):
+    def __init__(
+        self,
+        url: str | None = None,
+        token: str | None = None,
+        timeout: int = 90,
+        *,
+        connect_retries: int = 1,
+        on_retry: Callable[[Exception, int], None] | None = None,
+    ):
         resolved_url, resolved_token = resolve_mcp_url(url)
         self.url = resolved_url
         self.token = token or resolved_token
         self.timeout = timeout
         self.sess: str | None = None
         self._id = 0
-        self._initialize()
+        self._connect_retries = max(1, connect_retries)
+        self._on_retry = on_retry
+        self._connect()
 
     def _post(self, payload: dict[str, Any], timeout: int | None = None) -> dict[str, Any]:
         headers = {
@@ -76,39 +110,101 @@ class LegadoMcp:
             if not self.sess:
                 self.sess = r.headers.get("Mcp-Session-Id")
             body = r.read().decode()
-            # SSE: take last data: line if present
             if body.lstrip().startswith("event:") or "\ndata:" in body:
                 for line in reversed(body.splitlines()):
                     if line.startswith("data:"):
                         return json.loads(line[5:].strip() or "{}")
             return json.loads(body or "{}")
 
-    def _initialize(self) -> None:
-        self._post(
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": {"name": "legado-scripts", "version": "1"},
-                },
-            }
-        )
-        self._post({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    def _connect(self) -> None:
+        last: Exception | None = None
+        for attempt in range(self._connect_retries):
+            try:
+                self.sess = None
+                self._post(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {
+                            "protocolVersion": "2024-11-05",
+                            "capabilities": {},
+                            "clientInfo": {"name": "legado-scripts", "version": "1"},
+                        },
+                    }
+                )
+                self._post({"jsonrpc": "2.0", "method": "notifications/initialized"})
+                return
+            except Exception as e:
+                last = e
+                if self._on_retry:
+                    self._on_retry(e, attempt)
+                time.sleep(min(2 + attempt, 8))
+        raise RuntimeError(last)
 
-    def call(self, name: str, arguments: dict[str, Any] | None = None, timeout: int | None = None) -> Any:
+    def reconnect(self) -> None:
+        self._connect()
+
+    def call(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        timeout: int | None = None,
+        *,
+        retry_once: bool = True,
+    ) -> Any:
         self._id += 1
-        resp = self._post(
-            {
-                "jsonrpc": "2.0",
-                "id": self._id,
-                "method": "tools/call",
-                "params": {"name": name, "arguments": arguments or {}},
-            },
-            timeout=timeout,
-        )
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._id,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments or {}},
+        }
+        try:
+            resp = self._post(payload, timeout=timeout)
+        except Exception:
+            if not retry_once:
+                raise
+            self.reconnect()
+            resp = self._post(payload, timeout=timeout)
         if "error" in resp:
             raise RuntimeError(resp["error"])
         return resp.get("result")
+
+    def text(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        timeout: int | None = None,
+    ) -> str:
+        return tool_text(self.call(name, arguments, timeout=timeout))
+
+    def get_source(self, url: str) -> dict[str, Any]:
+        return json.loads(self.text("get_source", {"url": url}))
+
+    def save_source(
+        self,
+        source: dict[str, Any] | str,
+        *,
+        preserve_enabled: bool | None = None,
+        preserve_group: bool | None = None,
+    ) -> str:
+        args: dict[str, Any] = {
+            "source": source if isinstance(source, str) else json.dumps(source, ensure_ascii=False),
+            "format": "json",
+        }
+        if preserve_enabled is not None:
+            args["preserveEnabled"] = preserve_enabled
+        if preserve_group is not None:
+            args["preserveGroup"] = preserve_group
+        return self.text("save_source", args)
+
+    def debug_source(self, url: str, key: str, timeout_sec: int = 55) -> str:
+        return self.text(
+            "debug_source",
+            {"url": url, "key": key, "timeoutSec": timeout_sec},
+            timeout=timeout_sec + 30,
+        )
+
+    def reset_channel(self) -> str:
+        return tool_text(self.call("reset_mcp_channel", {}))

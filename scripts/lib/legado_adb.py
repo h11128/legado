@@ -33,7 +33,20 @@ def force_stop(pkg: str = DEFAULT_PKG) -> None:
     time.sleep(0.8)
 
 
-def pull_legado_db(dest: Path, pkg: str = DEFAULT_PKG, *, stop_app: bool = True) -> Path:
+def shelf_restore_queue() -> Path:
+    """Runtime artifact dir for shelf-restore reports/DBs (not scripts)."""
+    p = repo_root() / "temp" / "shelf_restore" / "queue"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def pull_legado_db(
+    dest: Path,
+    pkg: str = DEFAULT_PKG,
+    *,
+    stop_app: bool = True,
+    min_bytes: int = 1000,
+) -> Path:
     """Pull databases/legado.db via run-as. Caller should treat dest as ephemeral under temp/."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     if stop_app:
@@ -43,7 +56,7 @@ def pull_legado_db(dest: Path, pkg: str = DEFAULT_PKG, *, stop_app: bool = True)
             ["adb", "exec-out", "run-as", pkg, "cat", "databases/legado.db"],
             stdout=f,
         )
-    if dest.stat().st_size < 1000:
+    if dest.stat().st_size < min_bytes:
         raise RuntimeError(f"db too small: {dest} ({dest.stat().st_size} bytes)")
     con = sqlite3.connect(str(dest))
     try:
@@ -53,6 +66,55 @@ def pull_legado_db(dest: Path, pkg: str = DEFAULT_PKG, *, stop_app: bool = True)
     finally:
         con.close()
     return dest
+
+
+def push_legado_db(
+    src: Path,
+    pkg: str = DEFAULT_PKG,
+    *,
+    relaunch: bool = True,
+    min_bytes: int = 1000,
+    min_books: int = 10,
+) -> None:
+    """Push a working copy into the app's databases/legado.db (clears WAL)."""
+    if not src.is_file() or src.stat().st_size < min_bytes:
+        raise RuntimeError(f"refuse push of tiny/missing db: {src}")
+    con = sqlite3.connect(str(src))
+    try:
+        ic = con.execute("pragma integrity_check").fetchone()[0]
+        if ic != "ok":
+            raise RuntimeError(f"refuse push: integrity_check={ic}")
+        books = con.execute("select count(*) from books").fetchone()[0]
+        if books < min_books:
+            raise RuntimeError(f"refuse push: books={books}")
+    finally:
+        con.close()
+    force_stop(pkg)
+    subprocess.check_call(["adb", "push", str(src), "/data/local/tmp/legado_work.db"])
+    subprocess.check_call(
+        [
+            "adb",
+            "shell",
+            f"run-as {pkg} cp /data/local/tmp/legado_work.db databases/legado.db "
+            f"&& run-as {pkg} rm -f databases/legado.db-wal databases/legado.db-shm",
+        ]
+    )
+    if relaunch:
+        subprocess.check_call(
+            [
+                "adb",
+                "shell",
+                "monkey",
+                "-p",
+                pkg,
+                "-c",
+                "android.intent.category.LAUNCHER",
+                "1",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        time.sleep(2)
 
 
 def open_read_book(book_url: str, pkg: str = DEFAULT_PKG, *, in_bookshelf: bool = True) -> None:
