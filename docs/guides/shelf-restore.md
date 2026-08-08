@@ -28,15 +28,18 @@ Never claim fixed without device verify (TOC + content). Never delete shelf-refe
 | `scripts/shelf-restore-change-source.py` | Batch MCP search remaps for manual-tagged books |
 | `scripts/shelf-restore-readable.py` | One-by-one remount until readable (MCP); always merges live missing/manual from DB |
 | `scripts/shelf-restore-report.py` | Structural missing/disabled/manual counts; optional `--smoke N` |
-| `scripts/lib/legado_adb.py` | Shared adb pull / push / open book |
+| `scripts/lib/legado_adb.py` | Shared adb pull / push / open book / ensure MCP port |
 | `scripts/lib/legado_mcp.py` | MCP URL from env / `config/mcp_defaults.json` / Cursor mcp.json |
+| `scripts/mcp-ensure.py` | Wake MCP after force-stop; write defaults + bump Cursor mcp.json |
 
 Runtime JSON / pulled DBs stay under `temp/shelf_restore/` (gitignored working area).
 
 ## MCP URL
 
 ```bash
-# preferred
+# preferred: wake phone MCP + sync URL (after force-stop / APK install / Cursor ECONNREFUSED)
+python scripts/mcp-ensure.py
+
 export LEGADO_MCP_URL='http://<phone>:1236/mcp'
 export LEGADO_MCP_TOKEN=1234
 # or write config/mcp_defaults.json {"url":"…","token":"1234"}

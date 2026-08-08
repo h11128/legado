@@ -21,3 +21,6 @@ package-lock.json
 .cxx
 .vscode
 __pycache__/
+# DHCP / local token — regenerate via scripts/mcp-ensure.py
+/config/mcp_defaults.json
+

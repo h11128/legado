@@ -164,16 +164,20 @@ MCP 开关在进程崩溃后会按用户偏好自启；仅用户关闭服务时�
 划掉任务在偏好开启时不杀 MCP；`McpWatchdog` 约每 3 分钟恢复服务并清理僵死通道。
 Wi‑Fi 地址变化时若 debug/校验正在进行，**推迟**重启 MCP 引擎，避免中途掐断工具调用
 （见 `docs/postmortem/2026-07-28-mcp-hang-59f4efb9.md`）。
-CIO `connectionIdleTimeoutSeconds=180`。手机 NSD 发布 `_legado-mcp._tcp`（TXT `path=/mcp`）。PC 用：
+CIO `connectionIdleTimeoutSeconds=180`。手机 NSD 发布 `_legado-mcp._tcp`（TXT `path=/mcp`）。
+
+**进程被杀后 MCP 会断**：`adb force-stop` / 拉库 / 部分装包路径会让 `McpService` 随进程退出；偏好 `mcpService=true` 只在下次 `App` 启动时 `restoreIfEnabled`。Cursor 对 `ECONNREFUSED` 常标成 **non-retryable**，手机恢复后仍要 bump `~/.cursor/mcp.json` 或 Reload MCP。
+
+PC 唤醒 + 写回 URL：
 
 ```bash
-python scripts/mcp_discover.py          # 发现并写回 config/mcp_defaults.json
+python scripts/mcp-ensure.py            # 启 MainActivity → 等 :1236 → /mcp/health → 写 config/mcp_defaults.json + 同步 Cursor
+# 可选：python scripts/mcp_discover.py  # 若仓库内有该脚本：zeroconf / dns-sd / adb 发现
 ```
 
-优先 zeroconf，其次 dns-sd，再回退 adb 读 wlan0。成功后写回 `mcp_defaults.json`，并同步 `~/.cursor/mcp.json` 的 `mcpServers.legado.url`。
-`mcp_client.ensure_session` 在连接失败时会自动 rediscover（repair 脚本无需用户手改 IP）。
-Cursor IDE 内置 MCP 客户端不走 Python：若工具仍超时，discover 写完配置后 **Reload MCP / 重开 agent 一次** 即可，不要手改 DHCP IP。
-勿死记 DHCP IP；SOT 仍是 `config/mcp_defaults.json`。
+成功后写回 `mcp_defaults.json`，并同步 `~/.cursor/mcp.json` 的 `mcpServers.legado.url`（`mcp-ensure` 还会改 `X-Legado-Client` 触发重连）。
+Cursor IDE 内置 MCP 客户端不走 Python：若工具仍超时，ensure/discover 写完配置后 **Reload MCP / 重开 agent 一次** 即可，不要手改 DHCP IP。
+勿死记 DHCP IP；SOT 仍是 `config/mcp_defaults.json`（DHCP，勿提交）。
 
 `start_check_sources` 参数（与 App「校验书源」同逻辑；布尔开关缺省=App 当前配置，仅作用于本次 MCP 批量校验）：
 
