@@ -18,7 +18,6 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.receiver.NetworkChangedListener
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.getPrefBoolean
-import io.legado.app.utils.isForegroundServiceStartDenied
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.putPrefBoolean
@@ -33,6 +32,7 @@ import io.legado.app.web.mcp.McpNsdPublisher
 import io.legado.app.web.mcp.McpToolServer
 import io.legado.app.web.mcp.configureMcp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import splitties.init.appCtx
 
 class McpService : BaseService() {
@@ -46,6 +46,8 @@ class McpService : BaseService() {
 
         private const val ACTION_RESTART = "restartMcpService"
         private const val CONNECTION_IDLE_TIMEOUT_SEC = 180
+        private const val MAX_START_ATTEMPTS = 5
+        private val START_RETRY_DELAYS_MS = longArrayOf(2_000, 5_000, 10_000, 20_000, 30_000)
 
         /** Start as FGS so package-replaced / background restore is allowed on Oreo+. */
         fun start(context: Context) {
@@ -80,6 +82,7 @@ class McpService : BaseService() {
     @Volatile
     private var destroyed = false
     private var notificationList = mutableListOf(appCtx.getString(R.string.service_starting))
+    private var startAttempt = 0
     private val nsdPublisher by lazy { McpNsdPublisher(this) }
     private val networkChangedListener by lazy {
         NetworkChangedListener(this, includeDetailedChanges = true)
@@ -131,6 +134,9 @@ class McpService : BaseService() {
         // must startForeground before any CIO stop/start or NSD work.
         promoteForegroundNotification()
         val sticky = super.onStartCommand(intent, flags, startId)
+        // BaseService returns START_NOT_STICKY after stopSelfResult when FGS start is denied —
+        // do not schedule CIO/NSD in that path (same pattern as AudioCacheService).
+        if (sticky == START_NOT_STICKY) return sticky
         when (intent?.action) {
             IntentAction.stop -> {
                 appCtx.putPrefBoolean(PreferKey.mcpService, false)
@@ -178,19 +184,6 @@ class McpService : BaseService() {
         }
     }
 
-    /**
-     * Same denial handling as [BaseService.tryStartForegroundNotification], callable before
-     * [onStartCommand] returns so BOOT/package-replaced cannot burn the FGS timer.
-     */
-    private fun promoteForegroundNotification() {
-        runCatching {
-            startForegroundNotification()
-        }.onFailure { error ->
-            if (!error.isForegroundServiceStartDenied()) throw error
-            error.printOnDebug()
-        }
-    }
-
     /** Defer engine restart while debug/check holds the channel (thread 59f4efb9). */
     @Synchronized
     private fun requestUpMcpServer() {
@@ -212,7 +205,8 @@ class McpService : BaseService() {
         }
         val token = AppConfig.jsSourceApiToken
         if (token.isNullOrBlank()) {
-            stopWithError(getString(R.string.mcp_service_token_required))
+            // Missing token is user config — do not spin retries.
+            failStart(getString(R.string.mcp_service_token_required), retry = false)
             return
         }
 
@@ -245,6 +239,7 @@ class McpService : BaseService() {
             nextEngine.start(wait = false)
             engine = nextEngine
             isRun = true
+            startAttempt = 0
             // Keep user intent: crash/restart must not clear this.
             appCtx.putPrefBoolean(PreferKey.mcpService, true)
             activeAddressKeys = addresses.mapNotNull { it.hostAddress }.sorted()
@@ -254,7 +249,10 @@ class McpService : BaseService() {
             McpChannelGuard.pendingNetworkRestart = false
         } catch (error: Exception) {
             error.printOnDebug()
-            stopWithError(error.localizedMessage ?: getString(R.string.mcp_service_start_failed))
+            failStart(
+                error.localizedMessage ?: getString(R.string.mcp_service_start_failed),
+                retry = true,
+            )
         }
     }
 
@@ -263,11 +261,40 @@ class McpService : BaseService() {
         engine = null
     }
 
-    private fun stopWithError(message: String) {
+    /**
+     * Keep FGS alive and retry quickly on transient bind failures.
+     * Only [IntentAction.stop] clears PreferKey.mcpService.
+     */
+    private fun failStart(message: String, retry: Boolean) {
         isRun = false
         nsdPublisher.unpublish()
-        // Do not persist mcpService=false — only user stop clears the preference.
         toastOnUi(message)
+        val preferOn = getPrefBoolean(PreferKey.mcpService, false)
+        if (retry && preferOn && startAttempt < MAX_START_ATTEMPTS) {
+            val attempt = startAttempt + 1
+            startAttempt = attempt
+            val delayMs = START_RETRY_DELAYS_MS[(attempt - 1).coerceAtMost(START_RETRY_DELAYS_MS.lastIndex)]
+            notificationList = mutableListOf(
+                getString(R.string.mcp_service_start_retry, attempt, message)
+            )
+            startForegroundNotification()
+            execute(context = Dispatchers.IO) {
+                delay(delayMs)
+                if (!destroyed && getPrefBoolean(PreferKey.mcpService, false)) {
+                    requestUpMcpServer()
+                }
+            }
+            return
+        }
+        notificationList = mutableListOf(message)
+        startForegroundNotification()
+        // Do not persist mcpService=false — preference stays true for transient bind failures.
+        // Config errors (retry=false, e.g. missing token) must not arm the ~3 min watchdog loop.
+        if (retry) {
+            McpWatchdog.schedule(this)
+        } else {
+            McpWatchdog.cancel(this)
+        }
         stopSelf()
     }
 

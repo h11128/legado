@@ -20,8 +20,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Semaphore
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.CoroutineContext
-import android.provider.Settings
-import androidx.annotation.RequiresApi
 
 abstract class BaseService : LifecycleService() {
 
@@ -45,6 +43,8 @@ abstract class BaseService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         LifecycleHelp.onServiceCreate(this)
+        // FGS services that override [startForegroundNotification] should also call
+        // [promoteForegroundNotification] at the top of onCreate/onStartCommand.
         checkPermission()
     }
 
@@ -53,12 +53,9 @@ abstract class BaseService : LifecycleService() {
         LogUtils.d(simpleName) {
             "onStartCommand $intent ${intent?.toUri(0)}"
         }
-        if (!isForeground) {
-            if (!tryStartForegroundNotification()) {
-                stopSelfResult(startId)
-                return START_NOT_STICKY
-            }
-            isForeground = true
+        if (!promoteForegroundNotification()) {
+            stopSelfResult(startId)
+            return START_NOT_STICKY
         }
         return super.onStartCommand(intent, flags, startId)
     }
@@ -96,6 +93,23 @@ abstract class BaseService : LifecycleService() {
     }
 
     /**
+     * Promote to foreground ASAP when started via [android.content.Context.startForegroundService].
+     * Call before any heavy work in subclass [onCreate]/[onStartCommand] to avoid
+     * `executing service … waited 30000ms` ANRs.
+     */
+    protected fun promoteForegroundNotification(): Boolean {
+        if (isForeground) {
+            // Refresh notification content (safe to call startForeground again).
+            return tryStartForegroundNotification()
+        }
+        if (!tryStartForegroundNotification()) {
+            return false
+        }
+        isForeground = true
+        return true
+    }
+
+    /**
      * 检测通知权限和后台权限，同一进程内仅首次检查显示权限理由。
      */
     private fun checkPermission() {
@@ -109,9 +123,7 @@ abstract class BaseService : LifecycleService() {
             }
             .onGranted {
                 if (lifecycleScope.isActive && !isForeground) {
-                    if (tryStartForegroundNotification()) {
-                        isForeground = true
-                    } else {
+                    if (!promoteForegroundNotification()) {
                         stopSelf()
                     }
                 }

@@ -90,6 +90,8 @@
     <string name="mcp_service_token_required">請先設定 Web 書源存取權杖</string>
     <string name="mcp_service_token_invalid">MCP 存取權杖未設定或不正確</string>
     <string name="mcp_service_start_failed">MCP 服務啟動失敗</string>
+    <string name="mcp_service_start_retry">MCP 啟動失敗，正在重試（%1$d）…\n%2$s</string>
+    <string name="web_service_start_retry">Web 服務啟動失敗，正在重試（%1$d）…\n%2$s</string>
     <string name="web_edit_source">web 編輯書源</string>
     <string name="offline_cache">離線緩存</string>
     <string name="offline_cache_t">離線緩存</string>

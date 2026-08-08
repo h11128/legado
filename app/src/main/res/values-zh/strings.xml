@@ -97,6 +97,8 @@
     <string name="mcp_service_token_required">请先配置 Web 书源访问令牌</string>
     <string name="mcp_service_token_invalid">MCP 访问令牌未配置或不正确</string>
     <string name="mcp_service_start_failed">MCP 服务启动失败</string>
+    <string name="mcp_service_start_retry">MCP 启动失败，正在重试（%1$d）…\n%2$s</string>
+    <string name="web_service_start_retry">Web 服务启动失败，正在重试（%1$d）…\n%2$s</string>
     <string name="web_edit_source">Web 编辑书源</string>
     <string name="offline_cache">离线缓存</string>
     <string name="offline_cache_t">离线缓存</string>

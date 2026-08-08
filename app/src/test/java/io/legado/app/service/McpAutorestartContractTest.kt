@@ -8,13 +8,30 @@ import java.io.File
 class McpAutorestartContractTest {
 
     @Test
-    fun `user stop clears preference but stopWithError does not`() {
+    fun `user stop clears preference but failStart does not`() {
         val service = projectFile("app/src/main/java/io/legado/app/service/McpService.kt")
         assertTrue(service.contains("Do not persist mcpService=false"))
         assertTrue(service.contains("User-initiated stop: persist off"))
         assertTrue(service.contains("IntentAction.stop -> {"))
         assertTrue(service.contains("appCtx.putPrefBoolean(PreferKey.mcpService, false)"))
         assertTrue(service.contains("appCtx.putPrefBoolean(PreferKey.mcpService, true)"))
+        assertTrue(service.contains("private fun failStart"))
+        assertTrue(service.contains("mcp_service_start_retry"))
+        assertTrue(service.contains("MAX_START_ATTEMPTS"))
+        assertTrue(service.contains("START_RETRY_DELAYS_MS"))
+        val failBody = service.substringAfter("private fun failStart")
+            .substringBefore("private fun updateAddresses")
+        assertFalse(
+            "failStart must not clear PreferKey.mcpService",
+            failBody.contains("putPrefBoolean(PreferKey.mcpService, false)"),
+        )
+        assertTrue(failBody.contains("McpWatchdog.schedule"))
+        assertTrue(failBody.contains("McpWatchdog.cancel"))
+        assertTrue(failBody.contains("delay(delayMs)"))
+        assertTrue(
+            "missing token must not spin retries",
+            service.contains("failStart(getString(R.string.mcp_service_token_required), retry = false)"),
+        )
     }
 
     @Test
@@ -97,11 +114,14 @@ class McpAutorestartContractTest {
         assertTrue("onStartCommand must promote FGS before scheduling engine", fg >= 0)
         assertTrue(schedule > fg)
         assertTrue(
+            "FGS deny path must not schedule engine",
+            onStart.contains("if (sticky == START_NOT_STICKY) return sticky"),
+        )
+        assertTrue(
             "engine bring-up must be scheduled off main",
             service.contains("private fun scheduleUpMcpServer()"),
         )
         val scheduleBody = service.substringAfter("private fun scheduleUpMcpServer()")
-            .substringBefore("private fun promoteForegroundNotification()")
             .substringBefore("@Synchronized")
         assertTrue(
             "scheduleUpMcpServer must execute on a background dispatcher",
@@ -120,6 +140,11 @@ class McpAutorestartContractTest {
         assertTrue(
             "onCreate should also promote FGS early for BOOT/package-replaced",
             onCreate.contains("promoteForegroundNotification()"),
+        )
+        val base = projectFile("app/src/main/java/io/legado/app/base/BaseService.kt")
+        assertTrue(
+            "BaseService must expose promoteForegroundNotification for FGS subclasses",
+            base.contains("protected fun promoteForegroundNotification(): Boolean"),
         )
     }
 
