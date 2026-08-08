@@ -341,6 +341,39 @@
                 </androidx.core.widget.NestedScrollView>
 
                 <LinearLayout
+                    android:id="@+id/ll_auto_change_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@color/background_menu"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="16dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="4dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tv_auto_change_metrics"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/primaryText"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tv_auto_change_current"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="marquee"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:marqueeRepeatLimit="marquee_forever"
+                        android:singleLine="true"
+                        android:textColor="@color/secondaryText"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <LinearLayout
                     android:id="@+id/fl_action"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -381,6 +414,13 @@
                 android:layout_width="match_parent"
                 android:layout_height="2dp"
                 android:layout_gravity="top" />
+
+            <io.legado.app.ui.widget.anima.RefreshProgressBar
+                android:id="@+id/auto_change_progress_bar"
+                android:layout_width="match_parent"
+                android:layout_height="2dp"
+                android:layout_gravity="top"
+                android:visibility="gone" />
 
         </FrameLayout>
     </LinearLayout>

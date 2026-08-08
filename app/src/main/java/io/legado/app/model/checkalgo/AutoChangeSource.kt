@@ -25,7 +25,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withTimeout
 
 /**
- * Shared auto-换源 ask path for read / manga (precise search + toc + content).
+ * Shared auto-换源 ask path for book info / read / manga (precise search + toc + content).
  *
  * Callers own UI overlay, prefs gate, session once-per-book, and [changeTo].
  * Candidate list is hard-capped — this is not a full-catalog scan.
@@ -38,10 +38,29 @@ object AutoChangeSource {
     /** Match manual 换源 publish throttle (~12.5fps). */
     private const val PROGRESS_THROTTLE_MS = 80L
 
+    /**
+     * Once-per-book-url for info / read / manga in this process session.
+     * Cleared when opening a different shelf book; stuck to replacement URL after success.
+     */
+    @Volatile
+    var attemptedBookUrl: String? = null
+
     enum class Trigger {
         MISSING_SOURCE,
         INFO_FAIL,
         TOC_FAIL,
+    }
+
+    /** True if this [bookUrl] already started (or finished) an auto-换源 attempt. */
+    fun alreadyAttempted(bookUrl: String): Boolean =
+        attemptedBookUrl == bookUrl
+
+    fun markAttempted(bookUrl: String) {
+        attemptedBookUrl = bookUrl
+    }
+
+    fun clearAttempted() {
+        attemptedBookUrl = null
     }
 
     /** Drop the dead/current origin so we do not re-pick the same broken source. */

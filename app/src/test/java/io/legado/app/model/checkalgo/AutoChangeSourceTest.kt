@@ -47,4 +47,15 @@ class AutoChangeSourceTest {
         )
         assertEquals(2, AutoChangeSource.limitCandidates(parts).size)
     }
+
+    @Test
+    fun attemptedBookUrl_marksAndClears() {
+        AutoChangeSource.clearAttempted()
+        assertTrue(!AutoChangeSource.alreadyAttempted("https://book.example/1"))
+        AutoChangeSource.markAttempted("https://book.example/1")
+        assertTrue(AutoChangeSource.alreadyAttempted("https://book.example/1"))
+        assertTrue(!AutoChangeSource.alreadyAttempted("https://book.example/2"))
+        AutoChangeSource.clearAttempted()
+        assertTrue(!AutoChangeSource.alreadyAttempted("https://book.example/1"))
+    }
 }

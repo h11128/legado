@@ -23,12 +23,16 @@ import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.getExportFileName
 import io.legado.app.help.book.getRemoteUrl
+import io.legado.app.help.book.isAudio
+import io.legado.app.help.book.isImage
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isNotShelf
 import io.legado.app.help.book.isSameNameAuthor
+import io.legado.app.help.book.isVideo
 import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeType
 import io.legado.app.help.book.updateTo
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.webdav.ObjectNotFoundException
 import io.legado.app.model.AudioPlay
@@ -36,6 +40,8 @@ import io.legado.app.model.BookCover
 import io.legado.app.model.ReadBook
 import io.legado.app.model.ReadManga
 import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.model.checkalgo.AutoChangeProgressUi
+import io.legado.app.model.checkalgo.AutoChangeSource
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.model.SourceCallBack
@@ -99,10 +105,12 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
     var hasCustomBtn = false
     var bookSource: BookSource? = null
     private var changeSourceCoroutine: Coroutine<*>? = null
+    private var autoChangeCoroutine: Coroutine<*>? = null
     val waitDialogData = MutableLiveData<Boolean>()
     val loadingData = MutableLiveData<Boolean>()
     private val networkLoadingCounter = BookInfoNetworkLoadingCounter(loadingData::postValue)
     val actionLive = MutableLiveData<String>()
+    val autoChangeProgressLiveData = MutableLiveData<AutoChangeProgressUi?>()
 
     private fun <T> Coroutine<T>.trackNetworkLoading(): Coroutine<T> = apply {
         networkLoadingCounter.begin()
@@ -153,6 +161,16 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
 
     private fun upBook(book: Book) {
         execute {
+            // Different book: stop in-flight auto-换源 so results cannot overwrite the new page.
+            if (bookData.value?.bookUrl != null && bookData.value?.bookUrl != book.bookUrl) {
+                autoChangeCoroutine?.cancel()
+                autoChangeProgressLiveData.postValue(null)
+            }
+            if (AutoChangeSource.attemptedBookUrl != null &&
+                AutoChangeSource.attemptedBookUrl != book.bookUrl
+            ) {
+                AutoChangeSource.clearAttempted()
+            }
             bookSource = if (book.isLocal) null else
                 appDb.bookSourceDao.getBookSource(book.origin)?.also {
                     hasCustomBtn = it.customButton
@@ -239,6 +257,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             val bookSource = bookSource ?: let {
                 chapterListData.postValue(chapterListData.value.orEmpty())
                 context.toastOnUi(R.string.error_no_source)
+                tryAutoChangeSource(book, AutoChangeSource.Trigger.MISSING_SOURCE)
                 return
             }
             val oldBook = book.copy()
@@ -275,6 +294,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                     chapterListData.postValue(chapterListData.value.orEmpty())
                     AppLog.put("获取书籍信息失败\n${it.localizedMessage}", it)
                     context.toastOnUi(R.string.error_get_book_info)
+                    tryAutoChangeSource(oldBook, AutoChangeSource.Trigger.INFO_FAIL)
                 }
                 .trackNetworkLoading()
         }
@@ -305,6 +325,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             val bookSource = bookSource ?: let {
                 chapterListData.postValue(chapterListData.value.orEmpty())
                 context.toastOnUi(R.string.error_no_source)
+                tryAutoChangeSource(book, AutoChangeSource.Trigger.MISSING_SOURCE)
                 return
             }
             WebBook.getChapterList(
@@ -335,6 +356,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                     chapterListData.postValue(chapterListData.value.orEmpty())
                     AppLog.put("获取目录失败\n${it.localizedMessage}", it)
                     context.toastOnUi(R.string.error_get_chapter_list)
+                    tryAutoChangeSource(oldBook, AutoChangeSource.Trigger.TOC_FAIL)
                 }
                 .trackNetworkLoading()
         }
@@ -472,6 +494,38 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             chapterListData.postValue(toc)
         }.onFinally {
             postEvent(EventBus.SOURCE_CHANGED, book.bookUrl)
+        }
+    }
+
+    /**
+     * 自动换源（缺源 / 详情失败 / 目录失败）— 简介页主触发。
+     * 仅文本网文：findFirst 只问 allTextEnabledPart；漫画/听书/视频走各自阅读页。
+     */
+    private fun tryAutoChangeSource(book: Book, trigger: AutoChangeSource.Trigger) {
+        if (book.isLocal || !AppConfig.autoChangeSource) return
+        if (book.isImage || book.isAudio || book.isVideo) return
+        if (AutoChangeSource.alreadyAttempted(book.bookUrl)) return
+        AutoChangeSource.markAttempted(book.bookUrl)
+        AutoChangeSource.logTrigger(trigger, book.origin, book.bookUrl)
+        val excludeOrigin = book.origin.takeIf { it.isNotBlank() }
+        autoChangeCoroutine?.cancel()
+        autoChangeCoroutine = execute {
+            val (newBook, toc, source) = AutoChangeSource.findFirst(
+                name = book.name,
+                author = book.author,
+                excludeOrigin = excludeOrigin,
+                onProgress = { progress ->
+                    autoChangeProgressLiveData.postValue(progress)
+                },
+            )
+            // Stick once-per-session to the replacement URL so changeTo does not re-arm.
+            AutoChangeSource.markAttempted(newBook.bookUrl)
+            changeTo(source, newBook, toc)
+        }.onError {
+            AppLog.put("自动换源失败\n${it.localizedMessage}", it)
+            context.toastOnUi("自动换源失败\n${it.localizedMessage}")
+        }.onFinally {
+            autoChangeProgressLiveData.postValue(null)
         }
     }
 

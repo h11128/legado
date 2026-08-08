@@ -76,7 +76,9 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
         if (isSameBook) {
             ReadManga.upData(book)
         } else {
-            ReadManga.autoChangeAttemptedFor = null
+            if (AutoChangeSource.attemptedBookUrl != book.bookUrl) {
+                AutoChangeSource.clearAttempted()
+            }
             ReadManga.resetData(book)
         }
         if (!book.isLocal && book.tocUrl.isEmpty() && !loadBookInfo(book)) {
@@ -162,8 +164,8 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
      */
     private fun tryAutoChangeSource(book: Book, trigger: AutoChangeSource.Trigger) {
         if (book.isLocal || !AppConfig.autoChangeSource) return
-        if (ReadManga.autoChangeAttemptedFor == book.bookUrl) return
-        ReadManga.autoChangeAttemptedFor = book.bookUrl
+        if (AutoChangeSource.alreadyAttempted(book.bookUrl)) return
+        AutoChangeSource.markAttempted(book.bookUrl)
         AutoChangeSource.logTrigger(trigger, book.origin, book.bookUrl)
         val excludeOrigin = book.origin.takeIf { it.isNotBlank() }
         execute {
@@ -180,7 +182,7 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
                     ReadManga.upLoadingMessage("$metrics\n$current")
                 },
             )
-            ReadManga.autoChangeAttemptedFor = newBook.bookUrl
+            AutoChangeSource.markAttempted(newBook.bookUrl)
             changeTo(newBook, toc)
         }.onError {
             AppLog.put("自动换源失败\n${it.localizedMessage}", it)

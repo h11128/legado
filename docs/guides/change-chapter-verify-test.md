@@ -71,15 +71,19 @@ Never claim PASS without the log file path + analyzer verdict.
 
 Toolbar **换源** opens 整书 dialog; long-press still offers 单章/整书 where wired.
 
-## Auto-换源 on open (read page)
+## Auto-换源 on open (info page primary)
 
-Preference `自动换源` (default on). Triggers once per book session when:
+Preference `自动换源` (default on). Triggers once per book URL (shared across info / read / manga) when:
 
 | Trigger | When |
 |---|---|
 | `missing_source` | `bookSource == null` (origin not in catalog) |
 | `info_fail` | detail (`getBookInfo`) fails while a source is bound |
 | `toc_fail` | chapter list load fails while a source is bound |
+
+**Primary surface:** book **简介页** (`BookInfoActivity`) — enter info → invalid source → auto-ask + live UI.  
+Text novels only on info page (skips image/audio/video).  
+**Fallback:** reading / manga page still hooks the same triggers when opened directly (skip info). Session key: `AutoChangeSource.attemptedBookUrl`.
 
 Does **not** auto-change on content-only failures.
 
@@ -90,6 +94,7 @@ Ask budget (not a full-catalog scan):
 - Live UI (aligned with manual 换源 dialog):
   - Top: determinate `RefreshProgressBar` (`done/total`)
   - Bottom strip: `自动换源 · 已问 a/b · 问中 x/y` + marquee `询问中 源名…`
+  - Info page: same bar + strip above 加入书架/阅读
   - Manga: same metrics on loading overlay (spinner + two-line text)
 - Payload: `AutoChangeProgressUi` via `autoChangeProgressLiveData` (not `ReadBook.msg`)
 
@@ -107,7 +112,7 @@ python scripts/auto-change-pick-book.py --kind missing_source --limit 10
 ```
 
 PASS when analyzer reports `has_trigger` + `has_ask` + `cap_ok` (candidates ≤ 30).  
-UI check (manual): top determinate bar + bottom `自动换源 · 已问 a/b · 问中 x/y` + `询问中 源名…`.
+UI check (manual): open **简介页** → top determinate bar + bottom `自动换源 · 已问 a/b · 问中 x/y` + `询问中 源名…`.
 
 Known good probe book (when present): **《信仰诸天》朝不保夕** with origin `https://www.9txs.com/` (`missing_source`).
 
@@ -115,6 +120,7 @@ Known good probe book (when present): **《信仰诸天》朝不保夕** with or
 
 | Date | Result | Evidence |
 |---|---|---|
+| 2026-08-08e | auto-change on **简介页** + shared attemptedBookUrl | BookInfo bar/strip; read/manga fallback; `AutoChangeSource.attemptedBookUrl` |
 | 2026-08-08 | code: auto-change on info/toc fail | `AutoChangeSource` helper + ReadBook/ReadManga hooks; unit `AutoChangeSourceTest`; no device session this step |
 | 2026-08-08b | auto-change cap=30 + progress UI | `limitCandidates(30)`; `AUTO_CHANGE_MS=45s`; read `upMsg` / manga loading `done/total` |
 | 2026-08-08c | auto-change live strip UI | top `RefreshProgressBar` + bottom metrics/current strip; `AutoChangeProgressUi` + inFlight source names |

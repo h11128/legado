@@ -100,8 +100,6 @@ object ReadBook : CoroutineScope by MainScope() {
     var curTextChapter: TextChapter? = null
     var nextTextChapter: TextChapter? = null
     var bookSource: BookSource? = null
-    /** BookUrl for which auto-换源 already ran this read session (once). */
-    var autoChangeAttemptedFor: String? = null
     var msg: String? = null
     private val loadingChapters = arrayListOf<Int>()
     private val readRecord = ReadRecord()

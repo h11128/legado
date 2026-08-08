@@ -70,6 +70,8 @@ import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.model.AutoTask
 import io.legado.app.model.BookCover
+import io.legado.app.model.checkalgo.bindAutoChangeProgress
+import io.legado.app.model.checkalgo.bindAutoChangeProgressStrip
 import io.legado.app.model.remote.RemoteBookWebDav
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.autoTask.AutoTaskEditActivity
@@ -115,6 +117,8 @@ import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
+import androidx.core.view.isGone
+import androidx.core.view.isVisible
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.html.HtmlPlugin
@@ -254,6 +258,7 @@ class BookInfoActivity :
         binding.titleBar.setBackgroundResource(R.color.transparent)
         binding.refreshLayout?.setColorSchemeColors(accentColor)
         binding.refreshProgressBar.secondColor = accentColor
+        binding.autoChangeProgressBar.secondColor = accentColor
         binding.arcView?.setBgColor(backgroundColor)
         binding.llInfo.setBackgroundColor(backgroundColor)
         binding.ivCoverC.setCardBackgroundColor(backgroundColor)
@@ -274,6 +279,24 @@ class BookInfoActivity :
             }
         }
         viewModel.waitDialogData.observe(this) { upWaitDialogStatus(it) }
+        viewModel.autoChangeProgressLiveData.observe(this) { progress ->
+            if (progress == null) {
+                binding.autoChangeProgressBar.isGone = true
+                binding.llAutoChangeStatus.isGone = true
+                return@observe
+            }
+            binding.autoChangeProgressBar.isVisible = true
+            binding.llAutoChangeStatus.isVisible = true
+            binding.autoChangeProgressBar.bindAutoChangeProgress(
+                progress.completed,
+                progress.total,
+            )
+            bindAutoChangeProgressStrip(
+                metricsView = binding.tvAutoChangeMetrics,
+                currentView = binding.tvAutoChangeCurrent,
+                progress = progress,
+            )
+        }
         viewModel.initData(intent)
         initViewEvent()
     }

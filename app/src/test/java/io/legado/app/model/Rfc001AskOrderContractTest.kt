@@ -64,6 +64,7 @@ class Rfc001AskOrderContractTest {
         val read = projectFile("app/src/main/java/io/legado/app/ui/book/read/ReadBookViewModel.kt")
         assertTrue(read.contains("AutoChangeSource."))
         assertTrue(read.contains("tryAutoChangeSource("))
+        assertTrue(read.contains("AutoChangeSource.alreadyAttempted("))
         assertFalse(read.contains("CheckHostTokenBucket("))
         assertFalse(read.contains("AskFailData("))
         val auto = projectFile("app/src/main/java/io/legado/app/model/checkalgo/AutoChangeSource.kt")
@@ -74,10 +75,38 @@ class Rfc001AskOrderContractTest {
         assertTrue(auto.contains("filterParts("))
         assertTrue(auto.contains("limitCandidates("))
         assertTrue(auto.contains("CANDIDATE_CAP"))
+        assertTrue(auto.contains("attemptedBookUrl"))
         assertTrue(auto.contains("chapter.index + 1"))
         assertTrue(auto.contains("onProgress"))
         assertTrue(auto.contains("AutoChangeProgressUi("))
         assertTrue(auto.contains("询问中"))
+    }
+
+    @Test
+    fun autoChangeSourceHooksBookInfoPage() {
+        val info = projectFile("app/src/main/java/io/legado/app/ui/book/info/BookInfoViewModel.kt")
+        assertTrue(info.contains("tryAutoChangeSource("))
+        assertTrue(info.contains("AutoChangeSource.Trigger.MISSING_SOURCE"))
+        assertTrue(info.contains("AutoChangeSource.Trigger.INFO_FAIL"))
+        assertTrue(info.contains("AutoChangeSource.Trigger.TOC_FAIL"))
+        assertTrue(info.contains("autoChangeProgressLiveData"))
+        assertTrue(info.contains("book.isImage || book.isAudio || book.isVideo"))
+        val activity = projectFile("app/src/main/java/io/legado/app/ui/book/info/BookInfoActivity.kt")
+        assertTrue(activity.contains("autoChangeProgressLiveData"))
+        assertTrue(activity.contains("bindAutoChangeProgress"))
+        assertTrue(activity.contains("bindAutoChangeProgressStrip"))
+        val layout = projectFile("app/src/main/res/layout/activity_book_info.xml")
+        assertTrue(layout.contains("auto_change_progress_bar"))
+        assertTrue(layout.contains("ll_auto_change_status"))
+    }
+
+    @Test
+    fun autoChangeSourceHooksMangaSharedAttempted() {
+        val manga = projectFile("app/src/main/java/io/legado/app/ui/book/manga/ReadMangaViewModel.kt")
+        assertTrue(manga.contains("tryAutoChangeSource("))
+        assertTrue(manga.contains("AutoChangeSource.alreadyAttempted("))
+        assertTrue(manga.contains("AutoChangeSource.markAttempted("))
+        assertFalse(manga.contains("autoChangeAttemptedFor"))
     }
 
     @Test

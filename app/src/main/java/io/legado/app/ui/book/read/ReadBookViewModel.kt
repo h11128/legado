@@ -128,8 +128,10 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         if (isSameBook) {
             ReadBook.upData(book)
         } else {
-            // New shelf book: allow auto-换源 again for this session.
-            ReadBook.autoChangeAttemptedFor = null
+            // New shelf book: allow auto-换源 again unless info page already tried this URL.
+            if (AutoChangeSource.attemptedBookUrl != book.bookUrl) {
+                AutoChangeSource.clearAttempted()
+            }
             ReadBook.resetData(book)
         }
         isInitFinish = true
@@ -319,8 +321,8 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
      */
     private fun tryAutoChangeSource(book: Book, trigger: AutoChangeSource.Trigger) {
         if (book.isLocal || !AppConfig.autoChangeSource) return
-        if (ReadBook.autoChangeAttemptedFor == book.bookUrl) return
-        ReadBook.autoChangeAttemptedFor = book.bookUrl
+        if (AutoChangeSource.alreadyAttempted(book.bookUrl)) return
+        AutoChangeSource.markAttempted(book.bookUrl)
         AutoChangeSource.logTrigger(trigger, book.origin, book.bookUrl)
         val excludeOrigin = book.origin.takeIf { it.isNotBlank() }
         // Clear full-page error placeholder so the strip overlay is the live UI.
@@ -336,7 +338,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             )
             // Stick once-per-session to the replacement URL so changeTo→resetData
             // does not re-arm auto for the migrated book in this reading session.
-            ReadBook.autoChangeAttemptedFor = newBook.bookUrl
+            AutoChangeSource.markAttempted(newBook.bookUrl)
             changeTo(newBook, toc)
         }.onError {
             AppLog.put("自动换源失败\n${it.localizedMessage}", it)
