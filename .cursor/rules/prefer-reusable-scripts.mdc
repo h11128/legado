@@ -26,9 +26,14 @@ Agents must not park repeatable procedures as one-off scripts under temp/. That 
 | Hard-coded machine/DHCP URLs in a queue script | Shared helper + env / config file |
 | “I’ll promote it later” under temp/ | Ship the reusable path in the same turn |
 
+Keep examples in this shared file **repo-agnostic**. Do not backtick project-only paths here (phantom-cite health scans shared MDC against myforge). Concrete script/guide names belong in the owning repo’s postmortem or guide.
+
 ## Enforcement
 
 - This MDC (shared alwaysApply)
-- Project HookRules when present (legado: legado_temp_script_write_deny / legado_temp_script_shell_deny)
+- Project HookRules when present (e.g. temp-script write/shell deny hooks)
 - Escape hatch remains .local-scripts/ only
-- Lesson write-up (legado): docs/postmortem dated 2026-08-08 about temp one-off scripts
+- After editing this or any shared MDC: run
+  `E:\shared-cursor-rules\sync-rules.ps1` (or at least
+  `E:\shared-cursor-rules\verify-health.ps1`) and require exit 0
+- Lesson write-up lives in the owning app repo postmortem (dated 2026-08-08, temp one-off scripts)
