@@ -25,12 +25,20 @@ class McpAutorestartContractTest {
             "failStart must not clear PreferKey.mcpService",
             failBody.contains("putPrefBoolean(PreferKey.mcpService, false)"),
         )
-        assertTrue(failBody.contains("McpWatchdog.schedule"))
-        assertTrue(failBody.contains("McpWatchdog.cancel"))
         assertTrue(failBody.contains("delay(delayMs)"))
         assertTrue(
             "missing token must not spin retries",
             service.contains("failStart(getString(R.string.mcp_service_token_required), retry = false)"),
+        )
+        // Exhausted/transient fail (retry=true) arms watchdog; config errors (retry=false) cancel it.
+        val afterAttempts = failBody.substringAfter("startAttempt < MAX_START_ATTEMPTS")
+        val terminalWatchdog = afterAttempts.substringAfter("startForegroundNotification()")
+            .substringAfter("startForegroundNotification()")
+        assertTrue(
+            Regex(
+                """if\s*\(\s*retry\s*\)\s*\{\s*McpWatchdog\.schedule\(this\)\s*\}\s*else\s*\{\s*McpWatchdog\.cancel\(this\)\s*\}""",
+                RegexOption.DOT_MATCHES_ALL,
+            ).containsMatchIn(terminalWatchdog),
         )
     }
 
