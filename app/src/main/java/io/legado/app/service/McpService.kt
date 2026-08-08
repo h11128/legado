@@ -18,6 +18,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.receiver.NetworkChangedListener
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.isForegroundServiceStartDenied
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.putPrefBoolean
@@ -31,6 +32,7 @@ import io.legado.app.web.mcp.McpChannelGuard
 import io.legado.app.web.mcp.McpNsdPublisher
 import io.legado.app.web.mcp.McpToolServer
 import io.legado.app.web.mcp.configureMcp
+import kotlinx.coroutines.Dispatchers
 import splitties.init.appCtx
 
 class McpService : BaseService() {
@@ -86,33 +88,38 @@ class McpService : BaseService() {
     override fun onCreate() {
         super.onCreate()
         destroyed = false
+        // Promote to FGS during onCreate as well — BOOT_COMPLETED / package-replaced
+        // paths can sit in onCreate before onStartCommand and still burn the FGS timer.
+        promoteForegroundNotification()
         McpChannelGuard.onBecameIdle = {
-            synchronized(this) {
+            // Lock only the pending check; never run CIO under this lock.
+            val shouldRestart = synchronized(this) {
                 if (!destroyed && McpChannelGuard.pendingNetworkRestart && !McpChannelGuard.isBusy()) {
                     McpChannelGuard.pendingNetworkRestart = false
-                    upMcpServer()
+                    true
+                } else {
+                    false
                 }
             }
+            if (shouldRestart) scheduleUpMcpServer()
         }
         networkChangedListener.onNetworkChanged = {
-            synchronized(this) {
-                if (!destroyed) {
-                    val addresses = NetworkUtils.getLocalIPAddress()
-                    if (isRun) {
-                        val addressKeys = addresses.mapNotNull { it.hostAddress }.sorted()
-                        if (addressKeys != activeAddressKeys) {
-                            // Do not stop CIO while debug/check holds the channel — that is a
-                            // primary hang mode from thread 59f4efb9 (mid-tool engine restart).
-                            if (McpChannelGuard.isBusy()) {
-                                McpChannelGuard.pendingNetworkRestart = true
-                                updateAddresses(addresses)
-                            } else {
-                                requestUpMcpServer()
-                            }
+            if (!destroyed) {
+                val addresses = NetworkUtils.getLocalIPAddress()
+                if (isRun) {
+                    val addressKeys = addresses.mapNotNull { it.hostAddress }.sorted()
+                    if (addressKeys != activeAddressKeys) {
+                        // Do not stop CIO while debug/check holds the channel — that is a
+                        // primary hang mode from thread 59f4efb9 (mid-tool engine restart).
+                        if (McpChannelGuard.isBusy()) {
+                            McpChannelGuard.pendingNetworkRestart = true
+                            updateAddresses(addresses)
+                        } else {
+                            scheduleUpMcpServer()
                         }
-                    } else {
-                        updateAddresses(addresses)
                     }
+                } else {
+                    updateAddresses(addresses)
                 }
             }
         }
@@ -120,6 +127,10 @@ class McpService : BaseService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // FGS timeout / ANR (Subject: executing service … waited 30003ms):
+        // must startForeground before any CIO stop/start or NSD work.
+        promoteForegroundNotification()
+        val sticky = super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
             IntentAction.stop -> {
                 appCtx.putPrefBoolean(PreferKey.mcpService, false)
@@ -127,10 +138,10 @@ class McpService : BaseService() {
                 stopSelf()
             }
             "copyHostAddress" -> sendToClip(hostAddress)
-            ACTION_RESTART -> requestUpMcpServer()
-            else -> requestUpMcpServer()
+            ACTION_RESTART -> scheduleUpMcpServer()
+            else -> scheduleUpMcpServer()
         }
-        return super.onStartCommand(intent, flags, startId)
+        return sticky
     }
 
     /**
@@ -157,6 +168,27 @@ class McpService : BaseService() {
         activeAddressKeys = emptyList()
         postEvent(EventBus.MCP_SERVICE, "")
         super.onDestroy()
+    }
+
+    /** Queue engine bring-up off the main/binder thread (never block FGS start). */
+    private fun scheduleUpMcpServer() {
+        if (destroyed) return
+        execute(context = Dispatchers.IO) {
+            requestUpMcpServer()
+        }
+    }
+
+    /**
+     * Same denial handling as [BaseService.tryStartForegroundNotification], callable before
+     * [onStartCommand] returns so BOOT/package-replaced cannot burn the FGS timer.
+     */
+    private fun promoteForegroundNotification() {
+        runCatching {
+            startForegroundNotification()
+        }.onFailure { error ->
+            if (!error.isForegroundServiceStartDenied()) throw error
+            error.printOnDebug()
+        }
     }
 
     /** Defer engine restart while debug/check holds the channel (thread 59f4efb9). */

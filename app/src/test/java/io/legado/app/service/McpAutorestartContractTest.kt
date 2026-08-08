@@ -87,6 +87,42 @@ class McpAutorestartContractTest {
         assertTrue(check.contains("reset_mcp_channel"))
     }
 
+    @Test
+    fun `mcp promotes foreground before engine work`() {
+        val service = projectFile("app/src/main/java/io/legado/app/service/McpService.kt")
+        val onStart = service.substringAfter("override fun onStartCommand")
+            .substringBefore("override fun onTaskRemoved")
+        val fg = onStart.indexOf("promoteForegroundNotification()")
+        val schedule = onStart.indexOf("scheduleUpMcpServer()")
+        assertTrue("onStartCommand must promote FGS before scheduling engine", fg >= 0)
+        assertTrue(schedule > fg)
+        assertTrue(
+            "engine bring-up must be scheduled off main",
+            service.contains("private fun scheduleUpMcpServer()"),
+        )
+        val scheduleBody = service.substringAfter("private fun scheduleUpMcpServer()")
+            .substringBefore("private fun promoteForegroundNotification()")
+            .substringBefore("@Synchronized")
+        assertTrue(
+            "scheduleUpMcpServer must execute on a background dispatcher",
+            scheduleBody.contains("execute(") && scheduleBody.contains("Dispatchers.IO"),
+        )
+        assertTrue(service.contains("Dispatchers.IO"))
+        // Must not call requestUpMcpServer/upMcpServer synchronously from onStartCommand body.
+        assertFalse(
+            Regex("""else\s*->\s*requestUpMcpServer\(\)""").containsMatchIn(onStart),
+        )
+        assertFalse(
+            Regex("""else\s*->\s*upMcpServer\(\)""").containsMatchIn(onStart),
+        )
+        val onCreate = service.substringAfter("override fun onCreate()")
+            .substringBefore("override fun onStartCommand")
+        assertTrue(
+            "onCreate should also promote FGS early for BOOT/package-replaced",
+            onCreate.contains("promoteForegroundNotification()"),
+        )
+    }
+
     private fun projectFile(path: String): String {
         var root = File(requireNotNull(System.getProperty("user.dir")))
         repeat(6) {
