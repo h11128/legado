@@ -14,7 +14,6 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookProgress
-import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
@@ -24,16 +23,11 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
-import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.ImageProvider
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
-import io.legado.app.model.RespondTimeUpdater
 import io.legado.app.model.SourceCallBack
-import io.legado.app.model.checkalgo.AskSourceOrder
-import io.legado.app.model.checkalgo.AskSourcePrefetch
-import io.legado.app.model.checkalgo.AskTimeout
-import io.legado.app.model.checkalgo.ChangeSourceAskMemory
+import io.legado.app.model.checkalgo.AutoChangeSource
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.BaseReadAloudService
@@ -43,20 +37,11 @@ import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.utils.DocumentUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.isContentScheme
-import io.legado.app.utils.mapParallelSafe
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toStringArray
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.onCompletion
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.onEmpty
-import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.flow.take
-import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileNotFoundException
@@ -140,16 +125,20 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         if (isSameBook) {
             ReadBook.upData(book)
         } else {
+            // New shelf book: allow auto-换源 again for this session.
+            ReadBook.autoChangeAttemptedFor = null
             ReadBook.resetData(book)
         }
         isInitFinish = true
         if (!book.isLocal && book.tocUrl.isEmpty() && !loadBookInfo(book)) {
+            tryAutoChangeSource(book, AutoChangeSource.Trigger.INFO_FAIL)
             return
         }
         if (book.isLocal && !checkLocalBookFileExist(book)) {
             return
         }
         if ((ReadBook.chapterSize == 0 || book.isLocalModified()) && !loadChapterListAwait(book)) {
+            tryAutoChangeSource(book, AutoChangeSource.Trigger.TOC_FAIL)
             return
         }
         ReadBook.upMsg(null)
@@ -177,7 +166,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             }
         }
         if (!book.isLocal && ReadBook.bookSource == null) {
-            autoChangeSource(book.name, book.author)
+            tryAutoChangeSource(book, AutoChangeSource.Trigger.MISSING_SOURCE)
             return
         }
     }
@@ -323,63 +312,34 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
     }
 
     /**
-     * 自动换源
+     * 自动换源（缺源 / 详情失败 / 目录失败）
      */
-    private fun autoChangeSource(name: String, author: String) {
-        if (!AppConfig.autoChangeSource) return
+    private fun tryAutoChangeSource(book: Book, trigger: AutoChangeSource.Trigger) {
+        if (book.isLocal || !AppConfig.autoChangeSource) return
+        if (ReadBook.autoChangeAttemptedFor == book.bookUrl) return
+        ReadBook.autoChangeAttemptedFor = book.bookUrl
+        AutoChangeSource.logTrigger(trigger, book.origin, book.bookUrl)
+        val excludeOrigin = book.origin.takeIf { it.isNotBlank() }
         execute {
-            SourceHelp.ensureRespondTimeHealed()
-            val sources = AskSourceOrder.order(
-                appDb.bookSourceDao.allTextEnabledPart,
-                threadCount = AppConfig.threadCount,
-                demoteUrls = ChangeSourceAskMemory.snapshot(),
-            )
-            AskSourcePrefetch.emitSources(sources)
-                .onStart {
+            val (newBook, toc, _) = AutoChangeSource.findFirst(
+                name = book.name,
+                author = book.author,
+                excludeOrigin = excludeOrigin,
+                onStart = {
                     ReadBook.upMsg(context.getString(R.string.source_auto_changing))
-                }.mapParallelSafe(AppConfig.threadCount) { source ->
-                val startTime = System.currentTimeMillis()
-                withTimeout(AskTimeout.AUTO_CHANGE_MS) {
-                    val book = WebBook.preciseSearchAwait(source, name, author).getOrThrow()
-                    if (book.tocUrl.isEmpty()) {
-                        WebBook.getBookInfoAwait(source, book)
-                    }
-                    val toc = WebBook.getChapterListAwait(source, book).getOrThrow()
-                    val chapter = toc.getOrElse(book.durChapterIndex) {
-                        toc.last()
-                    }
-                    val nextChapter = toc.getOrElse(chapter.index) {
-                        toc.first()
-                    }
-                    WebBook.getContentAwait(
-                        bookSource = source,
-                        book = book,
-                        bookChapter = chapter,
-                        nextChapterUrl = nextChapter.url
-                    )
-                    Triple(
-                        book,
-                        toc,
-                        System.currentTimeMillis() - startTime to source,
-                    )
-                }
-            }.take(1).onEach { (book, toc, timing) ->
-                val (elapsed, source) = timing
-                RespondTimeUpdater.noteSuccess(
-                    source.bookSourceUrl,
-                    elapsed,
-                    source.respondTime,
-                )
-                RespondTimeUpdater.flush()
-                changeTo(book, toc)
-            }.onEmpty {
-                throw NoStackTraceException("没有合适书源")
-            }.onCompletion {
-                ReadBook.upMsg(null)
-            }.catch {
-                AppLog.put("自动换源失败\n${it.localizedMessage}", it)
-                context.toastOnUi("自动换源失败\n${it.localizedMessage}")
-            }.collect()
+                },
+                onCompletion = {
+                    ReadBook.upMsg(null)
+                },
+            )
+            // Stick once-per-session to the replacement URL so changeTo→resetData
+            // does not re-arm auto for the migrated book in this reading session.
+            ReadBook.autoChangeAttemptedFor = newBook.bookUrl
+            changeTo(newBook, toc)
+        }.onError {
+            ReadBook.upMsg(null)
+            AppLog.put("自动换源失败\n${it.localizedMessage}", it)
+            context.toastOnUi("自动换源失败\n${it.localizedMessage}")
         }
     }
 

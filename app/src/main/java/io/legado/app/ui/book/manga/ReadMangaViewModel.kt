@@ -23,25 +23,17 @@ import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.ReadManga
+import io.legado.app.model.checkalgo.AutoChangeSource
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.createFileIfNotExist
-import io.legado.app.utils.mapParallelSafe
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.writeFile
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.onCompletion
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.onEmpty
-import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.flow.take
 import splitties.init.appCtx
 
 class ReadMangaViewModel(application: Application) : BaseViewModel(application) {
@@ -82,9 +74,11 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
         if (isSameBook) {
             ReadManga.upData(book)
         } else {
+            ReadManga.autoChangeAttemptedFor = null
             ReadManga.resetData(book)
         }
         if (!book.isLocal && book.tocUrl.isEmpty() && !loadBookInfo(book)) {
+            tryAutoChangeSource(book, AutoChangeSource.Trigger.INFO_FAIL)
             return
         }
 
@@ -93,6 +87,7 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
         }
 
         if ((ReadManga.chapterSize == 0 || book.isLocalModified()) && !loadChapterListAwait(book)) {
+            tryAutoChangeSource(book, AutoChangeSource.Trigger.TOC_FAIL)
             return
         }
 
@@ -117,7 +112,7 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
 
         //自动换源
         if (!book.isLocal && ReadManga.bookSource == null) {
-            autoChangeSource(book.name, book.author)
+            tryAutoChangeSource(book, AutoChangeSource.Trigger.MISSING_SOURCE)
             return
         }
     }
@@ -161,50 +156,28 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
     }
 
     /**
-     * 自动换源
+     * 自动换源（缺源 / 详情失败 / 目录失败）
      */
-    private fun autoChangeSource(name: String, author: String) {
-        if (!AppConfig.autoChangeSource) return
+    private fun tryAutoChangeSource(book: Book, trigger: AutoChangeSource.Trigger) {
+        if (book.isLocal || !AppConfig.autoChangeSource) return
+        if (ReadManga.autoChangeAttemptedFor == book.bookUrl) return
+        ReadManga.autoChangeAttemptedFor = book.bookUrl
+        AutoChangeSource.logTrigger(trigger, book.origin, book.bookUrl)
+        val excludeOrigin = book.origin.takeIf { it.isNotBlank() }
         execute {
-            val sources = appDb.bookSourceDao.allTextEnabledPart
-            flow {
-                for (source in sources) {
-                    source.getBookSource()?.let {
-                        emit(it)
-                    }
-                }
-            }.onStart {
-                // 自动换源
-
-            }.mapParallelSafe(AppConfig.threadCount) { source ->
-                val book = WebBook.preciseSearchAwait(source, name, author).getOrThrow()
-                if (book.tocUrl.isEmpty()) {
-                    WebBook.getBookInfoAwait(source, book)
-                }
-                val toc = WebBook.getChapterListAwait(source, book).getOrThrow()
-                val chapter = toc.getOrElse(book.durChapterIndex) {
-                    toc.last()
-                }
-                val nextChapter = toc.getOrElse(chapter.index) {
-                    toc.first()
-                }
-                WebBook.getContentAwait(
-                    bookSource = source,
-                    book = book,
-                    bookChapter = chapter,
-                    nextChapterUrl = nextChapter.url
-                )
-                book to toc
-            }.take(1).onEach { (book, toc) ->
-                changeTo(book, toc)
-            }.onEmpty {
-                throw NoStackTraceException("没有合适书源")
-            }.onCompletion {
-                // 换源完成
-            }.catch {
-                AppLog.put("自动换源失败\n${it.localizedMessage}", it)
-                context.toastOnUi("自动换源失败\n${it.localizedMessage}")
-            }.collect()
+            val (newBook, toc, _) = AutoChangeSource.findFirst(
+                name = book.name,
+                author = book.author,
+                excludeOrigin = excludeOrigin,
+                onStart = {
+                    context.toastOnUi(R.string.source_auto_changing)
+                },
+            )
+            ReadManga.autoChangeAttemptedFor = newBook.bookUrl
+            changeTo(newBook, toc)
+        }.onError {
+            AppLog.put("自动换源失败\n${it.localizedMessage}", it)
+            context.toastOnUi("自动换源失败\n${it.localizedMessage}")
         }
     }
 

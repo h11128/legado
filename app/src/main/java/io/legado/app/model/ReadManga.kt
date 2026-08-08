@@ -54,6 +54,8 @@ object ReadManga : CoroutineScope by MainScope() {
     var curMangaChapter: MangaChapter? = null
     var nextMangaChapter: MangaChapter? = null
     var bookSource: BookSource? = null
+    /** BookUrl for which auto-换源 already ran this read session (once). */
+    var autoChangeAttemptedFor: String? = null
     var readStartTime: Long = System.currentTimeMillis()
     private val readRecord = ReadRecord()
     private val loadingChapters = arrayListOf<Int>()
