@@ -95,6 +95,13 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - hunt empty；`.net`→safebrowse 威胁页；`.com` 超时。已禁用。
 - Trap: `http_403_home_hunt_empty`。deep_active 由 LegadoMcp.debug 自动 claim。
 
+
+## 2026-08-09 www.69shu.xyz deep dig
+
+- POST `/search` → CF **520 Origin Error**（手机 HTTP #4）；列表 0。
+- hunt empty。已有启用孪生 `https://www.69shuba.com`（先前迁通；搜索或仍 CF）。
+- 已禁用 xyz。Trap: `cf_520_origin_error_hunt_empty`。
+
 ## 2026-08-09 书架「失效」标签源抽查 + deep diagnose 关门
 
 - 抽查 10 个大源：表与队列见 `docs/guides/shelf-stale-tag-source-queue.md`。
