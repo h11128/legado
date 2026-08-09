@@ -54,6 +54,11 @@ Trap: `shallow_unfixable_claim` · script_fix: `no_auto:agent_must_html_or_phone
 - PC timeout；手机 POST `/search/` Cronet 60s（HTTP #644）。
 - `hunt --probe` empty；已禁用。Trap: `host_phone_timeout_no_mirror`。
 
+
+## 2026-08-09 www.bamxs.com deep dig
+
+- DNS `23.225.63.70`；PC/手机超时；hunt empty；已禁用。Trap: `known:host_phone_timeout_no_mirror`。
+
 ## 2026-08-09 书架「失效」标签源抽查 + deep diagnose 关门
 
 - 抽查 10 个大源：表与队列见 `docs/guides/shelf-stale-tag-source-queue.md`。
