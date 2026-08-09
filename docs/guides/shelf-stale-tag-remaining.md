@@ -112,5 +112,6 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `http://www.yjcat.com` | **fixed migrate** | Gate `l2_bot_shell`（CF Just a moment → `http://www.ibiquxs.org/`）；书路径已在 ibiquxs；克隆源 `http://www.ibiquxs.org` 设备 **校验成功**（搜索/1457章/正文）；书架 4 本 remap；`yjcat`+`yjcat#` `enabled=0`。Trap：`主机跳转` |
 | `https://www.tcknh.com` | **skip**（已禁用，含 `m.tcknh.com`） | DNS **NXDOMAIN**；hunt empty；OSINT 无 redirect；`xiakexs.com` 同名活站但 `/book/{id}` 与旧 `/novel/{id}` **不是同一本书**，书架书名搜索空。书架 3 靠自动换源。Trap：`dns_nxdomain_hunt_empty` |
 | `https://www.qqduw.com` | **skip**（已禁用） | DNS **A=127.0.0.1**（sinkhole）；hunt empty；`quduxsw` TLS/威胁页；`quduw.com`/`quduxs` 403。书架 3 靠自动换源。Trap：`known:dns_loopback` |
+| `https://www.iqushuwang.com/` | **skip**（已禁用） | `.com` 首页通但 **search POST 404**；书 URL 在 `.cc`；手机连 `.cc`→`23.224.*` **ENETUNREACH**（PC 见 WAF CAPTCHA）。书架 3 靠自动换源。Trap：`toc_href_slash_twin_unreachable` |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
