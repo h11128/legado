@@ -1,6 +1,37 @@
 # Source repair retrospective
 
 
+## 2026-08-09 浅层「修不了」被打脸 — 必须记的总教训
+
+**用户反馈：** 先前说修不了，再一站一站 deep diagnose 又能修；缺反思记录。
+
+### 做错了什么
+
+1. 把 `gate` / `serial oneshot` / `hunt empty` / 「搜索失效」标签当成终局，口头判死。
+2. 批次结束后只写了单站 ledger/retro，**没有**把「浅层判死 ≠ 不可修」写进回顾 + skill trap。
+3. 混淆了「搜索挂了」和「整源不可用」——书架打开路径（详情/目录/正文）仍可能活。
+
+### 深挖后翻案（同批证据）
+
+| 先前浅判 | 深挖结果 | 关键证据 |
+|----------|----------|----------|
+| haitang123 超时/skip | **migrate** → `m.haitang4.com` 校验成功 | 孪生已在机；原站 L1 超时 |
+| m.75zw NXDOMAIN/skip | **migrate** → `m.75zwz.com`；书架 remap | 搜索仍是热门假结果；打开路径 OK |
+| 31xs 搜索失效 → fail | **fixed**（无搜索） | 正文 `qsbs.bb` base64；发现/打开校验成功 |
+| ttshu8 POST 500 → fail | **fixed**（无搜索） | 打开/目录/正文 OK；`checkSearch=false` 校验成功 |
+| b520 搜索 404 → skip | **skip 加深** | TOC 几乎全 `href="/"`；孪生 PC 可修但手机 `23.224.*` 超时 |
+| lrxs / kanshushen skip | **skip 确认** | 占位壳→Google；api_search 404 + hunt empty |
+
+### 以后怎么做（可执行）
+
+1. **禁止**仅凭 gate/serial/标签说「修不了」收工；至少做：PC 抓首页+搜索+一本详情 TOC/正文，或手机 `debug_source` + `get_http_logs`。
+2. 搜索死 ≠ 整源死：打开路径通 → 可 `checkSearch=false` 验证并注明「无搜索」；§16 默认 disable 假搜索，但**不要**在未看打开路径时直接 skip。
+3. hunt empty / L2 通 都不够：孪生要 **手机可达**（HTTP 日志超时也算证据）。
+4. 每批 deep dig 结束：`docs/source-repair-retrospective.md` 写总教训 + 单站 `retro append`；新行为陷阱进 SKILL（本条 trap：`shallow_unfixable_claim`）。
+5. 名单 SOT：`docs/guides/shelf-stale-tag-remaining.md`（深挖表与浅表矛盾时以深挖为准）。
+
+Trap: `shallow_unfixable_claim` · script_fix: `no_auto:agent_must_html_or_phone_debug`
+
 ## 2026-08-09 书架「失效」标签源抽查 + deep diagnose 关门
 
 - 抽查 10 个大源：表与队列见 `docs/guides/shelf-stale-tag-source-queue.md`。

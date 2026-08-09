@@ -33,6 +33,11 @@ Create and repair share the same close-out / improve gate — do not wait for th
 5. **Deep-fix checklist is mandatory** (skill SOT): channel → diagnose → branch → verify → ledger.
    Trust diagnose `layer`. If `fake_detail` (search page as 1 book, wmp8) → fix **search**, not toc.
    「搜索目录失效」is ambiguous — 画本=TOC, 御书屋=dead search; never guess from Chinese alone.
+5b. **Never claim「修不了 / unfixable」from gate/serial/hunt-empty alone** (trap
+   `shallow_unfixable_claim`). Before that verdict: PC HTML (home+search+one book TOC/content)
+   or phone `debug_source` + `get_http_logs`. Search-dead ≠ open-path-dead. After a deep-dig
+   batch: write the **session lesson** in `docs/source-repair-retrospective.md` (not only
+   per-URL `retro append`).
 6. **Wave is triage, not fix**: `repair_wave` may only apply *meaningful* smells; rate-only ≠ fixed.
 7. **Never rewrite search rules** on rate-limit HTML — rely on EWMA cooldown cache / clear-cookies.
 8. **Never create** ad-hoc inspect scripts — use `source-cli diagnose` / `probe`.
