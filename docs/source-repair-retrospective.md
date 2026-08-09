@@ -126,6 +126,14 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - Trap: `stream_protocol_error_reset`。
 
 
+## 2026-08-09 www.qinqinxsw.cc deep dig
+
+- Gate L2 `UnknownIssuer`（LE YE1）；curl 仍能拉到 ~4.7KB HTML，title「Redirecting…」，正文含 `ad-overlay` / prebid（非小说页）。
+- 首页 / 搜索 / `book/…` / `m.…/324_…/` 同壳；手机搜索「获取成功但书籍总数:0」；打开详情后 `TocEmptyException`。
+- `hunt --probe`（含 `.com` / `qinqinxs.cc` seeds）empty；`.com` 手机 `SSLV3_ALERT_HANDSHAKE_FAILURE` / `ERR_SSL_VERSION_OR_CIPHER_MISMATCH`。
+- 已禁用 `https://www.qinqinxsw.cc/`、`https://m.qinqinxsw.cc/`、`https://www.qinqinxsw.com/`；书架靠自动换源。
+- Trap: `known:域名停车/过期`（Redirecting shell）。
+
 ## 2026-08-09 www.wbxs.org deep dig
 
 - Gate L1 通、L2 `tls connection init failed: corrupt message`；备注已有 `Unable to parse TLS packet header`。

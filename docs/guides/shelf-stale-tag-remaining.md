@@ -100,6 +100,7 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | `https://hongxiud.com` | **skip** | 再挖：HTTPS 超时；HTTP 全路径色情广告壳（搜索/书 URL 同壳）；phone 列表空；hunt empty；http+https 已禁用 |
 | `https://m.92yanqing.com` | **skip** | 再挖：PC/手机首页+搜索+详情全超时；hunt empty；.net NXDOMAIN；已禁用 |
 | `https://www.wbxs.org` | **skip** | TLS 握手损坏（`Unable to parse TLS packet header` / `ERR_SSL_PROTOCOL_ERROR`）；hunt empty；已禁用 |
+| `https://www.qinqinxsw.cc/` | **skip** | JS「Redirecting…」广告壳；搜索/目录空；孪生 `.com` TLS 失败；hunt empty；www/m .cc +.com 已禁用 |
 | `https://www.00ksw.com` | **skip** | PC/手机 TCP hang（DNS→23.224 uucdn）；hunt empty；假镜像停车/威胁页；手机 DB `enabled=0`；书架 5 靠自动换源 |
 | `https://www.ffxs8.top` | **fixed migrate** | NXDOMAIN；孪生 `https://www.ffxs8.com` debug 打开 OK + MCP `checkSearch=false`→`校验成功`（ledger）；手机 DB 书架 5 remap（`.top` 剩 0，`.com` 含原路径）；`.top` `enabled=0` |
 | `https://www.dubu123.com` | **fixed migrate** | NXDOMAIN 仍在；孪生 `https://www.dbxsn.com`（首页 404 但 `/book/p*`+搜索活；301→`dbxsz`）；MCP debug+`keyword=斗破` **校验成功**；书架 4 remap（证据 `temp/full_fix/cache/dubu_migrate_proof.json`）；`.com` 已禁用 |
