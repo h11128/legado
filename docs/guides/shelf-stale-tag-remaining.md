@@ -108,5 +108,6 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://www.ffxs8.top` | **fixed migrate** | NXDOMAIN；孪生 `https://www.ffxs8.com` debug 打开 OK + MCP `checkSearch=false`→`校验成功`（ledger）；手机 DB 书架 5 remap（`.top` 剩 0，`.com` 含原路径）；`.top` `enabled=0` |
 | `https://www.dubu123.com` | **fixed migrate** | NXDOMAIN 仍在；孪生 `https://www.dbxsn.com`（首页 404 但 `/book/p*`+搜索活；301→`dbxsz`）；MCP debug+`keyword=斗破` **校验成功**；书架 4 remap（证据 `temp/full_fix/cache/dubu_migrate_proof.json`）；`.com` 已禁用 |
 | `https://www.tongrenquan.org` | **fixed migrate** | www/apex **无 A**（DNS 失败）；`hunt --probe` → `https://m.tongrenquan.org/`（手机已有启用「同人圈」）；路径 `/tongren/{id}.html` 可开；设备校验 **校验成功**（1335ms）；书架 4 本 origin+bookUrl remap；www+apex `enabled=0`。Trap：`known:apex_no_a_try_m` |
+| `http://00txs.com` | **skip**（已禁用，含 `http://00txs.com/`） | PC/手机 TCP **timeout**（DNS 有 A）；`hunt --probe` empty；OSINT Wayback 无 redirect；`9txs.org`=for-sale 壳；`9taoxs`/`m.9taoxs`=analytics 空壳；`11txs`/`33txs`/`9txs.com` 超时。书架 4 本靠自动换源。Trap：`host_phone_timeout_no_mirror` |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
