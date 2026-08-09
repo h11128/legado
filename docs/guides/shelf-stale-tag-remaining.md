@@ -99,5 +99,8 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | `https://m.boshishuwu.com` | **skip** | PROTOCOL_ERROR；301→.net 同死；已禁用 |
 | `https://hongxiud.com` | **skip** | 广告/色情劫持壳；已禁用 |
 | `https://m.92yanqing.com` | **skip** | 搜索超时；hunt empty；已禁用 |
+| `https://www.00ksw.com` | **skip** | PC/手机 TCP hang（DNS→23.224 uucdn）；hunt empty；假镜像停车/威胁页；已禁用 |
+| `https://www.ffxs8.top` | **skip migrate** | NXDOMAIN；孪生 `https://www.ffxs8.com` 打开/目录/正文 OK（搜索空壳）；书架 5 remap→.com；.top 已禁用 |
+| `https://www.dubu123.com` | **skip** | NXDOMAIN；hunt empty；dubuxs.cc 威胁页 / dbxs123 影视壳；已禁用 |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。

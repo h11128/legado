@@ -135,6 +135,25 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - 手机 POST `/search/` Cronet 60s timeout；PC 不通；hunt empty。已禁用。
 - Trap: `known:host_phone_timeout_no_mirror`。
 
+## 2026-08-09 www.00ksw.com deep dig
+
+- PC/手机均 TCP hang；DNS alias `23.224.148.*` via uucdn；`hunt --probe` empty。
+- 候选 `00ksw.cc`=XDNS 威胁页、`.org`=广告 redirect、`00ks`/`ldks` 停车。已禁用；书架 5 靠自动换源。
+- Trap: `known:host_phone_timeout_no_mirror`。
+- 注：本机 APK `save_source` 仍默认保留 enabled（响应无 `enabled=` 行）；本批用 `legado_adb` 拉库改 `enabled=0` 后推回。
+
+## 2026-08-09 www.ffxs8.top deep dig
+
+- `.top` NXDOMAIN；孪生 `https://www.ffxs8.com` 首页/详情/目录/正文 OK；站内搜索恒「没有搜索到相关的内容」。
+- 手机 debug 打开书架路径成功；`checkSearch=false` 校验成功。书架 5 本 `origin`+URL remap→`.com`；`.top` 已禁用。
+- Trap: `known:search_empty_shell_open_ok`。
+
+## 2026-08-09 www.dubu123.com deep dig
+
+- NXDOMAIN（手机 `UnknownHostException`）；hunt empty。
+- `dubuxs.cc`=XDNS 威胁页；`dbxs123.com`=影视壳（勿迁）；`dbxsn` 404/403。已禁用；书架 4 靠自动换源。
+- Trap: `known:host_phone_timeout_no_mirror`。
+
 ## 2026-08-09 书架「失效」标签源抽查 + deep diagnose 关门
 
 - 抽查 10 个大源：表与队列见 `docs/guides/shelf-stale-tag-source-queue.md`。
