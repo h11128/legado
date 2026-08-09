@@ -119,5 +119,6 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `http://www.xiaoshuozu.cc` | **fixed** | `s.php` 404→`/search.php?q=`（lzshu 同模板）；https 源「小说族」校验成功；旧 `/shu/{id}/` 错书；仅「大唐开局震惊李世民」精确 remap→`/shu/92982/`；另 2 本无精确同名靠换源。http 旧源 disabled。 |
 | `http://www.shatanxs.com/` | **skip**（含无尾斜线已禁用） | CF `Attention Required` **403**（PC/手机详情+搜索同）；`hunt --probe` empty；OSINT 无后继（crt 仅本域）。书架 3 靠自动换源。Trap：`http_403_home_hunt_empty` |
 | `http://www.kanquanben.org` | **skip**（已禁用） | DNS **NXDOMAIN**；hunt empty；`.com` CF403；`.net`/`m.` 广告 Redirecting 壳；`kqbxs` 威胁页。书架 3 靠换源。Trap：`dns_nxdomain_hunt_empty` |
+| `http://m.hetunxs.com` | **skip**（已禁用） | CF `Attention Required` **403**（PC/手机同）；hunt empty；OSINT 无后继。书架 3 靠换源。Trap：`http_403_home_hunt_empty` |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
