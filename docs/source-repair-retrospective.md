@@ -1,6 +1,17 @@
 # Source repair retrospective
 
 
+## 2026-08-09 tongrenquan.org — apex DNS 死、m. 活（known trap）
+
+| 项 | 结果 |
+|----|------|
+| 症状 | `www.tongrenquan.org` / apex **无 A**；备注 `Unable to resolve host`；书架 4 本 |
+| Gate | `l1_unreachable` → hunt |
+| Hunt | `https://m.tongrenquan.org/` L2 200；路径 `/tongren/{id}.html` 同书可开 |
+| 设备 | `m.tongrenquan.org` **校验成功**（1335ms）；debug 搜索+641章+正文 OK |
+| 动作 | 书架 4 remap → m；www+apex `enabled=0` |
+| Trap | `known:apex_no_a_try_m`（skill 已有；勿对 IP 空壳/死 apex 直接放弃） |
+
 ## 2026-08-09 浅层「修不了」被打脸 — 必须记的总教训
 
 **用户反馈：** 先前说修不了，再一站一站 deep diagnose 又能修；缺反思记录。
