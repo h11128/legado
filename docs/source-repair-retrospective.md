@@ -126,10 +126,14 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - Trap: `stream_protocol_error_reset`。
 
 
-## 2026-08-09 hongxiud.com deep dig
+## 2026-08-09 hongxiud.com deep dig（再挖）
 
-- http 通但整站被劫持成色情广告壳（title「美女日韩一区…」）；search.aspx 同壳无书列表。
-- 已禁用 http/https。Trap: `known:域名广告劫持 (pyzht)`。
+- Gate 对 `https://` 报 `l1_unreachable`（TCP timeout）；`hunt --probe` empty。
+- **HTTP 通**：`http://(www.|m.)hongxiud.com/`、`/search.aspx`、书架书 URL（如 `/KG21bN.html`）全部同一 ~1985B 色情广告壳；title「美女日韩一区_你懂的网址…」。
+- 手机：`https` debug 45s 卡搜索；`http` debug 301→www 后「列表为空/书籍总数:0」。
+- `hongxiu.com`=阅文「红袖读书」，**非**小说源孪生，不可 migrate。
+- 手机 DB 将 `http://hongxiud.com` + `https://hongxiud.com` 置 `enabled=0`（此前文档写已禁用但源仍开着）。书架 5 靠自动换源。
+- Trap: `known:域名广告劫持 (pyzht)`。
 
 
 ## 2026-08-09 m.92yanqing.com deep dig
