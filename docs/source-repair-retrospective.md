@@ -27,6 +27,18 @@
 | closeout | `trap_in_skill` 先匹配原始 underscore slug（修 `apex_no_a_try_m` 被当成 novel） |
 | 纪律 | `book-source-repair-discipline`：失效标签分流禁止未 probe 的 hunt 缓修 |
 
+## 2026-08-09 00txs.com（九桃）— timeout，无活孪生
+
+| 项 | 结果 |
+|----|------|
+| Gate | `l1_unreachable`（TCP timeout；DNS 有 A=`85.208.118.160`） |
+| Hunt | empty（含种子 11/9/33txs、9txs.org、9taoxs） |
+| OSINT | Wayback 有历史快照、**无 redirect 新域**；crt.sh 502 |
+| 假孪生 | `9txs.org` for-sale 壳；`9taoxs` analytics 空壳（书路径同壳） |
+| 手机 | debug 45s 无响应；HTTP 日志 `11txs` 亦 IOException~60s |
+| 动作 | `http://00txs.com` + `/` **enabled=0**；书架 4 本靠自动换源 |
+| Trap | `host_phone_timeout_no_mirror`（known） |
+
 ## 2026-08-09 浅层「修不了」被打脸 — 必须记的总教训
 
 **用户反馈：** 先前说修不了，再一站一站 deep diagnose 又能修；缺反思记录。
