@@ -63,3 +63,19 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 4. CF/停车页保持 skip，靠自动换源  
 
 书架上仍挂在**已禁用**源上的书（如 69shu 325、UU 44）不算「源还可修」，靠自动换源。
+
+## Deep diagnose 本批 9 源（2026-08-09）
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `https://m.wfxs.tw` | **fixed / 校验成功** | 搜索改 `/s/?q=`+`.result-card`；目录 `/booklist/{id}/1.html` `#html_box`；正文 `#read_conent_box` |
+| `https://m.75zw.com` | skip | TLS 证书变成 facebook 域名；oneshot 已 disable |
+| `https://www.75zwz.com/` | fail:搜索失效 | 首页通；搜索页无结果节点 |
+| `https://m.lrxs.org` | skip | 占位页「Web accesible」跳转 Google |
+| `http://www.31xs.com` | fail:搜索失效 | 表单 `onsubmit=false` 纯 JS；常见 search 路径 404 |
+| `http://www.b520.cc` | skip | 首页通；搜索路径 404 |
+| `https://m.ttshu8.com` | fail:搜索失效 | POST `/search.html` → **500** |
+| `https://haitang123.net` | skip | fingerprint 停车跳转 |
+| `http://apitt.kanshushenapp.com/` | skip | 随机跳 `gegedangbook.com`（L2 超时） |
+
+串行日志：`temp/shelf_restore/queue/serial_9.log`
