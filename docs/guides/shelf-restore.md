@@ -91,3 +91,12 @@ Stop a stuck readable worker: `powershell -File scripts/shelf_restore/stop_reada
 2. Pull DB integrity_check=ok before push  
 3. Record outcomes under `temp/shelf_restore/queue/*.jsonl`  
 4. Update this guide’s run record when process changes  
+
+## Stale「失效」tag sources (2026-08-09)
+
+Bookshelf books whose origin is still **enabled**, but source comment/group still says `搜索失效` / `Error` — spot-check + per-source repair queue:
+
+- Guide: [`shelf-stale-tag-source-queue.md`](shelf-stale-tag-source-queue.md)  
+- Runtime log: `temp/shelf_restore/queue/stale_tag_repair_queue.jsonl`  
+
+Unreadable shelf rows may rely on **auto-换源**; do not delete shelf-referenced URLs without origin check.  

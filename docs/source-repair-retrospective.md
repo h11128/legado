@@ -1,6 +1,14 @@
 # Source repair retrospective
 
 
+## 2026-08-09 书架「失效」标签源抽查 + 逐个修复关门
+
+- 抽查 10 个大源（书架书最多）：当时 0/10 正文完整；仅 69shu / lwxs 能拉目录。表与队列见 `docs/guides/shelf-stale-tag-source-queue.md`。
+- **trxs.me**：DNS NXDOMAIN → `https://trxs.cc`；禁用 `.me`；书架 8 remap / 13 自动换源。
+- **乐文 m.lwxs.com**：L2 host redirect → `https://m.ilwxs.com`；旧源 disable；书架 31 已 remap；设备校验成功（`checkSearch=false`，发现→目录→正文）；**搜索 POST 站端 500**，未谎称搜索修好。
+- **其余 8**：gate/hunt 后 skip（CF/TLS/超时/证书过期/不可达），保持启用给挂梯用户，不删书架引用 URL。
+- 策略确认：暂不批量修空目录书架；靠自动换源兜底。
+
 ## 2026-08-06 非小说壳 + QQ 搜索 + 换源 gate
 
 ### 书源
