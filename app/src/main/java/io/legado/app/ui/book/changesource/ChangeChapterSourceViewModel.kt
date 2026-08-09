@@ -16,6 +16,7 @@ import io.legado.app.help.book.primaryStr
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.SourceConfig
 import io.legado.app.model.checkalgo.AskTimeout
+import io.legado.app.model.checkalgo.ChangeBookSourceQuality
 import io.legado.app.model.checkalgo.ChangeChapterVerify
 import io.legado.app.model.checkalgo.ChangeSourceLog
 import io.legado.app.model.webBook.WebBook
@@ -74,11 +75,33 @@ class ChangeChapterSourceViewModel(application: Application) :
         chapterTitle = title
         probeByOrigin.clear()
         probeContentSamples.clear()
-        searchBooks.forEach {
-            it.chapterWordCountText = null
-            it.chapterWordCount = -1
-        }
+        searchBooks.forEach { clearChapterProbeUi(it) }
         startChapterVerify()
+    }
+
+    private fun clearChapterProbeUi(book: SearchBook) {
+        book.chapterWordCountText = null
+        book.chapterWordCount = -1
+        book.qualityVerdict = null
+        book.qualityTags = emptyList()
+        book.smartScore = -1
+    }
+
+    private fun applyChapterMetricUi(
+        book: SearchBook,
+        measuredChars: Int,
+        verdict: ChangeBookSourceQuality.QualityVerdict,
+        qualityTag: String? = null,
+        respondTimeMs: Int = book.respondTime,
+    ) {
+        book.chapterWordCount = measuredChars
+        book.qualityVerdict = verdict
+        book.qualityTags = listOfNotNull(qualityTag?.takeIf { it.isNotBlank() })
+        book.chapterWordCountText = when {
+            measuredChars >= 0 -> ChangeBookSourceQuality.metricLine(measuredChars, respondTimeMs)
+            else -> getApplication<Application>().getString(R.string.change_source_chapter_content_fail)
+        }
+        refreshSmartScore(book)
     }
 
     override fun onCachedSearchReady() {
@@ -299,8 +322,13 @@ class ChangeChapterSourceViewModel(application: Application) :
                 score = 0.0,
             )
             searchBooks.find { it.origin == origin }?.let { book ->
-                book.chapterWordCountText = msg
-                book.chapterWordCount = -1
+                val measured = book.chapterWordCount.coerceAtLeast(-1)
+                applyChapterMetricUi(
+                    book = book,
+                    measuredChars = if (measured >= 0) measured else -1,
+                    verdict = ChangeBookSourceQuality.QualityVerdict.Hijack,
+                    qualityTag = msg,
+                )
             }
             probeContentSamples.remove(origin)
         }
@@ -312,28 +340,52 @@ class ChangeChapterSourceViewModel(application: Application) :
             val probe = probeByOrigin[book.origin] ?: return@forEach
             when (probe.status) {
                 ChangeSourceChapterProbe.STATUS_OK -> {
-                    book.chapterWordCountText = app.getString(
-                        R.string.change_source_chapter_ok,
-                        probe.score.toInt()
+                    val n = probe.score.toInt()
+                    applyChapterMetricUi(
+                        book = book,
+                        measuredChars = n,
+                        verdict = ChangeBookSourceQuality.verdictFromContentQuality(
+                            ChangeChapterVerify.ContentQuality.Ok(n),
+                            n,
+                        ),
                     )
-                    book.chapterWordCount = probe.score.toInt()
                 }
 
                 ChangeSourceChapterProbe.STATUS_TOC_OK -> {
                     book.chapterWordCountText =
-                        app.getString(R.string.change_source_chapter_toc_ok)
+                        app.getString(R.string.change_source_pending_word)
+                    book.qualityTags = listOf(app.getString(R.string.change_source_chapter_toc_ok))
+                    book.qualityVerdict = ChangeBookSourceQuality.QualityVerdict.Pending
+                    book.smartScore = -1
                 }
 
                 ChangeSourceChapterProbe.STATUS_NO_CHAPTER -> {
-                    book.chapterWordCountText =
-                        app.getString(R.string.change_source_chapter_missing)
                     book.chapterWordCount = -1
+                    book.chapterWordCountText =
+                        app.getString(R.string.change_source_chapter_content_fail)
+                    book.qualityVerdict = ChangeBookSourceQuality.QualityVerdict.FetchError
+                    book.qualityTags =
+                        listOf(app.getString(R.string.change_source_chapter_missing))
+                    book.smartScore = ChangeBookSourceQuality.smartScore(
+                        measuredChars = -1,
+                        verdict = ChangeBookSourceQuality.QualityVerdict.FetchError,
+                        userScore = getBookScore(book),
+                    )
                 }
 
                 ChangeSourceChapterProbe.STATUS_CONTENT_FAIL -> {
-                    book.chapterWordCountText =
-                        app.getString(R.string.change_source_chapter_content_fail)
-                    book.chapterWordCount = -1
+                    val measured = book.chapterWordCount
+                    if (measured >= 0 && book.qualityVerdict != null) {
+                        // Keep split fields already written by contentProbeOne.
+                        refreshSmartScore(book)
+                    } else {
+                        applyChapterMetricUi(
+                            book = book,
+                            measuredChars = -1,
+                            verdict = ChangeBookSourceQuality.QualityVerdict.FetchError,
+                            qualityTag = app.getString(R.string.change_source_chapter_content_fail),
+                        )
+                    }
                 }
             }
         }
@@ -379,7 +431,17 @@ class ChangeChapterSourceViewModel(application: Application) :
                 score = 0.0,
             )
             searchBook.chapterWordCountText =
-                getApplication<Application>().getString(R.string.change_source_chapter_missing)
+                getApplication<Application>().getString(R.string.change_source_chapter_content_fail)
+            searchBook.chapterWordCount = -1
+            searchBook.qualityVerdict = ChangeBookSourceQuality.QualityVerdict.FetchError
+            searchBook.qualityTags = listOf(
+                getApplication<Application>().getString(R.string.change_source_chapter_missing),
+            )
+            searchBook.smartScore = ChangeBookSourceQuality.smartScore(
+                measuredChars = -1,
+                verdict = ChangeBookSourceQuality.QualityVerdict.FetchError,
+                userScore = getBookScore(searchBook),
+            )
         } else {
             upsertProbe(
                 origin = searchBook.origin,
@@ -388,15 +450,22 @@ class ChangeChapterSourceViewModel(application: Application) :
                 score = aligned.quality,
             )
             searchBook.chapterWordCountText =
-                getApplication<Application>().getString(R.string.change_source_chapter_toc_ok)
+                getApplication<Application>().getString(R.string.change_source_pending_word)
+            searchBook.qualityVerdict = ChangeBookSourceQuality.QualityVerdict.Pending
+            searchBook.qualityTags = listOf(
+                getApplication<Application>().getString(R.string.change_source_chapter_toc_ok),
+            )
+            searchBook.smartScore = -1
         }
     }
 
     /** Session-only; do not persist so the next open can retry transient network/toc errors. */
     private fun markTransientTocFail(searchBook: SearchBook) {
-        searchBook.chapterWordCountText =
-            getApplication<Application>().getString(R.string.change_source_chapter_content_fail)
-        searchBook.chapterWordCount = -1
+        applyChapterMetricUi(
+            book = searchBook,
+            measuredChars = -1,
+            verdict = ChangeBookSourceQuality.QualityVerdict.FetchError,
+        )
     }
 
     private fun contentEvalContext(): ChangeChapterVerify.ContentEvalContext {
@@ -494,10 +563,16 @@ class ChangeChapterSourceViewModel(application: Application) :
             status = ChangeSourceChapterProbe.STATUS_OK,
             score = searchBook.chapterWordCount.toDouble(),
         )
-        searchBook.chapterWordCountText = getApplication<Application>().getString(
-            R.string.change_source_chapter_ok,
-            searchBook.chapterWordCount
+        searchBook.chapterWordCountText = ChangeBookSourceQuality.metricLine(
+            searchBook.chapterWordCount,
+            searchBook.respondTime,
         )
+        searchBook.qualityVerdict = ChangeBookSourceQuality.verdictFromContentQuality(
+            ChangeChapterVerify.ContentQuality.Ok(searchBook.chapterWordCount),
+            searchBook.chapterWordCount,
+        )
+        searchBook.qualityTags = emptyList()
+        refreshSmartScore(searchBook)
         return true
     }
 
@@ -534,46 +609,44 @@ class ChangeChapterSourceViewModel(application: Application) :
             val processed = oldBook?.let {
                 contentProcessor.getContent(it, chapter, content, false).toString()
             } ?: content
-            when (val quality = ChangeChapterVerify.evaluateContent(
+            val diag = ChangeChapterVerify.evaluateContentDiag(
                 processed,
                 contentEvalContext(),
-            )) {
+            )
+            val measured = diag.contentLen.coerceAtLeast(0)
+            val verdict = ChangeBookSourceQuality.verdictFromContentQuality(diag.quality, measured)
+            val tag = when (diag.quality) {
+                is ChangeChapterVerify.ContentQuality.Ok -> null
+                ChangeChapterVerify.ContentQuality.TooShort ->
+                    getApplication<Application>().getString(R.string.change_source_chapter_too_short)
+                ChangeChapterVerify.ContentQuality.AntiTheft ->
+                    getApplication<Application>().getString(R.string.change_source_chapter_anti_theft)
+                ChangeChapterVerify.ContentQuality.Hijack ->
+                    getApplication<Application>().getString(R.string.change_source_chapter_hijack)
+            }
+            when (diag.quality) {
                 is ChangeChapterVerify.ContentQuality.Ok -> {
                     upsertProbe(
                         origin = searchBook.origin,
                         chapterKey = chapterKey,
                         status = ChangeSourceChapterProbe.STATUS_OK,
-                        score = quality.length.toDouble(),
+                        score = measured.toDouble(),
                     )
                     probeContentSamples[searchBook.origin] = processed
-                    searchBook.chapterWordCount = quality.length
-                    searchBook.chapterWordCountText = getApplication<Application>().getString(
-                        R.string.change_source_chapter_ok,
-                        quality.length
+                    applyChapterMetricUi(
+                        book = searchBook,
+                        measuredChars = measured,
+                        verdict = verdict,
                     )
                 }
-                ChangeChapterVerify.ContentQuality.TooShort -> {
+                else -> {
                     markContentQualityFail(
                         searchBook,
                         chapterKey,
                         contentStop,
-                        R.string.change_source_chapter_too_short,
-                    )
-                }
-                ChangeChapterVerify.ContentQuality.AntiTheft -> {
-                    markContentQualityFail(
-                        searchBook,
-                        chapterKey,
-                        contentStop,
-                        R.string.change_source_chapter_anti_theft,
-                    )
-                }
-                ChangeChapterVerify.ContentQuality.Hijack -> {
-                    markContentQualityFail(
-                        searchBook,
-                        chapterKey,
-                        contentStop,
-                        R.string.change_source_chapter_hijack,
+                        measuredChars = measured,
+                        verdict = verdict,
+                        qualityTag = tag,
                     )
                 }
             }
@@ -596,7 +669,10 @@ class ChangeChapterSourceViewModel(application: Application) :
             searchBook,
             chapterKey,
             contentStop,
-            R.string.change_source_chapter_content_fail,
+            measuredChars = -1,
+            verdict = ChangeBookSourceQuality.QualityVerdict.FetchError,
+            qualityTag = getApplication<Application>()
+                .getString(R.string.change_source_chapter_content_fail),
         )
     }
 
@@ -604,22 +680,31 @@ class ChangeChapterSourceViewModel(application: Application) :
         searchBook: SearchBook,
         chapterKey: String,
         contentStop: AtomicBoolean,
-        messageRes: Int,
+        measuredChars: Int,
+        verdict: ChangeBookSourceQuality.QualityVerdict,
+        qualityTag: String?,
     ) {
-        val msg = getApplication<Application>().getString(messageRes)
         if (contentStop.get()) {
-            searchBook.chapterWordCountText = msg
-            searchBook.chapterWordCount = -1
+            applyChapterMetricUi(
+                book = searchBook,
+                measuredChars = measuredChars,
+                verdict = verdict,
+                qualityTag = qualityTag,
+            )
             return
         }
         upsertProbe(
             origin = searchBook.origin,
             chapterKey = chapterKey,
             status = ChangeSourceChapterProbe.STATUS_CONTENT_FAIL,
-            score = 0.0,
+            score = measuredChars.coerceAtLeast(0).toDouble(),
         )
-        searchBook.chapterWordCountText = msg
-        searchBook.chapterWordCount = -1
+        applyChapterMetricUi(
+            book = searchBook,
+            measuredChars = measuredChars,
+            verdict = verdict,
+            qualityTag = qualityTag,
+        )
     }
 
     private suspend fun ensureToc(

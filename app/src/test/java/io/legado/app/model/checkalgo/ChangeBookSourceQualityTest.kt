@@ -627,5 +627,158 @@ class ChangeBookSourceQualityTest {
         assertNull(hit.latestChapterTitle)
         assertFalse(ChangeBookSourceQuality.hasUsableSearchLatest("猫眼", null))
     }
+
+    @Test
+    fun smartScorePendingIsNotReady() {
+        assertEquals(
+            -1,
+            ChangeBookSourceQuality.smartScore(
+                measuredChars = 0,
+                verdict = ChangeBookSourceQuality.QualityVerdict.Pending,
+            ),
+        )
+        assertEquals(-1, ChangeBookSourceQuality.smartScore(0, null))
+    }
+
+    @Test
+    fun smartScoreOrdersOkAboveTooShortAboveHijack() {
+        val ok = ChangeBookSourceQuality.smartScore(
+            measuredChars = 3800,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            contentRefSim = 0.7,
+            respondTimeMs = 500,
+        )
+        val tooShort = ChangeBookSourceQuality.smartScore(
+            measuredChars = 53,
+            verdict = ChangeBookSourceQuality.QualityVerdict.TooShort,
+            respondTimeMs = 300,
+        )
+        val hijack = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2500,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Hijack,
+            respondTimeMs = 400,
+        )
+        assertTrue("ok=$ok tooShort=$tooShort", ok > tooShort)
+        assertTrue("tooShort=$tooShort hijack=$hijack", tooShort > hijack)
+        assertTrue(ok in 0..100)
+        assertTrue(tooShort in 0..100)
+        assertTrue(hijack in 0..100)
+    }
+
+    @Test
+    fun smartScoreUserLikeRaisesAndDislikeLowers() {
+        val base = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2000,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+        )
+        val liked = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2000,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            userScore = 1,
+        )
+        val disliked = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2000,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            userScore = -1,
+        )
+        assertTrue(liked > base)
+        assertTrue(disliked < base)
+    }
+
+    @Test
+    fun metricLineKeepsWordCountSeparateFromQuality() {
+        val line = ChangeBookSourceQuality.metricLine(53, 320)
+        assertTrue(line.contains("字数：53"))
+        assertFalse(line.contains("过短"))
+        assertFalse(line.contains("劫持"))
+    }
+
+    @Test
+    fun contentSortTierUsesVerdictWhenMeasuredCharsLookOk() {
+        // Hijack with long body must still sort as content-bad via verdict.
+        assertEquals(
+            ChangeBookSourceQuality.TIER_CONTENT_BAD,
+            ChangeBookSourceQuality.contentSortTier(
+                chapterWordCount = 2500,
+                verdict = ChangeBookSourceQuality.QualityVerdict.Hijack,
+            ),
+        )
+        assertEquals(
+            ChangeBookSourceQuality.TIER_OK,
+            ChangeBookSourceQuality.contentSortTier(
+                chapterWordCount = 2500,
+                verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            ),
+        )
+    }
+
+    @Test
+    fun isContentBadVerdictMatchesDropFilter() {
+        assertTrue(
+            ChangeBookSourceQuality.isContentBadVerdict(
+                ChangeBookSourceQuality.QualityVerdict.TooShort,
+            ),
+        )
+        assertFalse(
+            ChangeBookSourceQuality.isContentBadVerdict(
+                ChangeBookSourceQuality.QualityVerdict.Ok,
+            ),
+        )
+        assertFalse(ChangeBookSourceQuality.isContentBadVerdict(null))
+    }
+
+    @Test
+    fun sortSmartScoreKeyKeepsPendingAboveContentBad() {
+        val pending = ChangeBookSourceQuality.sortSmartScoreKey(
+            -1,
+            ChangeBookSourceQuality.QualityVerdict.Pending,
+        )
+        val tooShort = ChangeBookSourceQuality.sortSmartScoreKey(
+            40,
+            ChangeBookSourceQuality.QualityVerdict.TooShort,
+        )
+        val ok = ChangeBookSourceQuality.sortSmartScoreKey(
+            82,
+            ChangeBookSourceQuality.QualityVerdict.Ok,
+        )
+        assertTrue(ok > pending)
+        assertTrue(pending > tooShort)
+    }
+
+    @Test
+    fun needsSessionQualityHydrationWhenVerdictMissing() {
+        assertTrue(
+            ChangeBookSourceQuality.needsSessionQualityHydration(
+                null,
+                "字数：53 · 0.3s",
+            ),
+        )
+        assertFalse(
+            ChangeBookSourceQuality.needsSessionQualityHydration(
+                ChangeBookSourceQuality.QualityVerdict.TooShort,
+                "字数：53 · 0.3s",
+            ),
+        )
+        assertFalse(ChangeBookSourceQuality.needsSessionQualityHydration(null, null))
+    }
+
+    @Test
+    fun softMetaSuppressedForContentBadVerdictEvenWithPositiveChars() {
+        assertFalse(
+            ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+                chapterWordCount = 53,
+                contentRefSim = null,
+                verdict = ChangeBookSourceQuality.QualityVerdict.TooShort,
+            ),
+        )
+        assertEquals(
+            0,
+            ChangeBookSourceQuality.softMetaPenalty(
+                ChangeBookSourceQuality.TIER_LATEST_BAD,
+                chapterWordCount = 53,
+                verdict = ChangeBookSourceQuality.QualityVerdict.TooShort,
+            ),
+        )
+    }
 }
 

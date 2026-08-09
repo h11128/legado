@@ -36,6 +36,9 @@ class ChangeSourceResultOptionsWiringTest {
             val source = projectFile(path).readText()
             assertTrue(path, source.contains("oldItem.chapterWordCountText == newItem.chapterWordCountText"))
             assertTrue(path, source.contains("oldItem.respondTime == newItem.respondTime"))
+            assertTrue(path, source.contains("oldItem.smartScore == newItem.smartScore"))
+            assertTrue(path, source.contains("tvSmartScore"))
+            assertTrue(path, source.contains("tvQualityTags"))
         }
     }
 

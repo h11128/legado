@@ -62,6 +62,24 @@ data class SearchBook(
     @IgnoredOnParcel
     override var tocHtml: String? = null
 
+    /**
+     * Change-source content probe verdict (session-only).
+     * Null = legacy row / not probed yet beyond search hit.
+     */
+    @Ignore
+    @IgnoredOnParcel
+    var qualityVerdict: io.legado.app.model.checkalgo.ChangeBookSourceQuality.QualityVerdict? = null
+
+    /** Short quality / soft-meta labels for UI (not mixed into [chapterWordCountText]). */
+    @Ignore
+    @IgnoredOnParcel
+    var qualityTags: List<String> = emptyList()
+
+    /** 0..100 smart score; -1 = not ready (pending / unknown). */
+    @Ignore
+    @IgnoredOnParcel
+    var smartScore: Int = -1
+
     override fun equals(other: Any?) = other is SearchBook && other.bookUrl == bookUrl
 
     override fun hashCode() = bookUrl.hashCode()

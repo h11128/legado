@@ -39,6 +39,9 @@ class ChangeBookSourceAdapter(
                     && oldItem.getDisplayLastChapterTitle() == newItem.getDisplayLastChapterTitle()
                     && oldItem.chapterWordCountText == newItem.chapterWordCountText
                     && oldItem.respondTime == newItem.respondTime
+                    && oldItem.smartScore == newItem.smartScore
+                    && oldItem.qualityTags == newItem.qualityTags
+                    && oldItem.qualityVerdict == newItem.qualityVerdict
         }
 
     }
@@ -58,8 +61,8 @@ class ChangeBookSourceAdapter(
                 tvOrigin.text = item.originName
                 tvAuthor.text = item.author
                 tvLast.text = item.getDisplayLastChapterTitle()
-                tvCurrentChapterWordCount.text = item.chapterWordCountText
-                tvRespondTime.text = context.getString(R.string.respondTime, item.respondTime)
+                bindMetricAndTags(this, item)
+                bindSmartScore(this, item)
                 if (callBack.oldBookUrl == item.bookUrl) {
                     ivChecked.visible()
                 } else {
@@ -80,6 +83,8 @@ class ChangeBookSourceAdapter(
                         }
                     }
                 }
+                bindMetricAndTags(this, item)
+                bindSmartScore(this, item)
             }
             val score = callBack.getBookScore(item)
             if (score > 0) {
@@ -116,18 +121,37 @@ class ChangeBookSourceAdapter(
                     appCtx.getCompatColor(R.color.md_blue_100)
                 )
             }
+        }
+    }
 
-            if (AppConfig.changeSourceLoadWordCount && !item.chapterWordCountText.isNullOrBlank()) {
-                tvCurrentChapterWordCount.visible()
-            } else {
-                tvCurrentChapterWordCount.gone()
-            }
+    private fun bindMetricAndTags(binding: ItemChangeSourceBinding, item: SearchBook) {
+        val showMetrics = AppConfig.changeSourceLoadWordCount &&
+            !item.chapterWordCountText.isNullOrBlank()
+        if (showMetrics) {
+            binding.tvCurrentChapterWordCount.text = item.chapterWordCountText
+            binding.tvCurrentChapterWordCount.visible()
+        } else {
+            binding.tvCurrentChapterWordCount.gone()
+        }
+        val tags = item.qualityTags.joinToString(" · ")
+        if (showMetrics && tags.isNotEmpty()) {
+            binding.tvQualityTags.text = tags
+            binding.tvQualityTags.visible()
+        } else {
+            binding.tvQualityTags.gone()
+        }
+    }
 
-            if (AppConfig.changeSourceLoadWordCount && item.respondTime >= 0) {
-                tvRespondTime.visible()
-            } else {
-                tvRespondTime.gone()
-            }
+    private fun bindSmartScore(binding: ItemChangeSourceBinding, item: SearchBook) {
+        if (!AppConfig.changeSourceLoadWordCount) {
+            binding.tvSmartScore.gone()
+            return
+        }
+        binding.tvSmartScore.visible()
+        binding.tvSmartScore.text = if (item.smartScore >= 0) {
+            item.smartScore.toString()
+        } else {
+            "—"
         }
     }
 

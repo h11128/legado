@@ -288,6 +288,131 @@ object ChangeBookSourceQuality {
     fun isQualityOkWordCount(chapterWordCount: Int): Boolean =
         chapterWordCount >= QUALITY_OK_MIN_CHARS
 
+    /** Content-probe verdict for 换源 rows (separate from measured char count). */
+    enum class QualityVerdict {
+        Pending,
+        Ok,
+        Weak,
+        TooShort,
+        AntiTheft,
+        Hijack,
+        FetchError,
+    }
+
+    fun isContentBadVerdict(verdict: QualityVerdict?): Boolean = when (verdict) {
+        QualityVerdict.TooShort,
+        QualityVerdict.AntiTheft,
+        QualityVerdict.Hijack,
+        QualityVerdict.FetchError,
+        -> true
+        else -> false
+    }
+
+    fun verdictFromContentQuality(
+        quality: ChangeChapterVerify.ContentQuality,
+        measuredChars: Int,
+    ): QualityVerdict = when (quality) {
+        is ChangeChapterVerify.ContentQuality.Ok -> {
+            if (isQualityOkWordCount(measuredChars)) QualityVerdict.Ok else QualityVerdict.Weak
+        }
+        ChangeChapterVerify.ContentQuality.TooShort -> QualityVerdict.TooShort
+        ChangeChapterVerify.ContentQuality.AntiTheft -> QualityVerdict.AntiTheft
+        ChangeChapterVerify.ContentQuality.Hijack -> QualityVerdict.Hijack
+    }
+
+    /** Metric line only — never embed quality labels here. */
+    fun metricWordCountText(measuredChars: Int): String = "字数：$measuredChars"
+
+    fun metricLine(measuredChars: Int, respondTimeMs: Int): String {
+        val words = metricWordCountText(measuredChars)
+        if (respondTimeMs < 0) return words
+        val sec = respondTimeMs / 1000.0
+        return if (sec < 10) {
+            "$words · ${"%.1f".format(sec)}s"
+        } else {
+            "$words · ${respondTimeMs}ms"
+        }
+    }
+
+    /**
+     * Default-sort key for [smartScore]: ready scores as-is; pending / not-yet-scored
+     * floats above content-bad (~5–35) and below typical Ok (~78+).
+     */
+    const val SMART_SCORE_PENDING_SORT = 60
+
+    fun sortSmartScoreKey(smartScore: Int, verdict: QualityVerdict?): Int = when {
+        smartScore >= 0 -> smartScore
+        verdict == null || verdict == QualityVerdict.Pending -> SMART_SCORE_PENDING_SORT
+        else -> -1
+    }
+
+    /**
+     * Cached DB rows persist measured [SearchBook.chapterWordCount] but not session
+     * [SearchBook.qualityVerdict]. Re-probe when load-word-count is on and verdict is missing.
+     */
+    fun needsSessionQualityHydration(qualityVerdict: QualityVerdict?, wordCountText: String?): Boolean =
+        qualityVerdict == null && !wordCountText.isNullOrBlank()
+
+    /**
+     * 0..100 smart score for 换源 list. Pending / unknown → -1 (UI shows —).
+     */
+    fun smartScore(
+        measuredChars: Int,
+        verdict: QualityVerdict?,
+        contentRefSim: Double? = null,
+        latestMismatch: Boolean = false,
+        tocMismatch: Boolean = false,
+        respondTimeMs: Int = -1,
+        userScore: Int = 0,
+        expectedChars: Int? = null,
+    ): Int {
+        val v = verdict ?: return -1
+        if (v == QualityVerdict.Pending) return -1
+        var score = when (v) {
+            QualityVerdict.Ok -> 78
+            QualityVerdict.Weak -> 55
+            QualityVerdict.TooShort -> 35
+            QualityVerdict.AntiTheft -> 15
+            QualityVerdict.Hijack -> 10
+            QualityVerdict.FetchError -> 5
+            QualityVerdict.Pending -> return -1
+        }
+        if (measuredChars > 0) {
+            score += lengthBandScore(measuredChars, expectedChars).let { band ->
+                when {
+                    band >= measuredChars + 50_000 -> 15
+                    band >= measuredChars + 10_000 -> 8
+                    isQualityOkWordCount(measuredChars) -> 5
+                    measuredChars >= MIN_SCORE_CHARS -> 2
+                    else -> 0
+                }
+            }
+        }
+        val sim = contentRefSim
+        if (sim != null) {
+            score += when {
+                sim >= 0.50 -> 10
+                sim >= 0.20 -> 5
+                sim < 0.06 -> -5
+                else -> 0
+            }
+        }
+        if (latestMismatch) score -= 6
+        if (tocMismatch) score -= 6
+        if (respondTimeMs in 0..800) score += 5
+        else if (respondTimeMs in 801..2000) score += 2
+        else if (respondTimeMs > 8000) score -= 5
+        else if (respondTimeMs > 4000) score -= 2
+        score += when {
+            userScore > 0 -> 8
+            userScore < 0 -> -12
+            else -> 0
+        }
+        return score.coerceIn(0, 100)
+    }
+
+    private const val MIN_SCORE_CHARS = 80
+
     /**
      * TOC sizes are consistent enough to be the same book progression.
      * Unknown/zero totals do not punish.
@@ -401,23 +526,31 @@ object ChangeBookSourceQuality {
 
     /**
      * Hard sort rank from **content probe only**.
-     * Latest-chapter / TOC meta must not veto a body that already passed content gates —
-     * those stay as [softMetaPenalty] after respondTime.
-     *
-     * [TIER_PENDING] (chapterWordCount == 0): search already matched; keep above
-     * content-bad / soft-fail so parallel hits appear near the top while word-count loads.
+     * Prefer [verdict] when set; otherwise fall back to measured [chapterWordCount]
+     * (legacy rows / pending).
      */
     fun contentSortTier(
         chapterWordCount: Int,
         wordCountText: String? = null,
         softFailed: Boolean = false,
+        verdict: QualityVerdict? = null,
     ): Int {
-        val contentTier = when {
-            chapterWordCount >= QUALITY_OK_MIN_CHARS -> TIER_OK
-            chapterWordCount > 0 -> TIER_WEAK
-            chapterWordCount == 0 -> TIER_PENDING
-            chapterWordCount == -1 && !wordCountText.isNullOrBlank() -> TIER_CONTENT_BAD
-            else -> TIER_UNKNOWN
+        val contentTier = when (verdict) {
+            QualityVerdict.Pending -> TIER_PENDING
+            QualityVerdict.Ok -> TIER_OK
+            QualityVerdict.Weak -> TIER_WEAK
+            QualityVerdict.TooShort,
+            QualityVerdict.AntiTheft,
+            QualityVerdict.Hijack,
+            QualityVerdict.FetchError,
+            -> TIER_CONTENT_BAD
+            null -> when {
+                chapterWordCount >= QUALITY_OK_MIN_CHARS -> TIER_OK
+                chapterWordCount > 0 -> TIER_WEAK
+                chapterWordCount == 0 -> TIER_PENDING
+                chapterWordCount == -1 && !wordCountText.isNullOrBlank() -> TIER_CONTENT_BAD
+                else -> TIER_UNKNOWN
+            }
         }
         // Content-first: session soft-fail must not bury probes that already got OK/WEAK body.
         if (contentTier == TIER_OK || contentTier == TIER_WEAK) return contentTier
@@ -431,7 +564,12 @@ object ChangeBookSourceQuality {
      * Quality-OK bodies skip the penalty — tip mismatch is noise once chapter text matched.
      * Pending / content-bad also skip — failure text is enough; meta tier must not resort noise.
      */
-    fun softMetaPenalty(metaTiers: Int, chapterWordCount: Int = Int.MIN_VALUE): Int {
+    fun softMetaPenalty(
+        metaTiers: Int,
+        chapterWordCount: Int = Int.MIN_VALUE,
+        verdict: QualityVerdict? = null,
+    ): Int {
+        if (isContentBadVerdict(verdict)) return 0
         if (chapterWordCount != Int.MIN_VALUE) {
             if (chapterWordCount <= 0 || isQualityOkWordCount(chapterWordCount)) return 0
         }
@@ -446,7 +584,7 @@ object ChangeBookSourceQuality {
 
     /**
      * Soft meta badges (latest tip / TOC size) for list rows — never hard-filter.
-     * - Pending / content-bad (`chapterWordCount <= 0`): never — avoid stacking on failure text.
+     * - Content-bad verdict / pending / unmeasured (`chapterWordCount <= 0`): never.
      * - TOC: only weak body (`0 < words < QUALITY_OK_MIN_CHARS`) when local ruler trusted;
      *   never on quality-OK and never when untrusted (official vs pirate counts diverge).
      * - Latest + quality-OK: show when body refSim is weak; when refSim is null, only if
@@ -458,7 +596,9 @@ object ChangeBookSourceQuality {
         contentRefSim: Double?,
         referenceTrusted: Boolean = true,
         kind: SoftMetaKind = SoftMetaKind.LATEST,
+        verdict: QualityVerdict? = null,
     ): Boolean {
+        if (isContentBadVerdict(verdict) || verdict == QualityVerdict.Pending) return false
         if (chapterWordCount <= 0) return false
         if (kind == SoftMetaKind.TOC && !referenceTrusted) return false
         if (!isQualityOkWordCount(chapterWordCount)) {
@@ -476,22 +616,26 @@ object ChangeBookSourceQuality {
         chapterWordCount: Int,
         contentRefSim: Double?,
         referenceTrusted: Boolean = true,
+        verdict: QualityVerdict? = null,
     ): Boolean = shouldShowSoftMetaBadge(
         chapterWordCount = chapterWordCount,
         contentRefSim = contentRefSim,
         referenceTrusted = referenceTrusted,
         kind = SoftMetaKind.LATEST,
+        verdict = verdict,
     )
 
     fun shouldShowTocMismatchBadge(
         chapterWordCount: Int,
         contentRefSim: Double?,
         referenceTrusted: Boolean = true,
+        verdict: QualityVerdict? = null,
     ): Boolean = shouldShowSoftMetaBadge(
         chapterWordCount = chapterWordCount,
         contentRefSim = contentRefSim,
         referenceTrusted = referenceTrusted,
         kind = SoftMetaKind.TOC,
+        verdict = verdict,
     )
 
     /**
