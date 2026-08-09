@@ -32,6 +32,15 @@
 
 Trap: `shallow_unfixable_claim` · script_fix: `no_auto:agent_must_html_or_phone_debug`
 
+
+## 2026-08-09 www.75zwz.com deep dig
+
+- Bug: searchUrl 误用 `searchtype={{key}}`；真字段 `369koolearn` POST 仍空壳无 `#sitembox`。
+- Open: `/1123134/` 目录 1417 + `#content` 正文 OK（手机 debug）。
+- Verify: `checkSearch=false` `checkDiscovery=false` → 校验成功（发现 alone 会「发现目录失效」勿当整源死）。
+- Twin: `m.75zwz.com` 已迁通；本源保留打开路径。
+- Trap: `search_empty_shell_open_ok`；反思：本站 close-out 当场写 skill+retro（用户要求每站提升）。
+
 ## 2026-08-09 书架「失效」标签源抽查 + deep diagnose 关门
 
 - 抽查 10 个大源：表与队列见 `docs/guides/shelf-stale-tag-source-queue.md`。

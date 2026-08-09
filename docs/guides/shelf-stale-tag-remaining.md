@@ -70,7 +70,7 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 |-----|------|------|
 | `https://m.wfxs.tw` | **fixed / 校验成功** | 搜索改 `/s/?q=`+`.result-card`；目录 `/booklist/{id}/1.html` `#html_box`；正文 `#read_conent_box` |
 | `https://m.75zw.com` | **fixed migrate** | DNS 已 NXDOMAIN；→ `https://m.75zwz.com`（打开/目录/正文 OK；搜索仍返回热门假结果）；书架 15 remap |
-| `https://www.75zwz.com/` | fail:搜索失效 | 首页通；搜索页无结果节点 |
+| `https://www.75zwz.com/` | **fixed**（无搜索） | 混淆字段仍空壳；打开路径校验成功；trap `search_empty_shell_open_ok` |
 | `https://m.lrxs.org` | skip（深挖确认） | 占位页「Web accesible」→Google；hunt empty；已禁用 |
 | `http://www.31xs.com` | **fixed**（无搜索） | 见下方 deep dig：正文 `qsbs.bb`；发现/打开校验成功 |
 | `http://www.b520.cc` | skip（深挖） | TOC `href="/"`；孪生手机不可达；见下方 |
