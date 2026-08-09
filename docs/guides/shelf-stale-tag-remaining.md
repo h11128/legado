@@ -127,7 +127,7 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://www.wfxs.tw` | **fixed** | 旧搜 `m…/s.html` 空壳；同步 `m.wfxs.tw` 的 `/s/?q=`+`.result-card`+booklist/正文规则；设备 **校验成功**；书架 3 保留 www。Trap：`search_empty_shell_open_ok` |
 | `http://www.ffxs8.com/` | **fixed** | 备注 Error 过期；POST 搜索→https 结果；目录253+正文 OK；设备 **校验成功**。Trap：`search_empty_shell_open_ok`（stale tag） |
 | `https://m.xxbiqudu.com/` | **skip**（m/www/# 已禁用；2026-08-09 再挖确认） | 手机 HTTP 正文明确 **`[xxbiqudu.com] is for sale`（4.cn）**；搜索/书架 `/N_ID/` 同出售壳（~1781B）；`hunt --probe` empty；OSINT/crt 无后继；`xxbiquge*` TLS 超时。书架靠换源。Trap：`域名停车/过期` |
-| `https://m.mozhua2.com` | **skip**（已禁用） | 首页/搜索 **401**；备注孪生 `2wxh/juqisw/dizhuwu/luhubook` 同 401；hunt empty。书架 2 靠换源。Trap：`http_403_home_hunt_empty` |
+| `https://m.mozhua2.com` | **skip**（已禁用；2026-08-09 再挖确认） | 全路径 **401**（`<meta refresh>`/`loading` WAF）；UA/cookie/webView 无效；手机 POST **TLS packet header**；孪生 `mozhua.app/2wxh/juqisw/dizhuwu/luhubook` 同壳；hunt/OSINT 无后继。书架 2 靠换源。Trap：`waf_401_meta_refresh_cluster` |
 | `http://www.530p.com/` | **skip**（含孪生已禁用） | L2/书 URL 全是停车「官网首页」；hunt/OSINT 无后继。书架 4 靠换源。Trap：`域名停车/过期` |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
