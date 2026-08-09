@@ -31,6 +31,9 @@ object ReviewOverlayMatch {
         if (raw.isEmpty()) return emptyList()
         val peers = raw.filter { BookAuthorIdentity.equalName(it.name, book.name) }
         if (peers.isEmpty()) return emptyList()
+        // Include content author in the peer set so unique equal-name hits with empty
+        // provider author can still sameBook (QQ/书吧 often omit author in search cards).
+        val peerAuthors = peers.map { it.author } + book.author
         return peers.mapNotNull { hit ->
             if (
                 BookAuthorIdentity.sameBook(
@@ -38,7 +41,7 @@ object ReviewOverlayMatch {
                     book.author,
                     hit.name,
                     hit.author,
-                    peers.map { it.author },
+                    peerAuthors,
                 )
             ) {
                 ProviderHit(source, hit)

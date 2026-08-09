@@ -118,6 +118,5 @@ Commits: P2 `1968aa58a` · P3 `3d17ee2da` · P4 `dca536b88` · verify `62c269d04
 
 Re-run overlay: `python scripts/rfc004-overlay-device-session.py`  
 Re-run silent auto-bind: `python scripts/rfc004-autobind-device-session.py`  
-**Real-only + screenshots (no fixtures):** `python scripts/rfc004-autobind-real-ui-session.py`  
-→ evidence `temp/rfc004_ui/autobind_real/` (`01_read_title.png`, `03_dialog.png`, `RESULT.txt`; 2026-08-09: fixtures disabled, `capable=5` real, silent bind 起点 `bucket=11175`, UI `共 11175 条评论` + real 本章说).  
-Re-run 起点段号探针: `python scripts/rfc004-probe-qidian-para-align.py`
+**Full screenshot acceptance (real only):** `python scripts/rfc004-autobind-acceptance-ui.py`  
+→ `temp/rfc004_ui/acceptance/ACCEPTANCE.json` + gates G1–G9 PNGs (fixtures off; silent multi-bind 起点+QQ; `coverage=69/69`; merge dialog; 简介「段评源：已绑定 2 个»; autoBind-off negative).

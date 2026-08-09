@@ -131,6 +131,10 @@ class ReviewParagraphMapTest {
             ReviewParagraphAuthority.authorityFor(ReviewParagraphAuthority.FIXTURE_PROVIDER_URL),
         )
         assertEquals(
+            ReviewParagraphAuthority.Kind.ContentSplitVerified,
+            ReviewParagraphAuthority.authorityFor(ReviewParagraphAuthority.QIDIAN_REVIEW_PROVIDER_URL),
+        )
+        assertEquals(
             ReviewParagraphAuthority.Kind.Unsupported,
             ReviewParagraphAuthority.authorityFor("https://example.com"),
         )
@@ -138,6 +142,11 @@ class ReviewParagraphMapTest {
         assertTrue(
             ReviewParagraphAuthority.isParagraphMapOpen(
                 ReviewParagraphAuthority.FIXTURE_PROVIDER_URL,
+            ),
+        )
+        assertTrue(
+            ReviewParagraphAuthority.isParagraphMapOpen(
+                ReviewParagraphAuthority.QIDIAN_REVIEW_PROVIDER_URL,
             ),
         )
         // RuleEmittedPreview must not open content-split hard-map path.

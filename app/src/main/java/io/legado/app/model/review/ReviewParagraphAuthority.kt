@@ -7,6 +7,8 @@ package io.legado.app.model.review
 object ReviewParagraphAuthority {
 
     const val FIXTURE_PROVIDER_URL = "legado-fixture://review-overlay"
+    /** Device-verified 2026-08-09: getContent <p> split order == chapterReview paragraphId 1..N. */
+    const val QIDIAN_REVIEW_PROVIDER_URL = "https://m.qidian.com#rfc004-review"
 
     enum class Kind {
         Unsupported,
@@ -15,7 +17,9 @@ object ReviewParagraphAuthority {
     }
 
     fun authorityFor(providerSourceUrl: String): Kind = when (providerSourceUrl) {
-        FIXTURE_PROVIDER_URL -> Kind.ContentSplitVerified
+        FIXTURE_PROVIDER_URL,
+        QIDIAN_REVIEW_PROVIDER_URL,
+        -> Kind.ContentSplitVerified
         else -> Kind.Unsupported
     }
 
