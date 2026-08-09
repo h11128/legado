@@ -134,5 +134,7 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `http://m.18ys.net` | **skip**（已禁用） | L2/书架书 **502**；`www.18ys.com` lander；`ixs.cc` NXDOMAIN、`ixs5200` 502；hunt+OSINT 无活后继。Trap：`l2_502_brand_cluster_dead` |
 | `http://download.maoyankanshu.la` | **fixed** | 标签域 NXDOMAIN，但 comment JS→`api.longchunbajiao.com` 活；「我的」API 空、「万世书」通；设 `checkKeyWord=万世书`→**校验成功**。Trap：`check_keyword_too_broad` |
 | `http://www.wuxianxs.cc` | **skip**（已禁用） | PC/手机首页+书 URL **403**；hunt empty；OSINT `wuxianxiaoshuo`/`wuxianxs123` 同名假友（路径 `/books/` 且无精确书架书名）。书架 8 靠换源。Trap：`http_403_home_hunt_empty` |
+| `https://m.75zwz.com` | **fixed** | 仅「发现失效」陈旧标签；`checkDiscovery=false`+keyword=斗破 **校验成功**（搜索/目录/正文 OK）。Trap：`search_empty_shell_open_ok` |
+| `http://m.shuqixs.cc` | **skip**（已禁用；www 早已 disabled） | gate `l2_bot_shell`（Just a moment）；手机搜索 **403**；webView/jar 无效；hunt/OSINT 无后继。书架 2 靠换源。Trap：`CF 空搜索体` |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。

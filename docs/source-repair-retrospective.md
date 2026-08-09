@@ -10,6 +10,8 @@
 | `m.18ys.net` | skip | 502 品牌簇全死；新 trap `l2_502_brand_cluster_dead` |
 | `download.maoyankanshu.la` | **fixed** | 标签域死、API 活；`checkKeyWord=万世书` 清「搜索失效」 |
 | `www.wuxianxs.cc` | skip | 403；同名站假友 |
+| `m.75zwz.com` | **fixed** | 清陈旧「发现失效」 |
+| `m.shuqixs.cc` | skip | CF Just a moment / 403 |
 
 ## 2026-08-09 tongrenquan.org — apex DNS 死、m. 活（known trap）
 
