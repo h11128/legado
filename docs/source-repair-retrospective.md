@@ -126,6 +126,15 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - Trap: `stream_protocol_error_reset`。
 
 
+## 2026-08-09 www.wbxs.org deep dig
+
+- Gate L1 通、L2 `tls connection init failed: corrupt message`；备注已有 `Unable to parse TLS packet header`。
+- PC：443 TCP 通但 TLS `record layer failure`；HTTP 被本机拦到 `safebrowse.io` 威胁页。
+- 手机：搜索与打开 `/a/184943` 均 `SSLException: Unable to parse TLS packet header` + Cronet `ERR_SSL_PROTOCOL_ERROR`。
+- `hunt --probe` empty；同名「完本」活站（ghost580 / wanbenshenzhan / book15）路径 `/a/{id}` 均 404，不可 remap。
+- 手机 DB `enabled=0`；书架 6 靠自动换源。
+- Trap（新）：`tls_packet_header_corrupt` → SKILL + `no_auto:tls_origin_corrupt`。
+
 ## 2026-08-09 hongxiud.com deep dig（再挖）
 
 - Gate 对 `https://` 报 `l1_unreachable`（TCP timeout）；`hunt --probe` empty。
