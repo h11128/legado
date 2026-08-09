@@ -30,6 +30,17 @@ class AutoChangeSourceTest {
     }
 
     @Test
+    fun filterParts_excludesDedicatedReviewProviders() {
+        val parts = listOf(
+            BookSourcePart(bookSourceUrl = "https://www.69shu.com"),
+            BookSourcePart(bookSourceUrl = "https://m.qidian.com#rfc004-review"),
+            BookSourcePart(bookSourceUrl = "legado-fixture://rfc004"),
+        )
+        val filtered = AutoChangeSource.filterParts(parts, null)
+        assertEquals(listOf("https://www.69shu.com"), filtered.map { it.bookSourceUrl })
+    }
+
+    @Test
     fun limitCandidates_capsAtThirty() {
         assertEquals(30, AutoChangeSource.CANDIDATE_CAP)
         val parts = (1..80).map { BookSourcePart(bookSourceUrl = "https://s$it.example/") }

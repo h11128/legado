@@ -9,6 +9,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.RespondTimeUpdater
+import io.legado.app.model.review.ReviewCapability
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.mapParallelSafe
 import java.util.concurrent.ConcurrentHashMap
@@ -68,9 +69,12 @@ object AutoChangeSource {
         parts: List<BookSourcePart>,
         excludeOrigin: String?,
     ): List<BookSourcePart> {
+        val withoutReview = ReviewCapability.excludeDedicatedReviewProviders(parts) {
+            it.bookSourceUrl
+        }
         val exclude = excludeOrigin?.trim().orEmpty()
-        if (exclude.isEmpty()) return parts
-        return parts.filter { it.bookSourceUrl != exclude }
+        if (exclude.isEmpty()) return withoutReview
+        return withoutReview.filter { it.bookSourceUrl != exclude }
     }
 
     /** Keep ask-order head only; auto path must not scan the whole catalog. */

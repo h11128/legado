@@ -19,6 +19,7 @@ import io.legado.app.model.checkalgo.AskTimeout
 import io.legado.app.model.checkalgo.ChangeBookSourceQuality
 import io.legado.app.model.checkalgo.ChangeChapterVerify
 import io.legado.app.model.checkalgo.ChangeSourceLog
+import io.legado.app.model.review.ReviewCapability
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
@@ -186,7 +187,9 @@ class ChangeChapterSourceViewModel(application: Application) :
                 applyProbeHintsToBooks()
                 notifySearchAdapter()
 
-                val candidates = searchBooks.toList()
+                val candidates = searchBooks.filterNot {
+                    ReviewCapability.isDedicatedReviewProvider(it.origin)
+                }
                 ChangeSourceLog.i(
                     "verify-start afterSearch=$afterSearch chapter=$chapterKey " +
                         "candidates=${candidates.size} cachedProbes=${probeByOrigin.size} " +

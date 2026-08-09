@@ -42,6 +42,7 @@ import io.legado.app.help.http.configureCheckHttpLimits
 import io.legado.app.help.http.HttpCallTiming
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.restoreDefaultHttpLimits
+import io.legado.app.model.review.ReviewCapability
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
@@ -176,6 +177,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         searchCallback = object : SourceCallback {
 
             override fun searchSuccess(searchBook: SearchBook) {
+                // Dedicated 段评提供方 must never enter the content 换源 list/DB.
+                if (ReviewCapability.isDedicatedReviewProvider(searchBook.origin)) return
                 // Early-stop: never re-accept unfinished deep pending after dropPending.
                 val pendingLabel =
                     getApplication<Application>().getString(R.string.change_source_pending_word)
@@ -232,9 +235,14 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
         getDbSearchBooks().let { rows ->
             searchBooks.clear()
-            // Keep all cached hits; display filters run in currentResults().
-            rows.forEach { ChangeBookSourceQuality.decorateSearchHitForChangeSource(it) }
-            searchBooks.addAll(rows)
+            // Keep cached content hits; display filters run in currentResults().
+            // Drop dedicated 段评提供方 left over from before this gate.
+            rows.asSequence()
+                .filterNot { ReviewCapability.isDedicatedReviewProvider(it.origin) }
+                .forEach {
+                    ChangeBookSourceQuality.decorateSearchHitForChangeSource(it)
+                    searchBooks.add(it)
+                }
             trySend(arrayOf(searchBooks))
         }
 
@@ -265,6 +273,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     /** Menu filters (author / non-novel host / dict intro / content-bad) — display only. */
     private fun passesDisplayFilters(book: SearchBook): Boolean {
+        // Dedicated 段评提供方 are never content 换源 candidates (cached hits too).
+        if (ReviewCapability.isDedicatedReviewProvider(book.origin)) return false
         if (screenKey.isNotEmpty()) {
             val key = screenKey
             val screenHit = book.originName.contains(key) ||
@@ -509,8 +519,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     open fun refresh(): Boolean {
         getDbSearchBooks().let { rows ->
             searchBooks.clear()
-            rows.forEach { decorateChangeSourceHit(it) }
-            searchBooks.addAll(rows)
+            rows.asSequence()
+                .filterNot { ReviewCapability.isDedicatedReviewProvider(it.origin) }
+                .forEach {
+                    decorateChangeSourceHit(it)
+                    searchBooks.add(it)
+                }
             searchCallback?.upAdapter()
         }
         return synchronized(searchBooks) { searchBooks.isEmpty() }.also { isEmpty ->
@@ -590,9 +604,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 val typed = oldBook?.let {
                     BookSourceTypeMapper.filterSameType(loaded, it.type)
                 } ?: loaded
+                val contentSources = ReviewCapability.excludeDedicatedReviewProviders(typed) {
+                    it.bookSourceUrl
+                }
                 bookSourceParts.addAll(
                     AskSourceOrder.order(
-                        typed,
+                        contentSources,
                         threadCount = threads,
                         demoteUrls = ChangeSourceAskMemory.snapshot(),
                     )
@@ -630,6 +647,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     fun startSearch(origin: String) {
+        if (ReviewCapability.isDedicatedReviewProvider(origin)) return
         val operation = operationState.reserveOperation()
         execute {
             operationPreparation.withLock {

@@ -12,6 +12,37 @@ import org.junit.Test
 class ReviewCapabilityTest {
 
     @Test
+    fun dedicatedReviewProviderDetectedByMarker() {
+        assertTrue(
+            ReviewCapability.isDedicatedReviewProvider("https://m.qidian.com#rfc004-review"),
+        )
+        assertTrue(
+            ReviewCapability.isDedicatedReviewProvider("https://book.qq.com#RFC004-REVIEW"),
+        )
+        assertTrue(
+            ReviewCapability.isDedicatedReviewProvider("legado-fixture://rfc004-provider"),
+        )
+        assertFalse(ReviewCapability.isDedicatedReviewProvider("https://m.qidian.com"))
+        assertFalse(ReviewCapability.isDedicatedReviewProvider("https://www.69shu.com"))
+        assertFalse(ReviewCapability.isDedicatedReviewProvider(null))
+        assertFalse(ReviewCapability.isDedicatedReviewProvider(""))
+    }
+
+    @Test
+    fun excludeDedicatedReviewProvidersFromPool() {
+        val urls = listOf(
+            "https://www.69shu.com",
+            "https://m.qidian.com#rfc004-review",
+            "legado-fixture://x",
+            "https://weread.qq.com#rfc004-review",
+        )
+        assertEquals(
+            listOf("https://www.69shu.com"),
+            ReviewCapability.excludeDedicatedReviewProviders(urls) { it },
+        )
+    }
+
+    @Test
     fun jsPairDetectedByFunctionKeyword() {
         val js = """
             function getReviewSummary(chapter, book) { return []; }
