@@ -109,6 +109,32 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - 源 `Host: m.xhsxsw.com` / toc Host `www.xhsxsw.com` → 打开是「官网首页」停车壳，无搜索/目录。
 - 已禁用。Trap: `ip_url_host_header_parked`。
 
+
+## 2026-08-09 www.qingzichan.net deep dig
+
+- PC timeout / 连接被关；手机校验 `Failed to connect …38.55.186.43:80`（POST /search ConnectException）。
+- hunt empty；`gegedang.com` 标题「官网首页」停车壳。已禁用。
+- Trap: `known:host_phone_timeout_no_mirror`。
+
+
+## 2026-08-09 m.boshishuwu.com deep dig
+
+- `.com` 301→`m.boshishuwu.net`；手机对 .com/.net 的 http+https 均 `PROTOCOL_ERROR`（StreamReset）。
+- PC RemoteDisconnected；hunt empty。已禁用各变体。
+- Trap: `stream_protocol_error_reset`。
+
+
+## 2026-08-09 hongxiud.com deep dig
+
+- http 通但整站被劫持成色情广告壳（title「美女日韩一区…」）；search.aspx 同壳无书列表。
+- 已禁用 http/https。Trap: `known:域名广告劫持 (pyzht)`。
+
+
+## 2026-08-09 m.92yanqing.com deep dig
+
+- 手机 POST `/search/` Cronet 60s timeout；PC 不通；hunt empty。已禁用。
+- Trap: `known:host_phone_timeout_no_mirror`。
+
 ## 2026-08-09 书架「失效」标签源抽查 + deep diagnose 关门
 
 - 抽查 10 个大源：表与队列见 `docs/guides/shelf-stale-tag-source-queue.md`。
