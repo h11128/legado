@@ -128,13 +128,16 @@ class ChangeBookSourceAdapter(
     }
 
     private fun bindCatalogLine(binding: ItemChangeSourceBinding, item: SearchBook) {
-        val latest = item.getDisplayLastChapterTitle()
+        val latestSegment = context.getString(
+            R.string.lasted_show,
+            item.getDisplayLastChapterTitle(),
+        )
         val totalLabel = if (item.tocChapterCount > 0) {
             context.getString(R.string.all_chapter_num, item.tocChapterCount)
         } else {
             null
         }
-        binding.tvLast.text = ChangeBookSourceQuality.catalogLine(totalLabel, latest)
+        binding.tvLast.text = ChangeBookSourceQuality.catalogLine(totalLabel, latestSegment)
     }
 
     private fun bindMetricAndTags(binding: ItemChangeSourceBinding, item: SearchBook) {

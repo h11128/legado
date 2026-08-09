@@ -1179,7 +1179,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     val head = ChangeBookSourceQuality.buildProbeChapterHead(probeOrdinal, title)
                     val fail = getApplication<Application>()
                         .getString(R.string.change_source_chapter_content_fail)
-                    if (head != null) "$head · $fail" else fail
+                    if (head != null) "$head\n$fail" else fail
                 }
             }
         }

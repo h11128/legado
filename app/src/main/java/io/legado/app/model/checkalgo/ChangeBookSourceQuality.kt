@@ -373,7 +373,7 @@ object ChangeBookSourceQuality {
     }
 
     /**
-     * Probe evidence line: optional `[ordinal] title ·` + `字数：N` + optional respond time.
+     * Probe evidence: `[ordinal] title` on first line; `字数：N · time` on second.
      * Does not include catalog total chapters (that belongs on the Catalog row).
      */
     fun metricLine(
@@ -385,12 +385,12 @@ object ChangeBookSourceQuality {
     ): String {
         val words = metricWordCountText(measuredChars)
         val time = respondTimeText(respondTimeMs)
-        val probeHead = buildProbeChapterHead(chapterOrdinal, chapterTitle, maxTitleLen)
-        return buildList {
-            if (probeHead != null) add(probeHead)
+        val metrics = buildList {
             add(words)
             if (time != null) add(time)
         }.joinToString(" · ")
+        val probeHead = buildProbeChapterHead(chapterOrdinal, chapterTitle, maxTitleLen)
+        return if (probeHead != null) "$probeHead\n$metrics" else metrics
     }
 
     fun buildProbeChapterHead(
@@ -409,11 +409,12 @@ object ChangeBookSourceQuality {
     }
 
     /**
-     * Catalog row: total chapter count (when known) + latest tip.
-     * [totalLabel] should already be localized, e.g. `共 189 章`.
+     * Catalog row: `共 N 章 · 最新：{tip}` when total known; otherwise just the latest segment.
+     * [totalLabel] localized total, e.g. `共 189 章`.
+     * [latestSegment] already includes the 最新 label, e.g. `最新：第187章 …`.
      */
-    fun catalogLine(totalLabel: String?, latestTitle: String): String {
-        val latest = latestTitle.trim().ifEmpty { "无最新章节" }
+    fun catalogLine(totalLabel: String?, latestSegment: String): String {
+        val latest = latestSegment.trim().ifEmpty { "无最新章节" }
         val total = totalLabel?.trim().orEmpty()
         return if (total.isNotEmpty()) "$total · $latest" else latest
     }

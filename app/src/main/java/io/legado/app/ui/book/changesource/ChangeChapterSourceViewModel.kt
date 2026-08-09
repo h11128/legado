@@ -113,7 +113,7 @@ class ChangeChapterSourceViewModel(application: Application) :
                 val head = ChangeBookSourceQuality.buildProbeChapterHead(ordinal, chapterTitle)
                 val fail = getApplication<Application>()
                     .getString(R.string.change_source_chapter_content_fail)
-                if (head != null) "$head · $fail" else fail
+                if (head != null) "$head\n$fail" else fail
             }
         }
         refreshSmartScore(book)
