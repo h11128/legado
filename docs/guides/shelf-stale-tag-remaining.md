@@ -129,5 +129,9 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://m.xxbiqudu.com/` | **skip**（m/www/# 已禁用；2026-08-09 再挖确认） | 手机 HTTP 正文明确 **`[xxbiqudu.com] is for sale`（4.cn）**；搜索/书架 `/N_ID/` 同出售壳（~1781B）；`hunt --probe` empty；OSINT/crt 无后继；`xxbiquge*` TLS 超时。书架靠换源。Trap：`域名停车/过期` |
 | `https://m.mozhua2.com` | **skip**（已禁用；2026-08-09 再挖确认） | 全路径 **401**（`<meta refresh>`/`loading` WAF）；UA/cookie/webView 无效；手机 POST **TLS packet header**；孪生 `mozhua.app/2wxh/juqisw/dizhuwu/luhubook` 同壳；hunt/OSINT 无后继。书架 2 靠换源。Trap：`waf_401_meta_refresh_cluster` |
 | `http://www.530p.com/` | **skip**（含孪生已禁用；2026-08-09 再挖确认） | 手机/PC 正文明确 **4.cn 出售**（一口价 CNY 11178，「域名可以转让」）；首页/搜索/书架书 URL 全是同停车壳；`hunt`/OSINT 无后继；`3zwx.com` 是「三者文学网」假友非同站。书架 4 靠换源。Trap：`域名停车/过期` |
+| `https://www.dajiadu8.com` | **skip**（已禁用） | DNS **NXDOMAIN**；hunt empty；`dajiadu.cc` 同路径 **错书假友**。书架靠换源。Trap：`dns_nxdomain_hunt_empty` |
+| `https://www.baimashuwu.com/` | **skip**（已禁用） | gate 假 verify；title「精选推荐」+`gg_card` 广告劫持；search 404；OSINT 无后继。Trap：`域名广告劫持` |
+| `http://m.18ys.net` | **skip**（已禁用） | L2/书架书 **502**；`www.18ys.com` lander；`ixs.cc` NXDOMAIN、`ixs5200` 502；hunt+OSINT 无活后继。Trap：`l2_502_brand_cluster_dead` |
+| `http://download.maoyankanshu.la` | **fixed** | 标签域 NXDOMAIN，但 comment JS→`api.longchunbajiao.com` 活；「我的」API 空、「万世书」通；设 `checkKeyWord=万世书`→**校验成功**。Trap：`check_keyword_too_broad` |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。

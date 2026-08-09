@@ -1,6 +1,15 @@
 # Source repair retrospective
 
 
+## 2026-08-09 batch3 — dajiadu8 / baimashuwu / 18ys / 猫眼
+
+| URL | 结果 | 要点 |
+|-----|------|------|
+| `dajiadu8.com` | skip | NXDOMAIN；`.cc` 假友错书 |
+| `baimashuwu.com` | skip | 「精选推荐」+gg_card；gate 假 verify |
+| `m.18ys.net` | skip | 502 品牌簇全死；新 trap `l2_502_brand_cluster_dead` |
+| `download.maoyankanshu.la` | **fixed** | 标签域死、API 活；`checkKeyWord=万世书` 清「搜索失效」 |
+
 ## 2026-08-09 tongrenquan.org — apex DNS 死、m. 活（known trap）
 
 | 项 | 结果 |
