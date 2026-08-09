@@ -88,6 +88,13 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 
 - DNS `23.225.63.70`；PC/手机超时；hunt empty；已禁用。Trap: `known:host_phone_timeout_no_mirror`。
 
+
+## 2026-08-09 www.wuxianxs.cc deep dig
+
+- 首页 PC/手机 **403**（HTTP #5）；searchUrl JS `java.ajax` 取 form → TypeError null[1]。
+- hunt empty；`.net`→safebrowse 威胁页；`.com` 超时。已禁用。
+- Trap: `http_403_home_hunt_empty`。deep_active 由 LegadoMcp.debug 自动 claim。
+
 ## 2026-08-09 书架「失效」标签源抽查 + deep diagnose 关门
 
 - 抽查 10 个大源：表与队列见 `docs/guides/shelf-stale-tag-source-queue.md`。
