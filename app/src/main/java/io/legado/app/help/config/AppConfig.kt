@@ -346,9 +346,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.reviewOverlayEnabled, value)
         }
 
-    /** RFC-004 §6.7: auto discovery default off (confirm required when enabled later). */
+    /** RFC-004: silent auto-bind capable review sources (default on). */
     var reviewOverlayAutoBind: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.reviewOverlayAutoBind, false)
+        get() = appCtx.getPrefBoolean(PreferKey.reviewOverlayAutoBind, true)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.reviewOverlayAutoBind, value)
         }

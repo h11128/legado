@@ -116,6 +116,7 @@
     <string name="review_origin_clear">清除段评源</string>
     <string name="review_origin_searching">正在搜索段评源…</string>
     <string name="review_origin_auto_bind_ask">发现段评源「%1$s」，是否绑定？</string>
+    <string name="review_origin_auto_bound">已自动绑定 %1$d 个段评源</string>
     <string name="review_origin_bound_count">段评源：已绑定 %1$d 个</string>
     <string name="review_origin_add">添加段评源</string>
     <string name="review_origin_manage">管理已绑定</string>
@@ -127,7 +128,7 @@
     <string name="review_overlay_enabled">跨源段评</string>
     <string name="review_overlay_enabled_s">允许使用与正文书源不同的段评源显示章评/段评</string>
     <string name="review_overlay_auto_bind">自动发现段评源</string>
-    <string name="review_overlay_auto_bind_s">未绑定时搜索有段评能力的书源，确认后再绑定（默认关闭）</string>
+    <string name="review_overlay_auto_bind_s">进阅读时自动搜索有段评能力的书源；唯一命中则静默绑定并合章评（默认开启；歧义不绑）</string>
     <string name="review_overlay_paragraph_icons">显示段评图标</string>
     <string name="review_overlay_paragraph_icons_s">段边界可验证时显示段落图标；否则仅章评</string>
     <string name="review_overlay_merge_enabled">多源章评合集</string>

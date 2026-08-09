@@ -35,12 +35,18 @@ Same bind as P1. Content book chapter text should be **similar** to fixture para
 5. Logcat: `authority=ContentSplitVerified coverage=… paras=N`.
 6. Non-fixture provider URLs → chapter-bucket only (no paragraph icons).
 
-## P3 — Auto-bind (opt-in)
+## P3 — Auto-bind (default on, silent multi)
 
-1. 阅读设置 → enable **自动发现段评源** (`reviewOverlayAutoBind`, default off).
-2. Unbound book, fixture enabled, open read.
-3. Expect confirm snackbar (never silent bind). Confirm → binding persists; dismiss → stays unbound.
-4. `capableCount==0` → no snackbar / no scan spam.
+1. 阅读设置 → **自动发现段评源** (`reviewOverlayAutoBind`, **default on**). Turn off to disable.
+2. Ensure ≥1 review-capable source is enabled (fixture and/or real `*段评源`).
+3. Book with **no** (or incomplete) `book_review_bindings` → open read.
+4. Expect **silent** bind of each capable source with **exactly one** `sameBook` hit (cap = `reviewOverlayMergeMax`, default 5). Toast:「已自动绑定 K 个段评源」.
+5. Ambiguous (≥2 hits on one source) → that source skipped (no bind).
+6. Existing rows (including **disabled**) are never overwritten / re-enabled.
+7. `capableCount==0` → no scan spam / no toast.
+
+Re-run: `python scripts/rfc004-autobind-device-session.py`  
+(older confirm-snackbar path removed).
 
 ## Prefs (P4)
 
@@ -101,11 +107,15 @@ In-dialog per-provider load-more on the merge list itself is deferred (§12.4.3 
 | Overlay log | `ReviewOverlay bind=legado-fixture://review-overlay align=0.7 authority=ContentSplitVerified coverage=0/4 (<0.5) → chapter-bucket only` |
 | Chapter bucket | `… coverage=0/4 bucket=2` (P1 path OK; digram coverage fail expected on dissimilar body text) |
 | P2 icons | Not asserted on dissimilar body (coverage gate correctly blocked wrong para icons) |
-| **P3 auto-bind** | Pref `reviewOverlayAutoBind=true`; unbound《爱的艺术》(empty author); UI snackbar「发现段评源「RFC004段评提供方(夹具)」，是否绑定？」; tap 确认 → `book_review_bindings` row `bindMode=auto` |
+| P2 same-body (unit) | `ReviewParagraphMapTest.fixtureSameBodyCoverageOpensParagraphIcons` → coverage **4/4** when local==fixture paragraphs |
+| **P3 auto-bind (legacy)** | Pref on; unbound《爱的艺术》; snackbar confirm → `bindMode=auto` |
+| **P3 seamless (2026-08-09+)** | Default `reviewOverlayAutoBind=true`; silent `proposeAll` (parallel) + `bindAutoAll`; Native origin also discovers peers + binds capable origin; toast「已自动绑定 K 个」. Device `rfc004-autobind-device-session.py`《诡秘之主》→ `proposals` + `bind=… bucket=11175` `bindMode=auto` (`temp/rfc004_autobind_run3.log`) |
+| 起点段号探针 | `python scripts/rfc004-probe-qidian-para-align.py` → `idEqualsPosition=true` (textCount≠id); authority still fixture-only |
 | Prefs P4 | Switches in `pref_config_read.xml` (阅读设置) |
 | Unit | `:app:testDebugUnitTest --tests 'io.legado.app.model.review.*'` BUILD SUCCESSFUL |
 
 Commits: P2 `1968aa58a` · P3 `3d17ee2da` · P4 `dca536b88` · verify `62c269d04` (PE `#682`).
 
 Re-run overlay: `python scripts/rfc004-overlay-device-session.py`  
-Re-run P3 snackbar: enable 自动发现段评源, clear binding, open unbound book with weak/empty author (fixture returns `夹具作者`).
+Re-run silent auto-bind: `python scripts/rfc004-autobind-device-session.py`  
+Re-run 起点段号探针: `python scripts/rfc004-probe-qidian-para-align.py`

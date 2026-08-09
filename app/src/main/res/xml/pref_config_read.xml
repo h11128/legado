@@ -170,7 +170,7 @@
         app:isBottomBackground="true" />
 
     <io.legado.app.lib.prefs.SwitchPreference
-        android:defaultValue="false"
+        android:defaultValue="true"
         android:key="reviewOverlayAutoBind"
         android:summary="@string/review_overlay_auto_bind_s"
         android:title="@string/review_overlay_auto_bind"

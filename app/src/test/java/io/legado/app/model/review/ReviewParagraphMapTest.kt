@@ -16,6 +16,29 @@ class ReviewParagraphMapTest {
     }
 
     @Test
+    fun fixtureSameBodyCoverageOpensParagraphIcons() {
+        // Mirrors docs/design/fixtures/rfc-004-review-provider-fixture.js § getContent/summary.
+        val title = "第一章 开端"
+        val paras = listOf(
+            "晨光刚落在城墙上，${title}的风便带着尘土扑面而来。巡逻的士兵交换着眼神，谁也不敢先开口。",
+            "驿站里传来马蹄声，信使把一卷密封文书交到守将手里。蜡印鲜红，边角还沾着雨痕。",
+            "文书展开后，厅内一时静得只剩灯芯爆裂。有人低声说：北境三日内必须回信，否则粮道将断。",
+            "夜色压下来时，城门仍未关闭。远处火把连成一线，像一条缓慢游动的金色蛇。",
+        )
+        val content = paras.joinToString("\n\n")
+        val providerParas = ReviewParagraphMapper.splitParagraphs(content)
+        assertEquals(4, providerParas.size)
+        val localToProvider = ReviewParagraphMapper.hardMapLocalToProvider(paras, providerParas)
+        assertEquals(mapOf(1 to 1, 2 to 2, 3 to 3, 4 to 4), localToProvider)
+        // Fixture summary: chapter bucket + each body para has count > 0
+        val counts = mapOf(-1 to 2, 1 to 1, 2 to 3, 3 to 1, 4 to 1)
+        val coverage = ReviewParagraphMapper.coverage(counts, localToProvider.values.toSet())
+        assertEquals(1.0, coverage, 1e-9)
+        assertTrue(coverage >= ReviewAlignConfig.MAP_COVERAGE_MIN)
+        assertEquals("4/4", ReviewParagraphMapper.coverageRatioLabel(counts, localToProvider.values.toSet()))
+    }
+
+    @Test
     fun hardMapMatchesIdenticalParagraphs() {
         val locals = listOf(
             "晨光刚落在城墙上，风便带着尘土扑面而来。巡逻的士兵交换着眼神。",

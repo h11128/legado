@@ -82,6 +82,7 @@ import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.ReviewRuleParser
 import io.legado.app.model.jsSource.JsSourceReview
+import io.legado.app.model.review.ReviewCapability
 import io.legado.app.model.review.ReviewOverlayAutoBind
 import io.legado.app.model.review.ReviewOverlayBindings
 import io.legado.app.model.review.ReviewOverlayLoader
@@ -1924,14 +1925,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
         val chapterIndex = ReadBook.durChapterIndex
         val textChapter = ReadBook.curTextChapter
-        if (textChapter != null &&
+        val bodyNotReady = textChapter != null &&
             textChapter.chapter.index == chapterIndex &&
             !textChapter.hasBodyContent
-        ) {
-            ReviewOverlaySessionStore.clearChapter()
-            clearReviewSummaryProviders()
-            return
-        }
 
         val originSource = ReadBook.bookSource
         val bindings = ReviewOverlayBindings.listEnabled(book.bookUrl)
@@ -1942,57 +1938,122 @@ class ReadBookActivity : BaseReadBookActivity(),
             AppConfig.reviewOverlayEnabled,
         )) {
             is ReviewOverlayMode.Overlay -> {
+                // Incomplete binding set: keep discovering peers up to mergeMax.
+                maybeProposeReviewAutoBind(book)
+                if (bodyNotReady) {
+                    ReviewOverlaySessionStore.clearChapter()
+                    clearReviewSummaryProviders()
+                    return
+                }
                 loadOverlayReviewSummaryIfNeeded(book, mode.bindings, chapterIndex)
             }
             ReviewOverlayMode.Unbound -> {
                 ReviewOverlaySessionStore.clear()
                 clearReviewSummaryProviders()
+                // Start discovery even before body text is ready (chapter-bucket does not need it).
                 maybeProposeReviewAutoBind(book)
             }
-            ReviewOverlayMode.NativeOnly, ReviewOverlayMode.Native -> {
+            ReviewOverlayMode.NativeOnly -> {
+                if (bodyNotReady) {
+                    ReviewOverlaySessionStore.clearChapter()
+                    clearReviewSummaryProviders()
+                    return
+                }
                 ReviewOverlaySessionStore.clear()
                 loadNativeReviewSummaryIfNeeded(book, originSource, chapterIndex)
+            }
+            ReviewOverlayMode.Native -> {
+                // Origin is review-capable with no overlay rows yet — still discover peers
+                // for P5 merge (origin itself is auto-bound when unique/synthetic).
+                maybeProposeReviewAutoBind(book)
+                if (bodyNotReady) {
+                    ReviewOverlaySessionStore.clearChapter()
+                    clearReviewSummaryProviders()
+                    return
+                }
+                // If auto-bind just wrote rows, prefer overlay/merge on next tick via
+                // loadReviewSummaryIfNeeded from bind success; meanwhile show native.
+                if (ReviewOverlayBindings.listEnabled(book.bookUrl).isNotEmpty()) {
+                    loadOverlayReviewSummaryIfNeeded(
+                        book,
+                        ReviewOverlayBindings.listEnabled(book.bookUrl),
+                        chapterIndex,
+                    )
+                } else {
+                    ReviewOverlaySessionStore.clear()
+                    loadNativeReviewSummaryIfNeeded(book, originSource, chapterIndex)
+                }
             }
         }
     }
 
     /**
-     * RFC-004 P3: async auto-discovery when unbound. Never silent-bind; snackbar confirm required.
-     * At most one propose attempt per content bookUrl for this Activity instance.
+     * RFC-004 P3: silent multi-bind of unique same-book review providers (opt-out via pref).
+     * Skips providers that already have a binding row (including disabled).
+     * Marks [bookUrl] done only after a finished scan with no remaining slots or no new proposals
+     * (so empty/network-fail first pass can retry; Overlay can fill incomplete sets).
      */
     private fun maybeProposeReviewAutoBind(book: Book) {
         if (!AppConfig.reviewOverlayEnabled || !AppConfig.reviewOverlayAutoBind) return
         val bookUrl = book.bookUrl
-        if (!reviewAutoBindProposedUrls.add(bookUrl)) return
-        reviewAutoBindJob?.cancel()
+        if (bookUrl in reviewAutoBindProposedUrls) return
+        if (reviewAutoBindJob?.isActive == true) return
         reviewAutoBindJob = lifecycleScope.launch(IO) {
-            val proposal = ReviewOverlayAutoBind.propose(book) ?: return@launch
+            val existing = ReviewOverlayBindings.list(bookUrl)
+            val mergeMax = AppConfig.reviewOverlayMergeMax
+            val slots = mergeMax - existing.size
+            if (slots <= 0) {
+                reviewAutoBindProposedUrls.add(bookUrl)
+                return@launch
+            }
+            val skip = existing.map { it.providerSourceUrl }.toHashSet()
+            val proposals = ArrayList(
+                ReviewOverlayAutoBind.proposeAll(
+                    book = book,
+                    maxResults = slots,
+                    skipProviderSourceUrls = skip,
+                )
+            )
+            // Prefer keeping capable content-origin in the merge set (may displace last peer).
+            val origin = ReadBook.bookSource
+            if (origin != null &&
+                ReviewCapability.isReviewCapable(origin) &&
+                origin.bookSourceUrl !in skip &&
+                proposals.none { it.source.bookSourceUrl == origin.bookSourceUrl }
+            ) {
+                proposals.add(
+                    0,
+                    ReviewOverlayAutoBind.Proposal(
+                        source = origin,
+                        providerBookUrl = book.bookUrl,
+                        providerName = book.name,
+                        providerAuthor = book.author,
+                    ),
+                )
+            }
+            val capped = proposals.take(slots)
+            if (capped.isEmpty()) {
+                // Finished scan with nothing to add — do not retry this book in this Activity.
+                reviewAutoBindProposedUrls.add(bookUrl)
+                return@launch
+            }
+            if (ReadBook.book?.bookUrl != bookUrl) return@launch
+            val contentBook = ReadBook.book ?: return@launch
+            val added = runCatching {
+                ReviewOverlayBindings.bindAutoAll(contentBook, capped, mergeMax)
+            }.onFailure {
+                AppLog.put("段评源自动绑定失败\n${it.localizedMessage}", it)
+            }.getOrDefault(0)
+            if (added <= 0) return@launch
+            val remaining = mergeMax - ReviewOverlayBindings.list(bookUrl).size
+            if (remaining <= 0) {
+                reviewAutoBindProposedUrls.add(bookUrl)
+            }
             if (ReadBook.book?.bookUrl != bookUrl) return@launch
             withContext(Main) {
                 if (isFinishing || isDestroyed) return@withContext
-                if (ReviewOverlayBindings.list(bookUrl).isNotEmpty()) return@withContext
-                val label = proposal.source.bookSourceName.ifBlank { proposal.source.bookSourceUrl }
-                binding.root.indefiniteSnackbar(
-                    getString(R.string.review_origin_auto_bind_ask, label),
-                    getString(R.string.dialog_confirm),
-                ) {
-                    val contentBook = ReadBook.book ?: return@indefiniteSnackbar
-                    if (contentBook.bookUrl != bookUrl) return@indefiniteSnackbar
-                    Coroutine.async(lifecycleScope, IO) {
-                        ReviewOverlayBindings.bindAuto(
-                            contentBook = contentBook,
-                            providerSourceUrl = proposal.source.bookSourceUrl,
-                            providerBookUrl = proposal.providerBookUrl,
-                            providerName = proposal.providerName,
-                            providerAuthor = proposal.providerAuthor,
-                        )
-                    }.onSuccess(Main) {
-                        toastOnUi(R.string.review_origin_bind_ok)
-                        loadReviewSummaryIfNeeded()
-                    }.onError {
-                        AppLog.put("段评源自动绑定失败\n${it.localizedMessage}", it)
-                    }
-                }
+                toastOnUi(getString(R.string.review_origin_auto_bound, added))
+                loadReviewSummaryIfNeeded()
             }
         }
     }

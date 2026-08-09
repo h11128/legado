@@ -31,6 +31,14 @@ class ReviewOverlayAutoBindTest {
             ),
         )
 
+    private fun proposal(url: String, bookUrl: String = "prov://$url") =
+        ReviewOverlayAutoBind.Proposal(
+            source = source(url),
+            providerBookUrl = bookUrl,
+            providerName = "我的书",
+            providerAuthor = "甲",
+        )
+
     @Test
     fun proposeNullWhenCapableEmpty() = runBlocking {
         val book = Book(name = "我的书", author = "甲", bookUrl = "content://a")
@@ -75,6 +83,74 @@ class ReviewOverlayAutoBindTest {
         )
         assertEquals("p-ok", result?.providerBookUrl)
         assertEquals("https://b", result?.source?.bookSourceUrl)
+    }
+
+    @Test
+    fun proposeAllCollectsMultipleUniqueHits() = runBlocking {
+        val a = source("https://a", respondTime = 10)
+        val b = source("https://b", respondTime = 20)
+        val cAmbiguous = source("https://c", respondTime = 30)
+        val book = Book(name = "我的书", author = "甲", bookUrl = "content://a")
+        val result = ReviewOverlayAutoBind.proposeAllFromCapable(
+            book = book,
+            capable = listOf(a, b, cAmbiguous),
+            maxResults = 5,
+            searchHits = { _, s ->
+                when (s.bookSourceUrl) {
+                    "https://c" -> listOf(
+                        hit(s, "c1", "我的书", "甲"),
+                        hit(s, "c2", "我的书", "甲"),
+                    )
+                    else -> listOf(hit(s, "p-${s.bookSourceUrl}", "我的书", "甲"))
+                }
+            },
+        )
+        assertEquals(2, result.size)
+        assertEquals(listOf("https://a", "https://b"), result.map { it.source.bookSourceUrl })
+    }
+
+    @Test
+    fun proposeAllRespectsMaxAndSkip() = runBlocking {
+        val a = source("https://a", respondTime = 10)
+        val b = source("https://b", respondTime = 20)
+        val c = source("https://c", respondTime = 30)
+        val book = Book(name = "我的书", author = "甲", bookUrl = "content://a")
+        val result = ReviewOverlayAutoBind.proposeAllFromCapable(
+            book = book,
+            capable = listOf(a, b, c),
+            maxResults = 2,
+            skipProviderSourceUrls = setOf("https://a"),
+            searchHits = { _, s -> listOf(hit(s, "p-${s.bookSourceUrl}", "我的书", "甲")) },
+        )
+        assertEquals(listOf("https://b", "https://c"), result.map { it.source.bookSourceUrl })
+    }
+
+    @Test
+    fun selectNewAutoProposalsSkipsExistingAndCaps() {
+        val proposals = listOf(
+            proposal("https://a"),
+            proposal("https://b"),
+            proposal("https://c"),
+            proposal("https://d"),
+        )
+        val selected = ReviewOverlayBindings.selectNewAutoProposals(
+            proposals = proposals,
+            existingProviderUrls = setOf("https://b"), // disabled or manual — still skip
+            existingCount = 1,
+            mergeMax = 3,
+        )
+        assertEquals(listOf("https://a", "https://c"), selected.map { it.source.bookSourceUrl })
+    }
+
+    @Test
+    fun selectNewAutoProposalsEmptyWhenSlotsFull() {
+        val selected = ReviewOverlayBindings.selectNewAutoProposals(
+            proposals = listOf(proposal("https://a")),
+            existingProviderUrls = setOf("https://x", "https://y"),
+            existingCount = 5,
+            mergeMax = 5,
+        )
+        assertTrue(selected.isEmpty())
     }
 
     @Test

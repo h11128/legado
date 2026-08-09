@@ -24,8 +24,11 @@ python scripts/push-rfc004-review-sources.py
 ### 起点
 
 - `debug_source` 诡秘之主 → search list size **20** (script asks `pageSize=10`; API returns more) / toc 1418 / content len 2544
-- `eval_js` `reviewSummary` chapter `402733549`: raw field **`textCount`**, e.g. `paragraphId=-1 textCount=11174`, para1=`5009` (matches `reviewList.total`)
+- `eval_js` `reviewSummary` chapter `402733549`: field **`textCount`** is the **comment count** (not the segment id). Example: `paragraphId=-1 textCount≈11175`; body `paragraphId=1 textCount=5009` (5009 = 条数).
+- **段号坐标系（2026-08-09 复探针）:** `python scripts/rfc004-probe-qidian-para-align.py` → `getContent` `<p>`→`\\n\\n` 拆出 **69** 段；summary body **69** 条；`paragraphId` **== 1..69**（`idEqualsPosition=true`）。因此「opaque 大整数当段号」是误读 `textCount`；本源在本章上段号与拆段下标一致。
+- **但仍不能直接开 P2 段角标：** `ReviewParagraphAuthority` 仍只有夹具 URL 为 `ContentSplitVerified`；盗版正文书源正文 ≠ 起点 `<p>` 正文时 digram hard-map coverage 会塌（夹具异文真机曾见 `coverage=0/4`）。下一步若开门：需同书同章对照 coverage 证据，或 `paraPreview` 桥，而不是只看段号是否 1..N。
 - `eval_js` `reviewList` `segmentId=-1`: real nicknames + 本章说正文
+- Probe raw: `temp/rfc004_qidian_para_probe_out.txt`
 
 ### 微信读书
 
@@ -67,7 +70,7 @@ API + `getReviewSummary`/`Detail` wiring verified via device ajax/`debug_source`
 3. Book info → **段评源** → pick the provider → confirm.
 4. Open a chapter whose title exists on the **provider TOC** when the provider is chapter-scoped (起点/晋江); 番茄/QQ 书评是全书桶，任意对上的章都可出章评气泡。
 5. Expect chapter-bucket bubble; tap → real comments.
-6. Paragraph icons: still gated by `ContentSplitVerified` (fixture URL only unless authority extended).
+6. Paragraph icons: still gated by `ContentSplitVerified` (fixture URL only unless authority extended). 起点段号虽可与自身 `getContent` 对齐（见上探针），跨正文书源仍需 coverage 证据。
 
 ## Notes
 

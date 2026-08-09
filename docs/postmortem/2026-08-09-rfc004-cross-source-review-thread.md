@@ -65,11 +65,12 @@ Related:
 - 不够则退回章桶，不对错段画图标  
 - 每阶段 subagent review → 修 → commit
 
-### F. P3 — 自动发现（`3d17ee2da`，真机证据 `58935eaed`）
+### F. P3 — 自动发现（`3d17ee2da`，真机证据 `58935eaed`）→ 无缝多绑
 
-- 未绑定时搜索 capable 源，**确认 snackbar** 后再绑（不静默）
+- **初版：** 未绑定时搜索 capable 源，**确认 snackbar** 后再绑（不静默）
 - **夹具：** 专门做的测试书源（`legado-fixture://review-overlay`），用来稳定测路径，不是真实站点
 - 真机坑：夹具作者与书架作者不一致 → `sameBook` 失败；改用空白/弱作者书测 snackbar
+- **无缝自动（用户要求后）：** `reviewOverlayAutoBind` **默认开**；`proposeAll` 收集每源唯一命中；`bindAutoAll` 静默写入（上限 mergeMax）；toast「已自动绑定 K 个」；歧义/已有行（含禁用）跳过。章评合集接现有 P5 路径。段角标仍不自动开真实源 authority。
 
 ### G. P4 — 阅读设置（`dca536b88`）
 

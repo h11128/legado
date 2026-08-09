@@ -42,6 +42,10 @@ object ReviewOverlayBindings {
         )
         if (existing != null) {
             binding.id = existing.id
+            // Auto path must not revive a user-disabled row; manual bind may re-enable.
+            if (!existing.enabled && binding.bindMode == BookReviewBinding.MODE_AUTO) {
+                binding.enabled = false
+            }
             if (binding.sortOrder == 0 && existing.sortOrder != 0) {
                 binding.sortOrder = existing.sortOrder
             }
@@ -88,6 +92,60 @@ object ReviewOverlayBindings {
             providerAuthor = providerAuthor,
             bindMode = BookReviewBinding.MODE_AUTO,
         )
+    }
+
+    /**
+     * Silent multi-bind for auto-discovery.
+     * Skips providers that already have a row (enabled or disabled — never re-enables).
+     * Inserts until total row count reaches [mergeMax].
+     *
+     * @return number of newly inserted rows
+     */
+    fun bindAutoAll(
+        contentBook: Book,
+        proposals: List<ReviewOverlayAutoBind.Proposal>,
+        mergeMax: Int = AppConfig.reviewOverlayMergeMax,
+    ): Int {
+        if (proposals.isEmpty()) return 0
+        val existing = list(contentBook.bookUrl)
+        val toBind = selectNewAutoProposals(
+            proposals = proposals,
+            existingProviderUrls = existing.map { it.providerSourceUrl }.toSet(),
+            existingCount = existing.size,
+            mergeMax = mergeMax,
+        )
+        for (p in toBind) {
+            bindAuto(
+                contentBook = contentBook,
+                providerSourceUrl = p.source.bookSourceUrl,
+                providerBookUrl = p.providerBookUrl,
+                providerName = p.providerName,
+                providerAuthor = p.providerAuthor,
+            )
+        }
+        return toBind.size
+    }
+
+    /** Pure filter for [bindAutoAll] (unit-testable). */
+    internal fun selectNewAutoProposals(
+        proposals: List<ReviewOverlayAutoBind.Proposal>,
+        existingProviderUrls: Set<String>,
+        existingCount: Int,
+        mergeMax: Int,
+    ): List<ReviewOverlayAutoBind.Proposal> {
+        var slots = (mergeMax.coerceAtLeast(1) - existingCount.coerceAtLeast(0)).coerceAtLeast(0)
+        if (slots == 0 || proposals.isEmpty()) return emptyList()
+        val seen = existingProviderUrls.toHashSet()
+        val out = ArrayList<ReviewOverlayAutoBind.Proposal>(slots)
+        for (p in proposals) {
+            if (slots <= 0) break
+            val url = p.source.bookSourceUrl
+            if (url in seen) continue
+            seen.add(url)
+            out.add(p)
+            slots--
+        }
+        return out
     }
 
     fun setEnabled(contentBookUrl: String, providerSourceUrl: String, enabled: Boolean) {
