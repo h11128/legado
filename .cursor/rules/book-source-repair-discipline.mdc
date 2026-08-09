@@ -26,16 +26,20 @@ Create and repair share the same close-out / improve gate — do not wait for th
  — or parse phone backup `bookshelf.json` / `Download/legado/backup*.zip`.
  Postmortem: `docs/postmortem/2026-08-07-shelf-origin-source-deleted.md`.
 2b-db-push. **Never MCP `save_source(newUrl)` then `push_legado_db` of an older pull.**
- Whole-file push + wipe WAL deletes any row missing from that snapshot (80xs→wap,
- 2026-08-09). Prefer `python scripts/legado-db-mutate.py` or
- `scripts.lib.legado_db_mutate.with_legado_db` — upsert/disable/remap in **one**
- pull, pass `require_source_urls`, then push. `pull_legado_db` is WAL-aware by
- default. **`push_legado_db` defaults `merge_live_sources=True`**: re-pulls device
- and merges URLs that appeared after `{db}.pull_urls.json` baseline (intentional
- deletes stay deleted; no phone/PC clock). Device check: `LegadoMcp.wait_check_done`
- (no fixed sleep×N).
+ Prefer `python scripts/legado-db-mutate.py` / `with_legado_db` (upsert in one pull +
+ `require_source_urls`). `pull_legado_db` is WAL-aware + writes `{db}.pull_urls.json`.
+ **`push_legado_db(merge_live_sources="auto")` (default):** skip full re-pull when
+ pending MCP saves already in the work DB; else MCP `get_source` upsert; else
+ baseline full merge. Device check: **`LegadoMcp.wait_check_done`** (no sleep×N).
  Trap: `adb_db_push_stale_snapshot_wipes_source`.
+ Guide: `docs/guides/book-source-repair-efficiency.md`.
  Postmortem: `docs/postmortem/2026-08-09-adb-db-push-wipes-mcp-source.md`.
+2c-efficiency. **Wall-time MUST stay on the hot path** (see efficiency guide).
+ - PC probe timeout **≤12s**; do not serial-timeout brand alikes for minutes.
+ - `debug_source` default **35s**; dead host → skip, don't raise to 60–90.
+ - Checks: `wait_check_done`, never `sleep(3)×40` / `range(40)` poll loops.
+ - Prefer `legado-db-mutate` over whole-DB merge; do not force `merge_live_sources=True`
+   unless auto/MCP upsert failed.
 3. **One phone = one check/debug job** (MCP single-flight). Do **parallel PC** work
  (fetch HTML / triage / prepare patches) and **one batch** `start_check_sources` for many URLs.
  Do not run two `debug_source` / check jobs on the same device.

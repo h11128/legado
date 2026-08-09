@@ -157,6 +157,16 @@ def main() -> int:
         )
         return 0
 
+    if tool == "save_source":
+        try:
+            # Keep push_legado_db(merge=auto) aware of IDE MCP saves without a full DB re-pull.
+            sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+            from lib.legado_session import note_mcp_save  # noqa: E402
+
+            note_mcp_save(url)
+        except Exception:
+            pass
+
     repo = _find_repo(payload)
     claim_note = f"mcp {tool}"
     claim_ok = False

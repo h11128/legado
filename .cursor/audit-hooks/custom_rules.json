@@ -421,24 +421,34 @@
     "reviewed_version": null
   },
   {
-    "id": "legado_adb_push_stale_mcp_race_ask",
-    "source": "docs/postmortem/2026-08-09-adb-db-push-wipes-mcp-source.md (80xs wipe)",
+    "id": "legado_adb_push_unsafe_false_ask",
+    "source": "docs/guides/book-source-repair-efficiency.md (2026-08-09)",
     "events": [
       "beforeShellExecution"
     ],
     "severity": "warn",
-    "message": "push_legado_db whole-file replace can wipe MCP-saved sources. Prefer legado-db-mutate / require_source_urls.",
+    "message": "merge_live_sources=False without require_source_urls can wipe MCP saves.",
     "check": {
-      "type": "regex",
-      "field": "command",
-      "pattern": "push_legado_db\\s*\\(|\\.push_legado_db\\s*\\("
+      "type": "all_of",
+      "checks": [
+        {
+          "type": "regex",
+          "field": "command",
+          "pattern": "push_legado_db\\s*\\(|\\.push_legado_db\\s*\\("
+        },
+        {
+          "type": "regex",
+          "field": "command",
+          "pattern": "merge_live_sources\\s*=\\s*False"
+        }
+      ]
     },
     "intercept": {
       "events": [
         "beforeShellExecution"
       ],
       "action": "ask",
-      "agent_message": "ASK: `push_legado_db` replaces the whole device DB and clears WAL. If this working copy was pulled before MCP `save_source(newUrl)` (or lacks that URL), the new source is deleted (trap adb_db_push_stale_snapshot_wipes_source). Prefer `python scripts/legado-db-mutate.py` (shell line has no push_legado_db token) or pass `require_source_urls=[newUrl]` after INSERT in the same file. Approve only if every MCP-saved URL is already in the file being pushed.",
+      "agent_message": "ASK: merge_live_sources=False skips auto MCP sync. Only OK with require_source_urls=[...] covering every MCP-saved URL. Prefer default merge_live_sources='auto'. See docs/guides/book-source-repair-efficiency.md.",
       "user_message": null,
       "plugin": null
     },
@@ -453,7 +463,103 @@
     "experiment": null,
     "workspace_filter": null,
     "file_pattern_exclude": null,
-    "version": 3,
+    "version": 1,
+    "created_at": "2026-08-09",
+    "reviewed_at": null,
+    "reviewed_version": null
+  },
+  {
+    "id": "legado_inefficient_check_poll_ask",
+    "source": "docs/guides/book-source-repair-efficiency.md (2026-08-09)",
+    "events": [
+      "beforeShellExecution"
+    ],
+    "severity": "warn",
+    "message": "Manual get_check_progress + sleep poll is slower/racy vs wait_check_done.",
+    "check": {
+      "type": "all_of",
+      "checks": [
+        {
+          "type": "regex",
+          "field": "command",
+          "pattern": "get_check_progress"
+        },
+        {
+          "type": "regex",
+          "field": "command",
+          "pattern": "sleep\\s*\\(\\s*[2-9]|time\\.sleep\\s*\\(\\s*[2-9]|Start-Sleep"
+        }
+      ]
+    },
+    "intercept": {
+      "events": [
+        "beforeShellExecution"
+      ],
+      "action": "ask",
+      "agent_message": "ASK: use LegadoMcp.wait_check_done(max_wait_s=60) instead of get_check_progress + sleep×N. See docs/guides/book-source-repair-efficiency.md.",
+      "user_message": null,
+      "plugin": null
+    },
+    "side_effect": null,
+    "always_record": null,
+    "order": 16,
+    "min_length": 0,
+    "min_length_field": "",
+    "disabled": false,
+    "trial_until": null,
+    "platform": null,
+    "experiment": null,
+    "workspace_filter": null,
+    "file_pattern_exclude": null,
+    "version": 1,
+    "created_at": "2026-08-09",
+    "reviewed_at": null,
+    "reviewed_version": null
+  },
+  {
+    "id": "legado_probe_long_timeout_ask",
+    "source": "docs/guides/book-source-repair-efficiency.md (2026-08-09)",
+    "events": [
+      "beforeShellExecution"
+    ],
+    "severity": "warn",
+    "message": "PC probe timeout>=20s wastes wall time on dead hosts; prefer <=12s.",
+    "check": {
+      "type": "all_of",
+      "checks": [
+        {
+          "type": "regex",
+          "field": "command",
+          "pattern": "urlopen|urllib\\.request|httpx|requests\\.(get|post)"
+        },
+        {
+          "type": "regex",
+          "field": "command",
+          "pattern": "timeout\\s*=\\s*(?:2[0-9]|[3-9][0-9]|[1-9][0-9]{2,})"
+        }
+      ]
+    },
+    "intercept": {
+      "events": [
+        "beforeShellExecution"
+      ],
+      "action": "ask",
+      "agent_message": "ASK: PC HTML/probe timeout>=20s — for dead-host triage use timeout<=12s (discipline §2c / book-source-repair-efficiency.md). Approve only for a known-slow live host.",
+      "user_message": null,
+      "plugin": null
+    },
+    "side_effect": null,
+    "always_record": null,
+    "order": 17,
+    "min_length": 0,
+    "min_length_field": "",
+    "disabled": false,
+    "trial_until": null,
+    "platform": null,
+    "experiment": null,
+    "workspace_filter": null,
+    "file_pattern_exclude": null,
+    "version": 1,
     "created_at": "2026-08-09",
     "reviewed_at": null,
     "reviewed_version": null

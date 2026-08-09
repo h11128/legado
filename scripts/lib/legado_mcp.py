@@ -252,22 +252,28 @@ class LegadoMcp:
         if preserve_group is not None:
             args["preserveGroup"] = preserve_group
         out = self.text("save_source", args)
-        if claim:
-            book_url = ""
-            if isinstance(source, dict):
-                book_url = str(source.get("bookSourceUrl") or "")
-            elif isinstance(source, str):
-                try:
-                    book_url = str(json.loads(source).get("bookSourceUrl") or "")
-                except json.JSONDecodeError:
-                    book_url = ""
-            if book_url:
-                ok, msg = claim_deep_active(book_url, "legado_mcp save_source")
-                if not ok:
-                    out = f"{out}\n[deep_active claim failed: {msg}]"
+        book_url = ""
+        if isinstance(source, dict):
+            book_url = str(source.get("bookSourceUrl") or "")
+        elif isinstance(source, str):
+            try:
+                book_url = str(json.loads(source).get("bookSourceUrl") or "")
+            except json.JSONDecodeError:
+                book_url = ""
+        if book_url:
+            try:
+                from .legado_session import note_mcp_save
+            except ImportError:
+                from legado_session import note_mcp_save  # type: ignore
+
+            note_mcp_save(book_url)
+        if claim and book_url:
+            ok, msg = claim_deep_active(book_url, "legado_mcp save_source")
+            if not ok:
+                out = f"{out}\n[deep_active claim failed: {msg}]"
         return out
 
-    def debug_source(self, url: str, key: str, timeout_sec: int = 55) -> str:
+    def debug_source(self, url: str, key: str, timeout_sec: int = 35) -> str:
         claim_deep_active(url, "legado_mcp debug_source")
         return self.text(
             "debug_source",

@@ -31,7 +31,7 @@ def require_device() -> None:
 
 def force_stop(pkg: str = DEFAULT_PKG) -> None:
     subprocess.call(["adb", "shell", "am", "force-stop", pkg])
-    time.sleep(0.8)
+    time.sleep(0.35)
 
 
 def phone_wlan_ip() -> str | None:
@@ -279,6 +279,64 @@ def merge_live_book_sources_into(
             pass
 
 
+def _work_source_urls(work: Path) -> set[str]:
+    con = sqlite3.connect(str(work), timeout=60.0)
+    try:
+        return {
+            r[0]
+            for r in con.execute("SELECT bookSourceUrl FROM book_sources")
+        }
+    finally:
+        con.close()
+
+
+def sync_pending_mcp_saves_into_work(work: Path) -> tuple[str, list[str]]:
+    """Fast path: ensure MCP-saved URLs exist in ``work`` without full DB pull.
+
+    Returns (mode, urls) where mode is:
+    - ``skip``: nothing pending or already present
+    - ``mcp_upsert``: fetched via MCP get_source + upsert
+    - ``need_full_merge``: MCP unavailable; caller should full-merge
+    """
+    try:
+        from .legado_session import clear_mcp_saves, pending_mcp_saves
+    except ImportError:
+        from legado_session import clear_mcp_saves, pending_mcp_saves  # type: ignore
+
+    pending = pending_mcp_saves()
+    if not pending:
+        return "skip", []
+    have = _work_source_urls(work)
+    missing = [u for u in pending if u not in have]
+    if not missing:
+        clear_mcp_saves(pending)
+        return "skip", []
+    try:
+        try:
+            from .legado_db_mutate import upsert_book_source
+            from .legado_mcp import LegadoMcp
+        except ImportError:
+            from legado_db_mutate import upsert_book_source  # type: ignore
+            from legado_mcp import LegadoMcp  # type: ignore
+
+        mcp = LegadoMcp(connect_retries=3)
+        con = sqlite3.connect(str(work), timeout=60.0)
+        try:
+            for u in missing:
+                upsert_book_source(con, mcp.get_source(u))
+            con.commit()
+        finally:
+            con.close()
+        clear_mcp_saves(pending)
+        return "mcp_upsert", missing
+    except Exception as e:
+        print(
+            f"push_legado_db: MCP upsert failed ({e}); will full-merge",
+            file=sys.stderr,
+        )
+        return "need_full_merge", missing
+
+
 def push_legado_db(
     src: Path,
     pkg: str = DEFAULT_PKG,
@@ -287,25 +345,39 @@ def push_legado_db(
     min_bytes: int = 1000,
     min_books: int = 10,
     require_source_urls: list[str] | None = None,
-    merge_live_sources: bool = True,
+    merge_live_sources: bool | str = "auto",
 ) -> None:
     """Push a working copy into the app's databases/legado.db (clears WAL).
 
-    Default ``merge_live_sources=True`` re-pulls the device DB and inserts
-    ``book_sources`` that are missing from ``src`` **and** were not in
-    ``{src}.pull_urls.json`` (written by ``pull_legado_db``). That keeps
-    MCP saves after the original pull without resurrecting intentional deletes.
+    ``merge_live_sources`` modes:
+    - ``"auto"`` (default, fastest safe): if pending MCP saves already in
+      ``src`` → skip merge; else MCP ``get_source`` upsert; else full pull merge.
+    - ``True``: always full baseline merge (slow; use only when needed).
+    - ``False``: never merge (fixtures / caller fully owns ``require_source_urls``).
 
-    Pass ``require_source_urls`` for hard guarantees (e.g. URLs you just
-    INSERTed into ``src``). Set ``merge_live_sources=False`` only for
-    isolated fixture pushes that must not touch the phone first.
+    Pass ``require_source_urls`` for hard guarantees after local INSERT/upsert.
     """
     src = Path(src)
     if not src.is_file() or src.stat().st_size < min_bytes:
         raise RuntimeError(f"refuse push of tiny/missing db: {src}")
 
     merged: list[str] = []
-    if merge_live_sources:
+    mode = merge_live_sources
+    if mode == "auto":
+        sync_mode, synced = sync_pending_mcp_saves_into_work(src)
+        if sync_mode == "mcp_upsert":
+            print(
+                f"push_legado_db: auto MCP-upserted {len(synced)} "
+                f"(first={synced[0]!r})",
+                file=sys.stderr,
+            )
+        elif sync_mode == "need_full_merge":
+            mode = True
+        else:
+            # Still honor require_source_urls presence; no full merge needed
+            # when work already complete.
+            print("push_legado_db: auto skip merge (work complete)", file=sys.stderr)
+    if mode is True:
         merged = merge_live_book_sources_into(src, pkg=pkg)
         if merged:
             print(
@@ -313,6 +385,11 @@ def push_legado_db(
                 f"(first={merged[0]!r})",
                 file=sys.stderr,
             )
+            try:
+                from .legado_session import clear_mcp_saves
+            except ImportError:
+                from legado_session import clear_mcp_saves  # type: ignore
+            clear_mcp_saves(merged)
 
     con = sqlite3.connect(str(src))
     try:
@@ -336,7 +413,7 @@ def push_legado_db(
                     + ", ".join(missing)
                     + " — INSERT in this file first, or re-pull after MCP save"
                 )
-        elif not merge_live_sources:
+        elif mode is False:
             print(
                 "warning: push_legado_db(merge_live_sources=False) without "
                 "require_source_urls — MCP-saved sources missing from this "
