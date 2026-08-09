@@ -118,6 +118,8 @@ Known good probe book (when present): **《信仰诸天》朝不保夕** with or
 
 ## Agent run record
 
+Session retrospective (TOC demote + early-stop hang): [2026-08-09-change-source-toc-early-stop.md](../postmortem/2026-08-09-change-source-toc-early-stop.md)
+
 | Date | Result | Evidence |
 |---|---|---|
 | 2026-08-08l | PASS early-stop plateau rootfix | Ok+Weak 计入好源；`reason=plateau` at qualityOk=17/20 completed=603 → finish early；analyzer all PASS. Log `temp/legado_change_source_session_2026-08-08_213537.txt`. PO18 **24** ≪ QQ Weak **61**. |
