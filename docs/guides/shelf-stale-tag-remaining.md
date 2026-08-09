@@ -114,5 +114,6 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://www.qqduw.com` | **skip**（已禁用） | DNS **A=127.0.0.1**（sinkhole）；hunt empty；`quduxsw` TLS/威胁页；`quduw.com`/`quduxs` 403。书架 3 靠自动换源。Trap：`known:dns_loopback` |
 | `https://www.iqushuwang.com/` | **skip**（已禁用） | `.com` 首页通但 **search POST 404**；书 URL 在 `.cc`；手机连 `.cc`→`23.224.*` **ENETUNREACH**（PC 见 WAF CAPTCHA）。书架 3 靠自动换源。Trap：`toc_href_slash_twin_unreachable` |
 | `https://m.paipaiwx.com` | **fixed**（无搜索） | search POST 字段 `searchkey`→`369koolearn` 仍恒返回热搜空壳（m/www 同）；debug 详情/目录292/正文 OK；`checkSearch=false`→校验成功；书架 3 保留。Trap：`search_post_hot_shell` |
+| `https://m.feibzw.com/` | **skip**（已禁用 m/www/`#` +试验 `fsuzw`） | TLS `record layer failure`；`feisuzw` 公告→`https://www.fsuzw.com`（同 `/book-{id}/` 详情/目录通）；正文 YHFixed **每章换 woff2** 字体加密，Legado 解不开；搜索 0。书架靠换源。Trap：`tls_packet_header_corrupt` / `content_font_encrypt_dynamic` |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
