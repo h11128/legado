@@ -37,8 +37,17 @@ def _skill_root() -> Path | None:
     return None
 
 
-def claim_deep_active(url: str, note: str = "legado_mcp") -> tuple[bool, str]:
-    """Arm deep_active so stop/progress cannot skip ledger+retro (discipline §22)."""
+def claim_deep_active(
+    url: str,
+    note: str = "legado_mcp",
+    *,
+    entry: str = "mcp_fallback",
+) -> tuple[bool, str]:
+    """Arm deep_active so stop/progress cannot skip ledger+retro (discipline §22).
+
+    Default entry=mcp_fallback: fixed retro requires diagnose evidence OR
+    trap manual_mcp_bypass + no_auto:diagnose_transport… / no_auto:user_…
+    """
     url = (url or "").strip()
     if not url.startswith(("http://", "https://")):
         return False, "claim skipped: not an http(s) bookSourceUrl"
@@ -47,17 +56,20 @@ def claim_deep_active(url: str, note: str = "legado_mcp") -> tuple[bool, str]:
     env = {**os.environ}
     if skill:
         env["LEGADO_SKILL_ROOT"] = str(skill)
+    cmd = [
+        "source-cli",
+        "closeout",
+        "claim",
+        "--url",
+        url,
+        "--note",
+        note[:80],
+        "--entry",
+        (entry or "mcp_fallback").strip() or "mcp_fallback",
+    ]
     try:
         r = subprocess.run(
-            [
-                "source-cli",
-                "closeout",
-                "claim",
-                "--url",
-                url,
-                "--note",
-                note[:80],
-            ],
+            cmd,
             cwd=cwd,
             capture_output=True,
             text=True,

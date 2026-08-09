@@ -563,5 +563,53 @@
     "created_at": "2026-08-09",
     "reviewed_at": null,
     "reviewed_version": null
+  },
+  {
+    "id": "legado_mcp_without_diagnose_ask",
+    "source": "book-source-repair-discipline §5e / §9 (diagnose path 2026-08-09)",
+    "events": [
+      "beforeShellExecution"
+    ],
+    "severity": "warn",
+    "message": "LegadoMcp debug/save — prefer source-cli dig/diagnose first (MCP bypass is exceptional).",
+    "check": {
+      "type": "all_of",
+      "checks": [
+        {
+          "type": "regex",
+          "field": "command",
+          "pattern": "LegadoMcp\\(\\)|from scripts\\.lib\\.legado_mcp import"
+        },
+        {
+          "type": "regex",
+          "field": "command",
+          "pattern": "\\.(debug_source|save_source)\\s*\\("
+        }
+      ]
+    },
+    "intercept": {
+      "events": [
+        "beforeShellExecution"
+      ],
+      "action": "ask",
+      "agent_message": "ASK: LegadoMcp debug/save (discipline §5e/§9). Prefer `source-cli dig --url …` first. Approve only if diagnose already done this URL, diagnose transport failed, or user ordered MCP bypass (then retro trap manual_mcp_bypass + no_auto:diagnose_transport… / no_auto:user_…).",
+      "user_message": null,
+      "plugin": null
+    },
+    "side_effect": null,
+    "always_record": null,
+    "order": 18,
+    "min_length": 0,
+    "min_length_field": "",
+    "disabled": false,
+    "trial_until": null,
+    "platform": null,
+    "experiment": null,
+    "workspace_filter": null,
+    "file_pattern_exclude": null,
+    "version": 1,
+    "created_at": "2026-08-09",
+    "reviewed_at": null,
+    "reviewed_version": null
   }
 ]

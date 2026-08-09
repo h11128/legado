@@ -173,6 +173,8 @@ def main() -> int:
                     url,
                     "--note",
                     claim_note,
+                    "--entry",
+                    "mcp_fallback",
                 ],
                 cwd=str(repo),
                 capture_output=True,

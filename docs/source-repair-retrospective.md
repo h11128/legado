@@ -1,6 +1,12 @@
 # Source repair retrospective
 
 
+## 2026-08-09 — dig path enforcement (A+B)
+
+Harness: Prefer→MUST dig/diagnose; `deep_active.entry`; `retro fixed` DENY without diagnose
+unless `manual_mcp_bypass` + `no_auto:diagnose_transport…`; hook ASK on LegadoMcp debug/save;
+`source-cli dig`. Driven by ttkan MCP-first bypass.
+
 ## 2026-08-09 — ttkan.co deep diagnose
 
 | URL | 结果 | 要点 |

@@ -6,7 +6,7 @@ Goal: finish each URL with **minimum wall time** without risking DB wipe or fake
 
 | Step | Do | Avoid |
 |------|-----|--------|
-| Gate / hunt | `source-cli gate` → `hunt --probe` only if hunt | Brand-alike probes with timeout≥15s in a long serial list |
+| Gate / hunt | `source-cli dig --url …`（或 gate→diagnose→oneshot） | Brand-alike probes with timeout≥15s in a long serial list；**MCP-first** 跳过 dig |
 | PC HTML | timeout **≤12s** per URL | 25–60s urlopen on obvious NXDOMAIN |
 | Patch | MCP `save_source` / `legado-db-mutate` | Hand SQL then forget upsert |
 | Disable / remap | `python scripts/legado-db-mutate.py …` | Pull → MCP → push old file |
