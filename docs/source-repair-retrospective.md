@@ -10,7 +10,22 @@
 | Hunt | `https://m.tongrenquan.org/` L2 200；路径 `/tongren/{id}.html` 同书可开 |
 | 设备 | `m.tongrenquan.org` **校验成功**（1335ms）；debug 搜索+641章+正文 OK |
 | 动作 | 书架 4 remap → m；www+apex `enabled=0` |
-| Trap | `known:apex_no_a_try_m`（skill 已有；勿对 IP 空壳/死 apex 直接放弃） |
+| Trap | `apex_no_a_try_m` + 新行为 trap `gate_hunt_deferred_unprobed` |
+
+### 错判根因（为何像「要 skip」）
+
+1. 分流只跑 `gate`，把 `action=hunt` 丢进 **maybe_hunt / 以后再挖**，口头像放弃。  
+2. **没当场** `hunt --probe`——而 `domain_hunt_seeds.json` **早已**写着 `tongrenquan → m.tongrenquan.org`。  
+3. `Unable to resolve host` 被当成整站死，而不是「这个 hostname 死了、孪生子域可能还活」。
+
+### 已落的防再犯
+
+| 层 | 改动 |
+|----|------|
+| SKILL | trap `gate_hunt_deferred_unprobed`；强化 `apex_no_a_try_m` / `shallow_unfixable_claim` |
+| 脚本 | `scripts/shelf-stale-tag-triage.py`：hunt 必须 probe，migrate 升优先 |
+| closeout | `trap_in_skill` 先匹配原始 underscore slug（修 `apex_no_a_try_m` 被当成 novel） |
+| 纪律 | `book-source-repair-discipline`：失效标签分流禁止未 probe 的 hunt 缓修 |
 
 ## 2026-08-09 浅层「修不了」被打脸 — 必须记的总教训
 

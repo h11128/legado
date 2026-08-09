@@ -57,10 +57,13 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 
 ## 建议下一轮顺序
 
-1. 上表 **8 个 verify** 源：`diagnose` → 层补丁 → 设备校验  
-2. `m.75zw.com`（15 本）→ 尝试迁到已通的 `https://www.75zwz.com/`  
-3. 再按书架本数对 hunt 列表跑 `source-cli hunt --probe`  
-4. CF/停车页保持 skip，靠自动换源  
+1. **不要**再只跑 `gate` 就把 `action=hunt` 丢进「maybe later」。用：  
+   `python scripts/shelf-stale-tag-triage.py --candidates temp/shelf_restore/queue/stale_tag_remaining_candidates.json --limit 30`  
+   （hunt 会当场 `--probe`；migrate 候选进优先 URL 列表）
+2. 优先挖 `stale_tag_fixable_priority.urls.txt`
+3. CF/停车页保持 skip，靠自动换源  
+
+Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 
 书架上仍挂在**已禁用**源上的书（如 69shu 325、UU 44）不算「源还可修」，靠自动换源。
 

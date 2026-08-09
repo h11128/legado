@@ -64,11 +64,17 @@ Create and repair share the same close-out / improve gate — do not wait for th
 11. **Never end a source attempt without** `source-cli ledger append`.
 12. **After domain migrate**: fetch new search form HTML before verify.
 12b. **Hunt before disable on dead/timeout** — if gate is `l1_unreachable` / `l2_http_dead`
-    / L0 hunt cluster: run `source-cli hunt --probe` (oneshot does this). Migrate only when
-    a seed candidate passes L2. Do **not** hard-disable first. Exceptions for **seed hunt**:
-    L0 `dead_site_shutdown_confirmed`, parked/ad-hijack/nginx deadish (skip seed hunt).
-    **OSINT successor pass still required** before「无后继」结案（§5c /
-    `scripts/domain-successor-hunt.py`）— 停车页也可能是换域后的残留。
+ / L0 hunt cluster: run `source-cli hunt --probe` (oneshot does this). Migrate only when
+ a seed candidate passes L2. Do **not** hard-disable first. Exceptions for **seed hunt**:
+ L0 `dead_site_shutdown_confirmed`, parked/ad-hijack/nginx deadish (skip seed hunt).
+ **OSINT successor pass still required** before「无后继」结案（§5c /
+ `scripts/domain-successor-hunt.py`）— 停车页也可能是换域后的残留。
+12c. **Hunt bucket ≠ skip / 缓修** (trap `gate_hunt_deferred_unprobed`, tongrenquan 2026-08-09).
+ Stale-tag / shelf triage must **not** park `gate_action=hunt` or `Unable to resolve host`
+ as「maybe later」without running `hunt --probe` in the same triage pass. If probe returns
+ migrate/verify → **promote to priority dig immediately**. Use
+ `python scripts/shelf-stale-tag-triage.py` (not gate-only JSON). Seeds often already know
+ `m.` (see `domain_hunt_seeds.json`).
 13. **If debug OK but check fails** (下载链接为空 / ~100ms): run `source-cli diagnose --debug-file …` first
  (bookUrl → infoHtml trap).
 14. **After every source attempt (repair OR create: fixed/created / skip / fail), mandatory close-out**
