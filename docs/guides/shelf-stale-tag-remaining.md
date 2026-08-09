@@ -144,5 +144,6 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `http://www.shuquge.co` | **skip**（已禁用） | L2/手机 **444**；hunt empty；`ishuquge.la`/wap 亦超时；书架 2 靠换源（1 本已在 ishuquge）。Trap：`known:l2_http_dead` |
 | `http://www.sodu.info` | **skip**（已禁用） | 首页+搜索 **403**；hunt empty；`soduzw` 超时。书架 2 靠换源。Trap：`http_403_home_hunt_empty` |
 | `https://iyueba.net` | **fixed**（无搜索） | `/z/` 搜索返回**验证码**；详情/目录 `zjml`+`#content_1`、正文 `#booktxt` 修好；打开路径 **校验成功**。Trap：`search_empty_shell_open_ok` |
+| `https://m.zbcxw.cn` | **skip**（已禁用） | DNS **NXDOMAIN**（PC/手机）；`hunt --probe` empty；OSINT/书源仓仍指向 zbcxw；`xxshu.com` 等假友非书站。书架 2 靠换源。Trap：`known:dns_nxdomain_hunt_empty` |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。

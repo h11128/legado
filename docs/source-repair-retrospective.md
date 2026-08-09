@@ -1,6 +1,12 @@
 # Source repair retrospective
 
 
+## 2026-08-09 batch6 — zbcxw（星星小说）
+
+| URL | 结果 | 要点 |
+|-----|------|------|
+| `m.zbcxw.cn` | skip | NXDOMAIN；hunt/OSINT 无后继；已禁用 |
+
 ## 2026-08-09 batch5 — shuquge / sodu / iyueba
 
 | URL | 结果 | 要点 |
