@@ -138,21 +138,22 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 ## 2026-08-09 www.00ksw.com deep dig
 
 - PC/手机均 TCP hang；DNS alias `23.224.148.*` via uucdn；`hunt --probe` empty。
-- 候选 `00ksw.cc`=XDNS 威胁页、`.org`=广告 redirect、`00ks`/`ldks` 停车。已禁用；书架 5 靠自动换源。
-- Trap: `known:host_phone_timeout_no_mirror`。
-- 注：本机 APK `save_source` 仍默认保留 enabled（响应无 `enabled=` 行）；本批用 `legado_adb` 拉库改 `enabled=0` 后推回。
+- 候选 `00ksw.cc`=XDNS 威胁页、`.org`=广告 redirect、`00ks`/`ldks` 停车。手机 DB `enabled=0`；书架 5 靠自动换源。
+- Trap: `host_phone_timeout_no_mirror`。Ledger：`legadoSkill/temp/full_fix/repair_session_ledger.jsonl`（2026-08-09T04:05–04:06）。
+- 注：本机 APK `save_source` 默认保留 enabled（响应无 `enabled=` 行）；本批用 `legado_adb` 拉库改 `enabled=0` 后推回。
 
 ## 2026-08-09 www.ffxs8.top deep dig
 
-- `.top` NXDOMAIN；孪生 `https://www.ffxs8.com` 首页/详情/目录/正文 OK；站内搜索恒「没有搜索到相关的内容」。
-- 手机 debug 打开书架路径成功；`checkSearch=false` 校验成功。书架 5 本 `origin`+URL remap→`.com`；`.top` 已禁用。
-- Trap: `known:search_empty_shell_open_ok`。
+- `.top` NXDOMAIN；孪生 `https://www.ffxs8.com` 站内搜索恒「没有搜索到相关的内容」，但打开路径可读。
+- 设备证据：MCP `debug_source` 详情/目录182/正文 OK；`start_check_sources`（`checkSearch=false`）→ `校验成功`（ledger `https://www.ffxs8.com` @ 2026-08-09T04:08:52）。
+- 书架 remap 在**手机 DB**（非 `backup_now/bookshelf.json`）：`.top` origin 剩 0；`https://www.ffxs8.com` 含原 `/dsyq/21029` 等；`.top` `enabled=0`。
+- Trap: `search_empty_shell_open_ok`（`.com` 打开路径）；`.top` 结果标签 **fixed migrate**。
 
 ## 2026-08-09 www.dubu123.com deep dig
 
 - NXDOMAIN（手机 `UnknownHostException`）；hunt empty。
-- `dubuxs.cc`=XDNS 威胁页；`dbxs123.com`=影视壳（勿迁）；`dbxsn` 404/403。已禁用；书架 4 靠自动换源。
-- Trap: `known:host_phone_timeout_no_mirror`。
+- `dubuxs.cc`=XDNS 威胁页；`dbxs123.com`=影视壳（勿迁）；`dbxsn` 404/403。手机 DB `enabled=0`；书架 4 靠自动换源。
+- Trap: `dns_nxdomain_hunt_empty`（勿再用 timeout 类 trap 描述 NXDOMAIN）。Ledger @ 2026-08-09T04:10:21。
 
 ## 2026-08-09 书架「失效」标签源抽查 + deep diagnose 关门
 
