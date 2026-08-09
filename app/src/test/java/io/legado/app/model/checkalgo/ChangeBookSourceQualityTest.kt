@@ -105,6 +105,20 @@ class ChangeBookSourceQualityTest {
                 chapterWordCount = 3800,
             ),
         )
+        assertEquals(
+            0,
+            ChangeBookSourceQuality.softMetaPenalty(
+                ChangeBookSourceQuality.TIER_LATEST_BAD,
+                chapterWordCount = -1,
+            ),
+        )
+        assertEquals(
+            1,
+            ChangeBookSourceQuality.softMetaPenalty(
+                ChangeBookSourceQuality.TIER_LATEST_BAD,
+                chapterWordCount = 200,
+            ),
+        )
         assertEquals(0, ChangeBookSourceQuality.softMetaPenalty(ChangeBookSourceQuality.TIER_OK))
     }
 
@@ -128,10 +142,19 @@ class ChangeBookSourceQualityTest {
                 contentRefSim = 0.50,
             )
         )
+        // Trusted + null refSim: tip-lag suppress (legacy).
         assertFalse(
             ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
                 chapterWordCount = 3800,
                 contentRefSim = null,
+                referenceTrusted = true,
+            )
+        )
+        assertFalse(
+            ChangeBookSourceQuality.shouldShowTocMismatchBadge(
+                chapterWordCount = 3800,
+                contentRefSim = null,
+                referenceTrusted = true,
             )
         )
         assertFalse(
@@ -140,16 +163,75 @@ class ChangeBookSourceQualityTest {
                 contentRefSim = null,
             )
         )
+        // Content-bad: do not stack soft meta on failure text.
+        assertFalse(
+            ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+                chapterWordCount = -1,
+                contentRefSim = 0.90,
+            )
+        )
+        assertFalse(
+            ChangeBookSourceQuality.shouldShowTocMismatchBadge(
+                chapterWordCount = -1,
+                contentRefSim = 0.90,
+            )
+        )
         assertTrue(
             ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
                 chapterWordCount = 3800,
                 contentRefSim = 0.10,
             )
         )
+        // Quality-OK: TOC never (even with weak refSim).
+        assertFalse(
+            ChangeBookSourceQuality.shouldShowTocMismatchBadge(
+                chapterWordCount = 3800,
+                contentRefSim = 0.10,
+                referenceTrusted = true,
+            )
+        )
+        assertEquals(
+            0,
+            ChangeBookSourceQuality.softMetaPenalty(
+                ChangeBookSourceQuality.TIER_TOC_BAD,
+                chapterWordCount = 0,
+            ),
+        )
+        // Untrusted short local: latest tip is remaining signal; TOC stays off.
         assertTrue(
             ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
-                chapterWordCount = -1,
-                contentRefSim = 0.90,
+                chapterWordCount = 3800,
+                contentRefSim = null,
+                referenceTrusted = false,
+            )
+        )
+        assertFalse(
+            ChangeBookSourceQuality.shouldShowTocMismatchBadge(
+                chapterWordCount = 3800,
+                contentRefSim = null,
+                referenceTrusted = false,
+            )
+        )
+        // Weak body: latest yes; TOC only when trusted.
+        assertTrue(
+            ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+                chapterWordCount = 200,
+                contentRefSim = null,
+                referenceTrusted = false,
+            )
+        )
+        assertFalse(
+            ChangeBookSourceQuality.shouldShowTocMismatchBadge(
+                chapterWordCount = 200,
+                contentRefSim = null,
+                referenceTrusted = false,
+            )
+        )
+        assertTrue(
+            ChangeBookSourceQuality.shouldShowTocMismatchBadge(
+                chapterWordCount = 200,
+                contentRefSim = null,
+                referenceTrusted = true,
             )
         )
     }

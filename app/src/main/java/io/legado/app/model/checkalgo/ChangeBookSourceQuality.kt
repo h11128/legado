@@ -429,10 +429,11 @@ object ChangeBookSourceQuality {
     /**
      * Light penalty for latest/TOC mismatch badges. Applied after content + respondTime.
      * Quality-OK bodies skip the penalty — tip mismatch is noise once chapter text matched.
+     * Pending / content-bad also skip — failure text is enough; meta tier must not resort noise.
      */
     fun softMetaPenalty(metaTiers: Int, chapterWordCount: Int = Int.MIN_VALUE): Int {
-        if (chapterWordCount != Int.MIN_VALUE && isQualityOkWordCount(chapterWordCount)) {
-            return 0
+        if (chapterWordCount != Int.MIN_VALUE) {
+            if (chapterWordCount <= 0 || isQualityOkWordCount(chapterWordCount)) return 0
         }
         return when (metaTiers) {
             TIER_LATEST_BAD, TIER_TOC_BAD -> 1
@@ -440,32 +441,58 @@ object ChangeBookSourceQuality {
         }
     }
 
+    /** Soft tip/TOC badge kind — never used to hide rows, only display. */
+    enum class SoftMetaKind { LATEST, TOC }
+
     /**
-     * Soft meta badges (latest tip / TOC size) for list rows.
-     * - Pending (`chapterWordCount==0`): never — noise while deep runs.
-     * - Quality-OK: suppress when body refSim is strong (or unknown / no local cache).
-     * - Otherwise: show.
+     * Soft meta badges (latest tip / TOC size) for list rows — never hard-filter.
+     * - Pending / content-bad (`chapterWordCount <= 0`): never — avoid stacking on failure text.
+     * - TOC: only weak body (`0 < words < QUALITY_OK_MIN_CHARS`) when local ruler trusted;
+     *   never on quality-OK and never when untrusted (official vs pirate counts diverge).
+     * - Latest + quality-OK: show when body refSim is weak; when refSim is null, only if
+     *   local body is untrusted (tip is the remaining wrong-book signal).
+     * - Latest + weak body: always show when tip/TOC gate already matched upstream.
      */
     fun shouldShowSoftMetaBadge(
         chapterWordCount: Int,
         contentRefSim: Double?,
+        referenceTrusted: Boolean = true,
+        kind: SoftMetaKind = SoftMetaKind.LATEST,
     ): Boolean {
-        if (chapterWordCount == 0) return false
-        if (!isQualityOkWordCount(chapterWordCount)) return true
-        val sim = contentRefSim ?: return false
-        return sim < LATEST_BADGE_SUPPRESS_REF_SIM
+        if (chapterWordCount <= 0) return false
+        if (kind == SoftMetaKind.TOC && !referenceTrusted) return false
+        if (!isQualityOkWordCount(chapterWordCount)) {
+            // Weak body only — TOC already gated on trusted above.
+            return true
+        }
+        // Quality-OK: TOC never; latest uses refSim / untrusted-null rule.
+        if (kind == SoftMetaKind.TOC) return false
+        val sim = contentRefSim
+        if (sim != null) return sim < LATEST_BADGE_SUPPRESS_REF_SIM
+        return !referenceTrusted
     }
 
-    /** @deprecated Use [shouldShowSoftMetaBadge]; kept as alias for call-site clarity. */
     fun shouldShowLatestMismatchBadge(
         chapterWordCount: Int,
         contentRefSim: Double?,
-    ): Boolean = shouldShowSoftMetaBadge(chapterWordCount, contentRefSim)
+        referenceTrusted: Boolean = true,
+    ): Boolean = shouldShowSoftMetaBadge(
+        chapterWordCount = chapterWordCount,
+        contentRefSim = contentRefSim,
+        referenceTrusted = referenceTrusted,
+        kind = SoftMetaKind.LATEST,
+    )
 
     fun shouldShowTocMismatchBadge(
         chapterWordCount: Int,
         contentRefSim: Double?,
-    ): Boolean = shouldShowSoftMetaBadge(chapterWordCount, contentRefSim)
+        referenceTrusted: Boolean = true,
+    ): Boolean = shouldShowSoftMetaBadge(
+        chapterWordCount = chapterWordCount,
+        contentRefSim = contentRefSim,
+        referenceTrusted = referenceTrusted,
+        kind = SoftMetaKind.TOC,
+    )
 
     /**
      * Probe respondTime for result-list sort: unknown/negative sink within the same

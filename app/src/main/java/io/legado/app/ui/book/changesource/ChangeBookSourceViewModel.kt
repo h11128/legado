@@ -1238,6 +1238,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private fun annotateMetaQuality(searchBook: SearchBook, tocSize: Int?) {
         val hitKey = searchBook.bookUrl
         val local = oldBook
+        val referenceTrusted = wordCountEvalContext?.referenceTrusted != false
         if (tocSize != null &&
             local != null &&
             !ChangeBookSourceQuality.tocConsistent(local.totalChapterNum, tocSize)
@@ -1245,6 +1246,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             if (ChangeBookSourceQuality.shouldShowTocMismatchBadge(
                     searchBook.chapterWordCount,
                     contentRefSimByOrigin[hitKey],
+                    referenceTrusted = referenceTrusted,
                 )
             ) {
                 mergeTier(hitKey, ChangeBookSourceQuality.TIER_TOC_BAD)
@@ -1262,6 +1264,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 if (ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
                         searchBook.chapterWordCount,
                         contentRefSimByOrigin[hitKey],
+                        referenceTrusted = referenceTrusted,
                     )
                 ) {
                     mergeTier(hitKey, ChangeBookSourceQuality.TIER_LATEST_BAD)
@@ -1326,6 +1329,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 if (!ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
                         book.chapterWordCount,
                         contentRefSimByOrigin[bookUrl],
+                        referenceTrusted = wordCountEvalContext?.referenceTrusted != false,
                     )
                 ) {
                     continue
