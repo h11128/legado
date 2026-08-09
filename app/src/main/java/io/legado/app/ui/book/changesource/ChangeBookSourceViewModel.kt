@@ -1082,6 +1082,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
         val chapterIndex = wordCountChapterIndex(chapters).coerceIn(0, chapters.lastIndex)
         val bookChapter = chapters[chapterIndex]
+        val probeOrdinal = chapterIndex + 1
         var title = bookChapter.title.trim()
         if (title.length > 20) {
             title = title.substring(0, 20) + "…"
@@ -1163,11 +1164,23 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             respondTime = workMs.toInt()
             qualityVerdict = verdict
             qualityTags = listOfNotNull(qualityTag?.takeIf { it.isNotBlank() })
+            tocChapterCount = chapters.size
+            probeChapterOrdinal = probeOrdinal
+            probeChapterTitle = title
             chapterWordCountText = when {
                 measuredChars >= 0 ->
-                    ChangeBookSourceQuality.metricLine(measuredChars, respondTime)
-                else ->
-                    getApplication<Application>().getString(R.string.change_source_chapter_content_fail)
+                    ChangeBookSourceQuality.metricLine(
+                        measuredChars = measuredChars,
+                        respondTimeMs = respondTime,
+                        chapterOrdinal = probeOrdinal,
+                        chapterTitle = title,
+                    )
+                else -> {
+                    val head = ChangeBookSourceQuality.buildProbeChapterHead(probeOrdinal, title)
+                    val fail = getApplication<Application>()
+                        .getString(R.string.change_source_chapter_content_fail)
+                    if (head != null) "$head · $fail" else fail
+                }
             }
         }
         val tier = ChangeBookSourceQuality.contentSortTier(
@@ -1323,6 +1336,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             searchBook.latestChapterTitle,
         )
         val candSize = tocSize ?: candTitles?.size
+        if (candSize != null && candSize > 0) {
+            searchBook.tocChapterCount = candSize
+        }
         val tocMatch = if (candSize != null && candSize > 0) {
             ChangeBookSourceQuality.tocIdentity(
                 localTotal = local?.totalChapterNum ?: 0,
@@ -1504,8 +1520,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
         if (searchBook.chapterWordCount >= 0) {
             searchBook.chapterWordCountText = ChangeBookSourceQuality.metricLine(
-                searchBook.chapterWordCount,
-                searchBook.respondTime,
+                measuredChars = searchBook.chapterWordCount,
+                respondTimeMs = searchBook.respondTime,
+                chapterOrdinal = searchBook.probeChapterOrdinal,
+                chapterTitle = searchBook.probeChapterTitle,
             )
         }
         missContentBadCount.incrementAndGet()

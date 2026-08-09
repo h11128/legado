@@ -88,6 +88,21 @@ data class SearchBook(
     @IgnoredOnParcel
     var tocMatch: Boolean? = null
 
+    /** Candidate TOC size after deep probe (session-only; 0 = unknown). */
+    @Ignore
+    @IgnoredOnParcel
+    var tocChapterCount: Int = 0
+
+    /** 1-based probed chapter ordinal for metric line; 0 = unknown. */
+    @Ignore
+    @IgnoredOnParcel
+    var probeChapterOrdinal: Int = 0
+
+    /** Truncated probed chapter title for metric line. */
+    @Ignore
+    @IgnoredOnParcel
+    var probeChapterTitle: String? = null
+
     override fun equals(other: Any?) = other is SearchBook && other.bookUrl == bookUrl
 
     override fun hashCode() = bookUrl.hashCode()

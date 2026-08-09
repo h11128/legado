@@ -85,6 +85,8 @@ class ChangeChapterSourceViewModel(application: Application) :
         book.qualityVerdict = null
         book.qualityTags = emptyList()
         book.smartScore = -1
+        book.probeChapterOrdinal = 0
+        book.probeChapterTitle = null
     }
 
     private fun applyChapterMetricUi(
@@ -97,9 +99,22 @@ class ChangeChapterSourceViewModel(application: Application) :
         book.chapterWordCount = measuredChars
         book.qualityVerdict = verdict
         book.qualityTags = listOfNotNull(qualityTag?.takeIf { it.isNotBlank() })
+        val ordinal = (chapterIndex + 1).coerceAtLeast(1)
+        book.probeChapterOrdinal = ordinal
+        book.probeChapterTitle = chapterTitle
         book.chapterWordCountText = when {
-            measuredChars >= 0 -> ChangeBookSourceQuality.metricLine(measuredChars, respondTimeMs)
-            else -> getApplication<Application>().getString(R.string.change_source_chapter_content_fail)
+            measuredChars >= 0 -> ChangeBookSourceQuality.metricLine(
+                measuredChars = measuredChars,
+                respondTimeMs = respondTimeMs,
+                chapterOrdinal = ordinal,
+                chapterTitle = chapterTitle,
+            )
+            else -> {
+                val head = ChangeBookSourceQuality.buildProbeChapterHead(ordinal, chapterTitle)
+                val fail = getApplication<Application>()
+                    .getString(R.string.change_source_chapter_content_fail)
+                if (head != null) "$head · $fail" else fail
+            }
         }
         refreshSmartScore(book)
     }
@@ -563,9 +578,13 @@ class ChangeChapterSourceViewModel(application: Application) :
             status = ChangeSourceChapterProbe.STATUS_OK,
             score = searchBook.chapterWordCount.toDouble(),
         )
+        searchBook.probeChapterOrdinal = (chapterIndex + 1).coerceAtLeast(1)
+        searchBook.probeChapterTitle = chapterTitle
         searchBook.chapterWordCountText = ChangeBookSourceQuality.metricLine(
-            searchBook.chapterWordCount,
-            searchBook.respondTime,
+            measuredChars = searchBook.chapterWordCount,
+            respondTimeMs = searchBook.respondTime,
+            chapterOrdinal = searchBook.probeChapterOrdinal,
+            chapterTitle = searchBook.probeChapterTitle,
         )
         searchBook.qualityVerdict = ChangeBookSourceQuality.verdictFromContentQuality(
             ChangeChapterVerify.ContentQuality.Ok(searchBook.chapterWordCount),

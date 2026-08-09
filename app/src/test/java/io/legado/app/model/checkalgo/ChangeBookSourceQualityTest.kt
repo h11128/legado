@@ -855,6 +855,32 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
+    fun metricLineIncludesProbeChapterAndRespondTime() {
+        val line = ChangeBookSourceQuality.metricLine(
+            measuredChars = 11595,
+            respondTimeMs = 1500,
+            chapterOrdinal = 53,
+            chapterTitle = "乱仑系列（未删节）",
+        )
+        assertTrue(line.startsWith("[53] 乱仑系列（未删节）"))
+        assertTrue(line.contains("字数：11595"))
+        assertTrue(line.contains("1.5s"))
+        assertFalse(line.contains("共"))
+    }
+
+    @Test
+    fun catalogLinePutsTotalBeforeLatest() {
+        assertEquals(
+            "共 189 章 · 第187章 白虎",
+            ChangeBookSourceQuality.catalogLine("共 189 章", "第187章 白虎"),
+        )
+        assertEquals(
+            "第187章 白虎",
+            ChangeBookSourceQuality.catalogLine(null, "第187章 白虎"),
+        )
+    }
+
+    @Test
     fun contentSortTierUsesVerdictWhenMeasuredCharsLookOk() {
         // Hijack with long body must still sort as content-bad via verdict.
         assertEquals(

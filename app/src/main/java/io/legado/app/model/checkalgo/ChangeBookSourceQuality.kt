@@ -362,15 +362,60 @@ object ChangeBookSourceQuality {
     /** Metric line only — never embed quality labels here. */
     fun metricWordCountText(measuredChars: Int): String = "字数：$measuredChars"
 
-    fun metricLine(measuredChars: Int, respondTimeMs: Int): String {
-        val words = metricWordCountText(measuredChars)
-        if (respondTimeMs < 0) return words
+    fun respondTimeText(respondTimeMs: Int): String? {
+        if (respondTimeMs < 0) return null
         val sec = respondTimeMs / 1000.0
         return if (sec < 10) {
-            "$words · ${"%.1f".format(sec)}s"
+            "${"%.1f".format(sec)}s"
         } else {
-            "$words · ${respondTimeMs}ms"
+            "${respondTimeMs}ms"
         }
+    }
+
+    /**
+     * Probe evidence line: optional `[ordinal] title ·` + `字数：N` + optional respond time.
+     * Does not include catalog total chapters (that belongs on the Catalog row).
+     */
+    fun metricLine(
+        measuredChars: Int,
+        respondTimeMs: Int,
+        chapterOrdinal: Int = 0,
+        chapterTitle: String? = null,
+        maxTitleLen: Int = 20,
+    ): String {
+        val words = metricWordCountText(measuredChars)
+        val time = respondTimeText(respondTimeMs)
+        val probeHead = buildProbeChapterHead(chapterOrdinal, chapterTitle, maxTitleLen)
+        return buildList {
+            if (probeHead != null) add(probeHead)
+            add(words)
+            if (time != null) add(time)
+        }.joinToString(" · ")
+    }
+
+    fun buildProbeChapterHead(
+        chapterOrdinal: Int,
+        chapterTitle: String?,
+        maxTitleLen: Int = 20,
+    ): String? {
+        if (chapterOrdinal <= 0) return null
+        val raw = chapterTitle?.trim().orEmpty()
+        val title = when {
+            raw.isEmpty() -> ""
+            raw.length <= maxTitleLen -> raw
+            else -> raw.substring(0, maxTitleLen) + "…"
+        }
+        return if (title.isEmpty()) "[$chapterOrdinal]" else "[$chapterOrdinal] $title"
+    }
+
+    /**
+     * Catalog row: total chapter count (when known) + latest tip.
+     * [totalLabel] should already be localized, e.g. `共 189 章`.
+     */
+    fun catalogLine(totalLabel: String?, latestTitle: String): String {
+        val latest = latestTitle.trim().ifEmpty { "无最新章节" }
+        val total = totalLabel?.trim().orEmpty()
+        return if (total.isNotEmpty()) "$total · $latest" else latest
     }
 
     /**

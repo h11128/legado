@@ -14,6 +14,7 @@ import io.legado.app.data.entities.SearchBook
 import io.legado.app.databinding.ItemChangeSourceBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.model.checkalgo.ChangeBookSourceQuality
 import io.legado.app.ui.widget.popupActionMenu
 import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.gone
@@ -37,6 +38,7 @@ class ChangeBookSourceAdapter(
         override fun areContentsTheSame(oldItem: SearchBook, newItem: SearchBook): Boolean {
             return oldItem.originName == newItem.originName
                     && oldItem.getDisplayLastChapterTitle() == newItem.getDisplayLastChapterTitle()
+                    && oldItem.tocChapterCount == newItem.tocChapterCount
                     && oldItem.chapterWordCountText == newItem.chapterWordCountText
                     && oldItem.respondTime == newItem.respondTime
                     && oldItem.smartScore == newItem.smartScore
@@ -60,7 +62,7 @@ class ChangeBookSourceAdapter(
             if (payloads.isEmpty()) {
                 tvOrigin.text = item.originName
                 tvAuthor.text = item.author
-                tvLast.text = item.getDisplayLastChapterTitle()
+                bindCatalogLine(this, item)
                 bindMetricAndTags(this, item)
                 bindSmartScore(this, item)
                 if (callBack.oldBookUrl == item.bookUrl) {
@@ -74,7 +76,7 @@ class ChangeBookSourceAdapter(
                     bundle.keySet().forEach {
                         when (it) {
                             "name" -> tvOrigin.text = item.originName
-                            "latest" -> tvLast.text = item.getDisplayLastChapterTitle()
+                            "latest" -> bindCatalogLine(this@apply, item)
                             "upCurSource" -> if (callBack.oldBookUrl == item.bookUrl) {
                                 ivChecked.visible()
                             } else {
@@ -83,6 +85,7 @@ class ChangeBookSourceAdapter(
                         }
                     }
                 }
+                bindCatalogLine(this, item)
                 bindMetricAndTags(this, item)
                 bindSmartScore(this, item)
             }
@@ -122,6 +125,16 @@ class ChangeBookSourceAdapter(
                 )
             }
         }
+    }
+
+    private fun bindCatalogLine(binding: ItemChangeSourceBinding, item: SearchBook) {
+        val latest = item.getDisplayLastChapterTitle()
+        val totalLabel = if (item.tocChapterCount > 0) {
+            context.getString(R.string.all_chapter_num, item.tocChapterCount)
+        } else {
+            null
+        }
+        binding.tvLast.text = ChangeBookSourceQuality.catalogLine(totalLabel, latest)
     }
 
     private fun bindMetricAndTags(binding: ItemChangeSourceBinding, item: SearchBook) {
