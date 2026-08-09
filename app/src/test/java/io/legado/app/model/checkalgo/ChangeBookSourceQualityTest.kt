@@ -686,6 +686,48 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
+    fun smartScoreSpreadsOkTierByLengthAndRespondTime() {
+        // Mirrors temp/change_source_scores_2026-08-08.json Ok crowd that all scored 82.
+        val longFast = ChangeBookSourceQuality.smartScore(
+            measuredChars = 11_595,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            latestMismatch = true,
+            respondTimeMs = 631,
+        )
+        val midFast = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2493,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            latestMismatch = true,
+            respondTimeMs = 223,
+        )
+        val midSlow = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2317,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            latestMismatch = true,
+            respondTimeMs = 4005,
+        )
+        val shortOk = ChangeBookSourceQuality.smartScore(
+            measuredChars = 1680,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            latestMismatch = true,
+            respondTimeMs = 545,
+        )
+        assertTrue("longFast=$longFast midFast=$midFast", longFast > midFast)
+        assertTrue("midFast=$midFast shortOk=$shortOk", midFast > shortOk)
+        assertTrue("shortOk=$shortOk midSlow=$midSlow", shortOk > midSlow)
+        val span = longFast - midSlow
+        assertTrue("Ok span should be meaningful, span=$span", span >= 15)
+    }
+
+    @Test
+    fun lengthSmartBonusIsMonotonicInMeasuredChars() {
+        val a = ChangeBookSourceQuality.lengthSmartBonus(1680)
+        val b = ChangeBookSourceQuality.lengthSmartBonus(2493)
+        val c = ChangeBookSourceQuality.lengthSmartBonus(11_595)
+        assertTrue(a < b && b < c)
+    }
+
+    @Test
     fun metricLineKeepsWordCountSeparateFromQuality() {
         val line = ChangeBookSourceQuality.metricLine(53, 320)
         assertTrue(line.contains("字数：53"))

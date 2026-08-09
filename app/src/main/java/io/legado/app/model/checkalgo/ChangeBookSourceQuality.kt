@@ -355,6 +355,9 @@ object ChangeBookSourceQuality {
 
     /**
      * 0..100 smart score for 换源 list. Pending / unknown → -1 (UI shows —).
+     *
+     * Within a verdict tier, length (continuous) + respondTime must spread scores —
+     * device sample 2026-08-08: 12/15 Ok collapsed to 82 under the old step bonuses.
      */
     fun smartScore(
         measuredChars: Int,
@@ -369,25 +372,15 @@ object ChangeBookSourceQuality {
         val v = verdict ?: return -1
         if (v == QualityVerdict.Pending) return -1
         var score = when (v) {
-            QualityVerdict.Ok -> 78
-            QualityVerdict.Weak -> 55
-            QualityVerdict.TooShort -> 35
-            QualityVerdict.AntiTheft -> 15
+            QualityVerdict.Ok -> 62
+            QualityVerdict.Weak -> 48
+            QualityVerdict.TooShort -> 28
+            QualityVerdict.AntiTheft -> 14
             QualityVerdict.Hijack -> 10
             QualityVerdict.FetchError -> 5
             QualityVerdict.Pending -> return -1
         }
-        if (measuredChars > 0) {
-            score += lengthBandScore(measuredChars, expectedChars).let { band ->
-                when {
-                    band >= measuredChars + 50_000 -> 15
-                    band >= measuredChars + 10_000 -> 8
-                    isQualityOkWordCount(measuredChars) -> 5
-                    measuredChars >= MIN_SCORE_CHARS -> 2
-                    else -> 0
-                }
-            }
-        }
+        score += lengthSmartBonus(measuredChars, expectedChars)
         val sim = contentRefSim
         if (sim != null) {
             score += when {
@@ -397,12 +390,10 @@ object ChangeBookSourceQuality {
                 else -> 0
             }
         }
-        if (latestMismatch) score -= 6
-        if (tocMismatch) score -= 6
-        if (respondTimeMs in 0..800) score += 5
-        else if (respondTimeMs in 801..2000) score += 2
-        else if (respondTimeMs > 8000) score -= 5
-        else if (respondTimeMs > 4000) score -= 2
+        // Soft meta is secondary; keep light so tip noise does not flatten Ok rows.
+        if (latestMismatch) score -= 3
+        if (tocMismatch) score -= 3
+        score += respondSmartBonus(respondTimeMs)
         score += when {
             userScore > 0 -> 8
             userScore < 0 -> -12
@@ -411,7 +402,42 @@ object ChangeBookSourceQuality {
         return score.coerceIn(0, 100)
     }
 
-    private const val MIN_SCORE_CHARS = 80
+    /**
+     * Continuous length contribution so same-verdict rows do not pile on one score.
+     * ~350 chars ≈ +1, capped so a single long body cannot dominate the 0–100 scale.
+     */
+    fun lengthSmartBonus(measuredChars: Int, expectedChars: Int? = null): Int {
+        if (measuredChars <= 0) return 0
+        val continuous = (measuredChars / LENGTH_SCORE_DIVISOR).coerceIn(0, LENGTH_SCORE_CAP)
+        val expected = expectedChars?.takeIf { it >= ChangeChapterVerify.MIN_CONTENT_CHARS }
+        val relative = if (expected != null) {
+            val ratio = measuredChars.toDouble() / expected.toDouble()
+            when {
+                ratio in 0.7..1.4 -> 5
+                ratio in 0.4..2.0 -> 2
+                else -> 0
+            }
+        } else {
+            0
+        }
+        return continuous + relative
+    }
+
+    fun respondSmartBonus(respondTimeMs: Int): Int = when {
+        respondTimeMs < 0 -> 0
+        respondTimeMs <= 200 -> 8
+        respondTimeMs <= 400 -> 6
+        respondTimeMs <= 600 -> 4
+        respondTimeMs <= 800 -> 3
+        respondTimeMs <= 1200 -> 1
+        respondTimeMs <= 2000 -> 0
+        respondTimeMs > 8000 -> -7
+        respondTimeMs > 4000 -> -4
+        else -> -1
+    }
+
+    private const val LENGTH_SCORE_DIVISOR = 350
+    private const val LENGTH_SCORE_CAP = 20
 
     /**
      * TOC sizes are consistent enough to be the same book progression.
