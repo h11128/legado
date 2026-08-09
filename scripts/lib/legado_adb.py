@@ -96,22 +96,50 @@ def shelf_restore_queue() -> Path:
     return p
 
 
+def _adb_cat_bytes(pkg: str, remote_rel: str) -> bytes:
+    return subprocess.check_output(
+        ["adb", "exec-out", "run-as", pkg, "cat", remote_rel]
+    )
+
+
 def pull_legado_db(
     dest: Path,
     pkg: str = DEFAULT_PKG,
     *,
     stop_app: bool = True,
     min_bytes: int = 1000,
+    wal: bool = True,
 ) -> Path:
-    """Pull databases/legado.db via run-as. Caller should treat dest as ephemeral under temp/."""
+    """Pull databases/legado.db via run-as (WAL-aware by default).
+
+    MCP ``save_source`` often lands in the WAL only. Copying ``legado.db``
+    alone then pushing that file **wipes** those rows. Default ``wal=True``
+    pulls ``-wal``/``-shm`` beside dest and checkpoints into dest.
+    """
+    dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     if stop_app:
         force_stop(pkg)
-    with open(dest, "wb") as f:
-        subprocess.check_call(
-            ["adb", "exec-out", "run-as", pkg, "cat", "databases/legado.db"],
-            stdout=f,
-        )
+    dest.write_bytes(_adb_cat_bytes(pkg, "databases/legado.db"))
+    if wal:
+        for suffix in ("-wal", "-shm"):
+            side = dest.parent / f"{dest.name}{suffix}"
+            try:
+                side.write_bytes(_adb_cat_bytes(pkg, f"databases/legado.db{suffix}"))
+            except subprocess.CalledProcessError:
+                # Missing WAL is fine after a clean checkpoint on device.
+                if side.exists():
+                    side.unlink(missing_ok=True)
+        con = sqlite3.connect(str(dest))
+        try:
+            con.execute("PRAGMA wal_checkpoint(FULL)")
+            con.commit()
+        finally:
+            con.close()
+        for suffix in ("-wal", "-shm"):
+            side = dest.parent / f"{dest.name}{suffix}"
+            if side.exists():
+                side.unlink(missing_ok=True)
     if dest.stat().st_size < min_bytes:
         raise RuntimeError(f"db too small: {dest} ({dest.stat().st_size} bytes)")
     con = sqlite3.connect(str(dest))
@@ -131,8 +159,15 @@ def push_legado_db(
     relaunch: bool = True,
     min_bytes: int = 1000,
     min_books: int = 10,
+    require_source_urls: list[str] | None = None,
 ) -> None:
-    """Push a working copy into the app's databases/legado.db (clears WAL)."""
+    """Push a working copy into the app's databases/legado.db (clears WAL).
+
+    Pass ``require_source_urls`` for any URL that must survive the push
+    (typically sources you just INSERTed). Pushing a pull taken *before*
+    MCP saved a new URL will delete that source — refuse if listed URLs
+    are missing from ``src``.
+    """
     if not src.is_file() or src.stat().st_size < min_bytes:
         raise RuntimeError(f"refuse push of tiny/missing db: {src}")
     con = sqlite3.connect(str(src))
@@ -143,6 +178,27 @@ def push_legado_db(
         books = con.execute("select count(*) from books").fetchone()[0]
         if books < min_books:
             raise RuntimeError(f"refuse push: books={books}")
+        if require_source_urls:
+            missing = [
+                u
+                for u in require_source_urls
+                if not con.execute(
+                    "SELECT 1 FROM book_sources WHERE bookSourceUrl = ?", (u,)
+                ).fetchone()
+            ]
+            if missing:
+                raise RuntimeError(
+                    "refuse push: stale snapshot missing book_sources "
+                    + ", ".join(missing)
+                    + " — INSERT in this file first, or re-pull after MCP save"
+                )
+        else:
+            print(
+                "warning: push_legado_db without require_source_urls — "
+                "MCP-saved sources missing from this file will be wiped "
+                "(use scripts/legado-db-mutate.py or pass require_source_urls)",
+                file=sys.stderr,
+            )
     finally:
         con.close()
     force_stop(pkg)

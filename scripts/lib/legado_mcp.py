@@ -298,5 +298,51 @@ class LegadoMcp:
             },
         )
 
+    def get_check_progress(self) -> dict[str, Any]:
+        raw = self.text("get_check_progress", {})
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"get_check_progress not JSON: {raw[:200]}") from e
+        if not isinstance(data, dict):
+            raise RuntimeError(f"get_check_progress unexpected: {type(data)}")
+        return data
+
+    def wait_check_done(
+        self,
+        *,
+        max_wait_s: float = 90.0,
+        poll_s: float = 1.0,
+        min_finished: int = 1,
+    ) -> dict[str, Any]:
+        """Poll until check job is not running (MCP field ``running``).
+
+        Completes when ``running is False`` and ``finished >= min_finished``
+        (or ``finishedAt`` is set). Never treat a missing key as "done".
+        """
+        deadline = time.time() + max_wait_s
+        last: dict[str, Any] = {}
+        while time.time() < deadline:
+            last = self.get_check_progress()
+            running = last.get("running")
+            finished = int(last.get("finished") or 0)
+            if running is False and (
+                finished >= min_finished or last.get("finishedAt") is not None
+            ):
+                return last
+            # Some builds omit ``running`` once idle; finishedAt is enough.
+            if (
+                running is None
+                and last.get("finishedAt") is not None
+                and finished >= min_finished
+            ):
+                return last
+            time.sleep(poll_s)
+        raise TimeoutError(
+            f"check not done in {max_wait_s}s: "
+            f"finished={last.get('finished')} failed={last.get('failed')} "
+            f"running={last.get('running')} finishedAt={last.get('finishedAt')}"
+        )
+
     def reset_channel(self) -> str:
         return tool_text(self.call("reset_mcp_channel", {}))

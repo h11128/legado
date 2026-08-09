@@ -9,6 +9,14 @@
 | `so.27k.net` | skip | parking 壳；so+www 已禁用；书架 13 换源 |
 | `www.80xs.la` | **fixed migrate** | →`wap.80ge.info`；须 SQL INSERT 进同一份 DB 再 push，忌 MCP save 后推旧快照 |
 
+### Session harness lesson (speed + DB wipe)
+
+| 问题 | 根因 | 落实 |
+|------|------|------|
+| push 冲掉新源 | 整库覆盖 + 缺 WAL / 旧快照 | `pull` WAL-aware；`legado-db-mutate`；trap `adb_db_push_stale_snapshot_wipes_source`；hook ASK |
+| 空等很久 | `sleep×N`、死域长 timeout、整段 Await | `wait_check_done`；probe timeout≤12s |
+| 详见 | | `docs/postmortem/2026-08-09-adb-db-push-wipes-mcp-source.md` |
+
 ## 2026-08-09 batch5 — shuquge / sodu / iyueba
 
 | URL | 结果 | 要点 |

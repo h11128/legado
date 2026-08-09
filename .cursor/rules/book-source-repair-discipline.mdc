@@ -13,21 +13,29 @@ Create and repair share the same close-out / improve gate — do not wait for th
 1. **Never claim `fixed` / `created` without device verify** (`校验成功` from check/repair).
 2. **Never run fix/create-verify while bulk owns MCP** — `source-cli check channel` must be idle.
 2-shelf-origin. **Never `delete_sources` / 去重删禁用源 without a bookshelf-origin check.**
-    `books.origin` is an **exact** `bookSourceUrl` match (`BookSourceDao.getBookSource`).
-    Deleting a “twin” (`https://host` vs `https://host/` / `#frag`) while an enabled
-    base remains still orphans shelf books.
-    **Recovery policy:** true URL twins → **remap** `books.origin` to the surviving
-    enabled source, then delete the unused dup; only **restore** the deleted source
-    if remap cannot open the book (different host/rules). Prefer disable over delete
-    for shelf-referenced URLs.
-    **How to check (MCP has no bookshelf list tool):**
-    `adb exec-out run-as <pkg> cat databases/legado.db` (+ `-wal`/`-shm`) then
-    `SELECT origin, COUNT(*) FROM books WHERE origin IN (…) GROUP BY origin`
-    — or parse phone backup `bookshelf.json` / `Download/legado/backup*.zip`.
-    Postmortem: `docs/postmortem/2026-08-07-shelf-origin-source-deleted.md`.
+ `books.origin` is an **exact** `bookSourceUrl` match (`BookSourceDao.getBookSource`).
+ Deleting a “twin” (`https://host` vs `https://host/` / `#frag`) while an enabled
+ base remains still orphans shelf books.
+ **Recovery policy:** true URL twins → **remap** `books.origin` to the surviving
+ enabled source, then delete the unused dup; only **restore** the deleted source
+ if remap cannot open the book (different host/rules). Prefer disable over delete
+ for shelf-referenced URLs.
+ **How to check (MCP has no bookshelf list tool):**
+ `adb exec-out run-as <pkg> cat databases/legado.db` (+ `-wal`/`-shm`) then
+ `SELECT origin, COUNT(*) FROM books WHERE origin IN (…) GROUP BY origin`
+ — or parse phone backup `bookshelf.json` / `Download/legado/backup*.zip`.
+ Postmortem: `docs/postmortem/2026-08-07-shelf-origin-source-deleted.md`.
+2b-db-push. **Never MCP `save_source(newUrl)` then `push_legado_db` of an older pull.**
+ Whole-file push + wipe WAL deletes any row missing from that snapshot (80xs→wap,
+ 2026-08-09). Prefer `python scripts/legado-db-mutate.py` or
+ `scripts.lib.legado_db_mutate.with_legado_db` — upsert/disable/remap in **one**
+ pull, pass `require_source_urls`, then push. `pull_legado_db` is WAL-aware by
+ default. Device check: `LegadoMcp.wait_check_done` (no fixed sleep×N).
+ Trap: `adb_db_push_stale_snapshot_wipes_source`.
+ Postmortem: `docs/postmortem/2026-08-09-adb-db-push-wipes-mcp-source.md`.
 3. **One phone = one check/debug job** (MCP single-flight). Do **parallel PC** work
-   (fetch HTML / triage / prepare patches) and **one batch** `start_check_sources` for many URLs.
-   Do not run two `debug_source` / check jobs on the same device.
+ (fetch HTML / triage / prepare patches) and **one batch** `start_check_sources` for many URLs.
+ Do not run two `debug_source` / check jobs on the same device.
 4. **Do not repair 发现 (explore)** unless the user explicitly asks. Default verify uses
    `checkDiscovery=false` (MCP) and treats 发现-only failures as success for repair scoring.
 5. **Deep-fix checklist is mandatory** (skill SOT): channel → diagnose → branch → verify → ledger.
