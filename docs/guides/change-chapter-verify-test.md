@@ -120,7 +120,7 @@ Known good probe book (when present): **《信仰诸天》朝不保夕** with or
 
 | Date | Result | Evidence |
 |---|---|---|
-| 2026-08-08k | TOC identity strong demote | `tocTitleAffinity` + `tocIdentity` → smartScore `tocMatch` −20/+5; no 佚名 author hard-filter (RFC-003). Device same-book: PO18 Ok **24** ≪ QQ Weak **59** (`temp/legado_change_source_session_2026-08-08_204643.txt`). |
+| 2026-08-08k | TOC identity strong demote | `tocTitleAffinity` + `tocIdentity` → smartScore `tocMatch` −20/+5; no 佚名 author hard-filter (RFC-003). Device same-book retest (`d9a607990`): PO18 Ok **23** ≪ QQ Weak **59**；肉文屋/海棠等亦 ~25–27。Log: `temp/legado_change_source_session_2026-08-08_205705.txt`. Session analyzer FAIL=`has_finish`（源池过大未 early-stop），不影响分数结论。 |
 | 2026-08-08j | smartScore wrong-book demote | Hard `latestMatch=false` always tags + −22 score + length cap 4 (fixes PO18 long Ok ranking first). Pending sort key 55. Sample after: `temp/legado_change_source_score_after_*.txt`. |
 | 2026-08-08i | smartScore same-tier spread | Device sample `temp/legado_change_source_score_sample_2026-08-08_194403.txt`: Ok 12/15 collapsed at 82. Formula → continuous length (`chars/350`) + finer respond + soft −3. Analyzer: `scripts/change-source-score-analyze.py`. |
 | 2026-08-08h | score UX: metric/tags/smartScore | Word count always shown when measured (incl. too_short); quality tags separate; 0–100 smartScore sort. Unit `ChangeBookSourceQualityTest`. Device: `temp/_cs_score_ux/list.xml` shows `字数：N · Xs` + score + soft tags; log `words=53 verdict=TooShort score=40 visible=true` with `dropContentBad=false` (`temp/legado_change_source_session_2026-08-08_192159.txt` writeback; UI session 19:27). |
