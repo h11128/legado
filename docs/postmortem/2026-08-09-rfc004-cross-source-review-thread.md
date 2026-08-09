@@ -70,7 +70,8 @@ Related:
 - **初版：** 未绑定时搜索 capable 源，**确认 snackbar** 后再绑（不静默）
 - **夹具：** 专门做的测试书源（`legado-fixture://review-overlay`），用来稳定测路径，不是真实站点
 - 真机坑：夹具作者与书架作者不一致 → `sameBook` 失败；改用空白/弱作者书测 snackbar
-- **无缝自动（用户要求后）：** `reviewOverlayAutoBind` **默认开**；`proposeAll` 收集每源唯一命中；`bindAutoAll` 静默写入（上限 mergeMax）；toast「已自动绑定 K 个」；歧义/已有行（含禁用）跳过。章评合集接现有 P5 路径。段角标仍不自动开真实源 authority。
+- **无缝自动（用户要求后）：** `reviewOverlayAutoBind` **默认开**；`proposeAll` 收集每源唯一命中；`bindAutoAll` 静默写入（上限 mergeMax）；toast「已自动绑定 K 个」；歧义/已有行（含禁用）跳过。章评合集接现有 P5 路径。段角标：夹具 + 起点（同源）可 `ContentSplitVerified`。
+- **验收一键：** [rfc-004-autobind-acceptance.md](../guides/rfc-004-autobind-acceptance.md) · `python scripts/rfc004-run-acceptance.py`（G1–G9 截图，禁止再开 temp 手写流程）。
 
 ### G. P4 — 阅读设置（`dca536b88`）
 

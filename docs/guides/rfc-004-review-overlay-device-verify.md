@@ -121,5 +121,7 @@ Commits: P2 `1968aa58a` · P3 `3d17ee2da` · P4 `dca536b88` · verify `62c269d04
 
 Re-run overlay: `python scripts/rfc004-overlay-device-session.py`  
 Re-run silent auto-bind: `python scripts/rfc004-autobind-device-session.py`  
-**Full screenshot acceptance (real only):** `python scripts/rfc004-autobind-acceptance-ui.py`  
-→ `temp/rfc004_ui/acceptance/ACCEPTANCE.json` + gates G1–G9 PNGs (fixtures off; silent multi-bind 起点+QQ; `coverage=69/69`; merge dialog; 简介「段评源：已绑定 2 个»; autoBind-off negative).
+**Full screenshot acceptance (real only):**  
+→ Guide [rfc-004-autobind-acceptance.md](./rfc-004-autobind-acceptance.md)  
+→ One-shot `python scripts/rfc004-run-acceptance.py`  
+→ Artifacts `temp/rfc004_ui/acceptance/ACCEPTANCE.json` + G1–G9 PNGs.
