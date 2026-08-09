@@ -114,6 +114,12 @@ function getChapters(book) {
     var html = String(java.ajax("https://book.qq.com/book-detail/" + bid) || "");
     var out = [];
     var seen = {};
+    var commentUrl = "https://book.qq.com/book-comment/" + bid + "?bid=" + bid;
+    // Overlay align needs a provider title near content "第N章 …". Book-circle comments
+    // are not per-chapter — these anchors all share the same review bucket URL.
+    out.push({ title: "第一章", url: commentUrl + "#alias-1" });
+    out.push({ title: "第1章", url: commentUrl + "#alias-1b" });
+    out.push({ title: "全书书评", url: commentUrl });
     var re = /href="[^"]*book-read\/(\d+)\/(\d+)"[^>]*>([\s\S]*?)<\/a>/gi;
     var m;
     while ((m = re.exec(html)) && out.length < 80) {
@@ -126,12 +132,6 @@ function getChapters(book) {
         out.push({
             title: title,
             url: "https://book.qq.com/book-read/" + bid + "/" + cid + "?bid=" + bid
-        });
-    }
-    if (!out.length) {
-        out.push({
-            title: "全书书评",
-            url: "https://book.qq.com/book-comment/" + bid + "?bid=" + bid
         });
     }
     return out;
