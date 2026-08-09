@@ -32,7 +32,7 @@ object ReviewOverlayAutoBind {
         cap: Int = ReviewAlignConfig.AUTO_DISCOVERY_CAP,
     ): Proposal? = withContext(Dispatchers.IO) {
         if (!AppConfig.reviewOverlayEnabled || !AppConfig.reviewOverlayAutoBind) return@withContext null
-        if (ReviewOverlayBindings.get(book.bookUrl) != null) return@withContext null
+        if (ReviewOverlayBindings.list(book.bookUrl).isNotEmpty()) return@withContext null
         val capable = ReviewOverlayMatch.listCapableEnabledSources()
         if (capable.isEmpty()) {
             AppLog.put("ReviewOverlay auto-bind skip: capableCount=0")

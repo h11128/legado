@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| Status | **Accepted for P1 implementation (Rev 1.1)** — P0 supply remains manual-only until a verified review-capable sample exists |
+| Status | **Accepted; P5 Multi-provider in progress (Rev 1.2)** — single-bind P1–P4 shipped; multi merge per §12 |
 | Date | 2026-08-09 |
 | Repo | `legado` (Android app + optional Web read) |
 | Related code | `ReviewRule` / `ReviewRuleParser` / `JsSourceReview` / `ReadBookActivity.loadReviewSummaryIfNeeded` / `ReviewDetailDialog`; align: `BookAuthorIdentity`, `SearchBookMerge`, `ChangeChapterVerify.alignResult` / `digramJaccard`; ask: RFC-001/002 change-source |
@@ -19,7 +19,7 @@
 
 段评今天绑在「当前正文书源」上。绝大多数书源没有段评规则，所以功能等于死的。
 
-**要：** 正文继续用现在的源；另外选一个**有段评能力的源**当「评论提供方」，把评论贴到当前阅读的章/段上。
+**要：** 正文继续用现在的源；另外选一个或多个**有段评能力的源**当「评论提供方」，把评论贴到当前阅读的章/段上（P5：多源章评合集；段落图标仍最多一家）。
 
 **怎么贴：** 复用已有能力——认书（RFC-003 / 搜书合并）、认章（换源 `alignResult`）、认段（仅在段序可验证时用 digram）。不是让每个盗版源都去写段评规则。
 
@@ -28,6 +28,7 @@
 1. **供给优先**：没有至少一个可验证的评论源样例前，不把「自动发现」当用户可见功能空转。
 2. **先章后段**：P1 只做书+章+章桶（`-1`）；P2 段落图标有门禁（段边界与站点 `paraIndex` 同序同号可证明）。
 3. **不对错段**：置信度不够 → 章桶或隐藏，禁止 soft 贴段图标。
+4. **P5 合集**：多源只合并章评列表（带来源标记）；禁止把多家 `paraIndex` 叠到同一段。
 
 ---
 
@@ -72,6 +73,7 @@ Users already treat **content origin** and **metadata quality** as separable (�
 | G6 | Discover / bind review-capable sources; require §6.0 supply gate before auto-discovery UX. |
 | G7 | Confidence fail → chapter bucket (`paraIndex = -1`) or hide — **never** silent wrong-paragraph icons. |
 | G8 | Persist binding across process death **and content 换源** (migrate / secondary key — §6.8). |
+| G9 | **P5:** One content book may bind **N** review providers; chapter-bucket comments merge into one labeled list (§12). |
 
 ---
 
@@ -79,7 +81,8 @@ Users already treat **content origin** and **metadata quality** as separable (�
 
 - Central hosted comment service or Legado-account sync of reviews.
 - Requiring every book source to implement `ruleReview`.
-- Multi-provider merge with cross-site dedupe (**v1 = single primary provider**; multi merge is §10).
+- Cross-site **strong** comment-text dedupe as default (P5 concatenates with source badges; optional weak dedupe is §12.7 / P5c).
+- Union of multi-provider **paragraph icons** onto the same local paragraph (P5: at most one `paragraph_primary`).
 - Perfect 1:1 paragraph map across split/合章 / 插广告源.
 - Changing how a source’s **own** `ruleReview` works on the native fast path.
 - Auto-login / captcha solving for review sites.
@@ -97,10 +100,12 @@ Users already treat **content origin** and **metadata quality** as separable (�
 | **Content book** | Shelf `Book` the user is reading (`bookUrl`, `origin`, TOC, progress). |
 | **Review provider source** | A `BookSource` that can load reviews (§6.1). |
 | **Provider book** | Bound remote book on the provider source (name/author + provider `bookUrl`). |
-| **Binding** | Persisted link content book ↔ provider book (§6.8). |
+| **Binding** | Persisted link content book ↔ provider book (§6.8); P5 allows a **set** per content book (§12). |
 | **Chapter align** | Map content chapter → provider TOC index + score. |
 | **Paragraph map** | Map provider `paraIndex` → local display paragraph id; store `ProviderParaRef` for click. |
 | **Chapter bucket** | Provider `paraIndex = -1` (title/章评). Not a fabricated index. |
+| **Merged chapter bucket** | P5: concatenated `-1` items from multiple providers with source badges (§12). |
+| **paragraph_primary** | P5: at most one binding that may draw P2 paragraph icons. |
 | **Fast path** | Content `origin` is review-capable and overlay not forced → today’s native behavior. |
 | **ProviderParaRef** | `{ providerParaIndex: Int, paraData: String }` — **only** values sent to detail APIs. |
 
@@ -391,7 +396,14 @@ Settings: 段评可来自与正文不同的评论源；无评论源时功能保�
 
 ### P4 — Polish
 
-- Cache eviction, Web parity, multi-provider (still §10).
+- Cache eviction, Web parity.
+
+### P5 — Multi-provider merge（§12）
+
+- **P5-design:** §12 normative text (this Rev).
+- **P5a:** Multi-row bindings + multi-select UI + merged chapter-bucket list with source badges.
+- **P5b:** `paragraph_primary` + P2 coexistence; whole-set 换源 migrate; `reviewOverlayMergeEnabled` / `MergeMax`.
+- **P5c (optional):** Weak text dedupe, default off.
 
 ---
 
@@ -400,25 +412,26 @@ Settings: 段评可来自与正文不同的评论源；无评论源时功能保�
 | Area | Paths |
 |------|--------|
 | Overlay core | `app/.../model/review/ReviewOverlay*.kt` (new; package visibility vs `internal` parsers) |
+| Merge | `ReviewOverlayMerge.kt`, multi-row `BookReviewBinding`, `ReviewMergeSession` |
 | Align | `ChangeChapterVerify.kt` (call only; optional exported split helper **after** authority proof) |
 | Identity | `BookAuthorIdentity.kt` (call only) |
 | Read path | `ReadBookActivity.kt` |
-| Dialog | `ReviewDetailDialog.kt` — split provider vs display para fields |
+| Dialog | `ReviewDetailDialog.kt` — split provider vs display para fields; merge list with badges |
 | Persist + migration | Room entity; 换源 call sites that rewrite `bookUrl` |
 | Prefs | `AppConfig` / read config |
-| Tests | `ReviewParagraphMapTest`, binding migration tests |
+| Tests | `ReviewParagraphMapTest`, binding migration tests, merge count tests |
 | Supply | example source under `docs/` or verified import path |
 
 ---
 
-## 10. Follow-ups (out of v1)
+## 10. Follow-ups (out of P5)
 
-1. Multi-provider merge + dedupe.
-2. Manual chapter link when align fails.
-3. Backup ZIP export of bindings.
-4. Provider health demote after N empty summaries.
-5. Optional `paraPreview` / `contentHash` in JS/`ruleReview` to strengthen authority.
-6. Web `ReviewDialog.vue` overlay query params.
+1. Manual chapter link when align fails.
+2. Backup ZIP export of bindings.
+3. Provider health demote after N empty summaries.
+4. Optional `paraPreview` / `contentHash` in JS/`ruleReview` to strengthen authority.
+5. Web `ReviewDialog.vue` overlay query params.
+6. P5c weak cross-source comment dedupe.
 
 ---
 
@@ -441,10 +454,95 @@ Settings: 段评可来自与正文不同的评论源；无评论源时功能保�
 | A13 | P1: summary lacks `-1` | No fabricated chapter detail click |
 | A14 | Overlay detail open | Dialog/ruleData use provider book+chapter, never content book |
 | A15 | Name/author migrate fallback with ≥2 binding rows | No migration; stay unbound |
+| A16 | Two enabled bindings; both have `-1` | Chapter chip count = sum; detail list shows both sources with badges |
+| A17 | One of two providers fails align | Other still shows; log `ReviewOverlay merge skip=` |
+| A18 | `reviewOverlayMergeEnabled=false` | Only lowest `sortOrder` binding used |
+| A19 | Click merged item | Detail API uses that item’s `providerSourceUrl` + `ProviderParaRef` |
+| A20 | Two bindings; one `paragraph_primary` with authority | Paragraph icons only from primary; chapter merge still includes all |
 
 ---
 
-## 12. Risks / open points
+## 12. Multi-provider merge (P5)
+
+**Product:** One shelf book may enable up to **N≤5** review providers. Opening the chapter-bucket shows **one merged list** with per-item source badges. Paragraph icons still come from at most one `paragraph_primary` binding (§6.5 unchanged).
+
+### 12.1 Concepts
+
+| Term | Meaning |
+|------|---------|
+| **Binding set** | All `book_review_bindings` rows for one `contentBookUrl` |
+| **Enabled binding** | `enabled=true` and source still capable |
+| **Merged chapter bucket** | Concatenation of per-provider `-1` detail items ordered by `sortOrder` |
+| **MergeItem** | Display row carrying `providerSourceUrl`, `sourceLabel`, `ProviderParaRef`, and provider book/chapter context |
+| **paragraph_primary** | At most one row per content book with `role=paragraph_primary`; sole P2 icon source |
+
+### 12.2 Schema
+
+Table `book_review_bindings` (Room bump from 101):
+
+| Column | Notes |
+|--------|-------|
+| Drop unique on `contentBookUrl` alone | |
+| Unique `(contentBookUrl, providerSourceUrl)` | One row per provider per book |
+| `enabled` | Default true; disable without delete |
+| `sortOrder` | Lower first in merge / requests |
+| `role` | `chapter` (default) or `paragraph_primary` |
+| Existing content/provider fields | Unchanged |
+| `bindMode` | Per-row `auto` / `manual` |
+
+Migration from single-row v101: keep rows; set `enabled=true`, `sortOrder=0`, `role=paragraph_primary` only if authority ≠ `Unsupported`, else `chapter`.
+
+DAO: `listByContentBookUrl`, `getByContentAndProvider`, `setEnabled`, `setParagraphPrimary` (clear other primaries).
+
+### 12.3 Load path
+
+1. `listEnabledBindings(contentBookUrl)` capped by `reviewOverlayMergeMax` (default 5), ordered by `sortOrder`.
+2. If `reviewOverlayMergeEnabled=false` → use only the first binding (compat).
+3. Parallel per binding: align → `fetchSummary`; failure → empty for that source + `AppLog` `ReviewOverlay merge skip=…` (does not fail the whole merge).
+4. Chapter chip count = sum of `-1` counts (no dedupe). UI may show “约 N 条（多源未去重）”.
+5. If a `paragraph_primary` exists and authority + coverage pass → P2 icons from that binding only; non-primary `>0` para indices **do not** draw icons.
+6. Session stores a **MergeSession**: map of provider contexts + merged bucket metadata.
+
+### 12.4 Detail path
+
+1. Dialog title e.g. `本章评论（K 源）`.
+2. First paint: for each aligned provider with `-1`, fetch detail page 1; concatenate with source badges. One provider’s failure shows a failed block, not an empty dialog.
+3. Load-more: each provider keeps its own `nextPageUrl`; append pages independently.
+4. Click / expand uses **that item’s** provider source + `ProviderParaRef` — never another provider’s `paraData`.
+
+### 12.5 Fast path
+
+- No overlay bindings → native (if origin capable).
+- Any overlay binding set present → overlay/merge path; if origin is also in the set, treat it as one merge member (no double native+overlay).
+
+### 12.6 UX / prefs
+
+- Book info「段评源」: multi-select (enable, reorder, set paragraph primary, remove).
+- Auto-bind (P3): never silently fill N providers; confirm “发现 K 个，是否添加？”.
+
+| Pref | Default | Meaning |
+|------|---------|---------|
+| `reviewOverlayMergeEnabled` | true | false → first `sortOrder` only |
+| `reviewOverlayMergeMax` | 5 | Hard cap |
+
+### 12.7 Non-goals inside P5
+
+- Strong cross-site text dedupe (optional P5c, default off).
+- Union of multi-provider paragraph icons.
+- Qimao signing / new supply sources.
+
+### 12.8 Risks
+
+| Risk | Mitigation |
+|------|------------|
+| Wrong-book amplified | Per-provider `sameBook`; empty search returns `[]` |
+| Perf | N≤5; parallel summary; no full-body prefetch for merge |
+| Wrong paragraph | Non-primary `>0` indices ignored for icons |
+| Inflated count | Honest “sum / 未去重” copy |
+
+---
+
+## 13. Risks / open points (pre-P5)
 
 | Risk | Mitigation |
 |------|------------|
@@ -457,7 +555,7 @@ Settings: 段评可来自与正文不同的评论源；无评论源时功能保�
 
 ---
 
-## 13. Review checklist (for other AIs)
+## 14. Review checklist (for other AIs)
 
 - [ ] C1–C6 from Rev 0 review addressed in normative text
 - [ ] Soft-map icons removed; G7 consistent
@@ -468,10 +566,11 @@ Settings: 段评可来自与正文不同的评论源；无评论源时功能保�
 - [ ] Discrete align accept set matches `alignResult` scores
 - [ ] `sameBook` API shape matches `BookAuthorIdentity`
 - [ ] Acceptance tests falsifiable (A4/A11–A13)
+- [ ] P5: multi-row unique `(contentBookUrl, providerSourceUrl)`; merge badges; paragraph_primary only for icons
 
 ---
 
-## 14. Decision log
+## 15. Decision log
 
 | Date | Decision |
 |------|----------|
@@ -480,10 +579,11 @@ Settings: 段评可来自与正文不同的评论源；无评论源时功能保�
 | 2026-08-09 | Rev 1: kill soft-map icons; P1 chapter-only milestone; authority gate for P2; binding migration on 换源; supply gate; auto-bind default off + confirm; `ProviderParaRef` click invariant; discrete align accept set `{1.0,0.95,0.7}` |
 | 2026-08-09 | Rev 1.1: overlay detail must carry full provider book/chapter context; name/author bind migrate only when unique |
 | 2026-08-09 | P1a landed: binding table + manual UI + URL-only migrate (name/author fallback deferred — steal risk); providerName = provider book title |
+| 2026-08-09 | Rev 1.2 / P5: multi-provider chapter-bucket merge; N≤5; source badges; single `paragraph_primary` for P2 icons; no default text dedupe |
 
 ---
 
-## 15. Revision history
+## 16. Revision history
 
 | Rev | Date | Notes |
 |-----|------|-------|
@@ -491,3 +591,4 @@ Settings: 段评可来自与正文不同的评论源；无评论源时功能保�
 | 1 | 2026-08-09 | Address design-review Critical C1–C6 + Warnings W1–W4/W6 |
 | 1.1 | 2026-08-09 | Patch Rev 1 re-review P0s: §6.9 provider context; §6.8 unique migrate fallback |
 | 1.1-P1a | 2026-08-09 | Implementation: Room bindings, capability, bind UI; migrate URL-only |
+| 1.2 | 2026-08-09 | §12 Multi-provider merge (P5); G9; A16–A20 |

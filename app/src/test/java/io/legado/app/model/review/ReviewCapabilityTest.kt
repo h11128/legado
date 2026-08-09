@@ -113,7 +113,7 @@ class ReviewOverlayResolverTest {
         val mode = ReviewOverlayResolver.resolve(
             book = book(),
             originSource = null,
-            binding = binding("https://review"),
+            bindings = listOf(binding("https://review")),
             overlayEnabled = false,
         )
         assertEquals(ReviewOverlayMode.NativeOnly, mode)
@@ -124,7 +124,7 @@ class ReviewOverlayResolverTest {
         val mode = ReviewOverlayResolver.resolve(
             book = book(),
             originSource = BookSource().apply { bookSourceUrl = "https://content" },
-            binding = null,
+            bindings = null,
             overlayEnabled = true,
         )
         assertEquals(ReviewOverlayMode.Unbound, mode)
@@ -136,7 +136,7 @@ class ReviewOverlayResolverTest {
         val mode = ReviewOverlayResolver.resolve(
             book = book(origin.bookSourceUrl),
             originSource = origin,
-            binding = null,
+            bindings = null,
             overlayEnabled = true,
         )
         assertEquals(ReviewOverlayMode.Native, mode)
@@ -148,7 +148,7 @@ class ReviewOverlayResolverTest {
         val mode = ReviewOverlayResolver.resolve(
             book = book(origin.bookSourceUrl),
             originSource = origin,
-            binding = binding(origin.bookSourceUrl),
+            bindings = listOf(binding(origin.bookSourceUrl)),
             overlayEnabled = true,
         )
         assertEquals(ReviewOverlayMode.Native, mode)
@@ -161,11 +161,28 @@ class ReviewOverlayResolverTest {
         val mode = ReviewOverlayResolver.resolve(
             book = book(origin.bookSourceUrl),
             originSource = origin,
-            binding = bind,
+            bindings = listOf(bind),
             overlayEnabled = true,
         )
         assertTrue(mode is ReviewOverlayMode.Overlay)
-        assertEquals(bind, (mode as ReviewOverlayMode.Overlay).binding)
+        assertEquals(listOf(bind), (mode as ReviewOverlayMode.Overlay).bindings)
+    }
+
+    @Test
+    fun multiBindingsStayOverlayEvenIfOriginIncluded() {
+        val origin = capableSource("https://content")
+        val binds = listOf(
+            binding(origin.bookSourceUrl).copy(sortOrder = 0),
+            binding("https://review").copy(sortOrder = 1, providerSourceUrl = "https://review"),
+        )
+        val mode = ReviewOverlayResolver.resolve(
+            book = book(origin.bookSourceUrl),
+            originSource = origin,
+            bindings = binds,
+            overlayEnabled = true,
+        )
+        assertTrue(mode is ReviewOverlayMode.Overlay)
+        assertEquals(2, (mode as ReviewOverlayMode.Overlay).bindings.size)
     }
 
     @Test

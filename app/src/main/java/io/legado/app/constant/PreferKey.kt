@@ -52,6 +52,10 @@ object PreferKey {
     const val reviewOverlayAutoBind = "reviewOverlayAutoBind"
     /** RFC-004: allow P2 paragraph icons when authority open */
     const val reviewOverlayAllowParagraphIcons = "reviewOverlayAllowParagraphIcons"
+    /** RFC-004 P5: merge multiple review providers (false → first sortOrder only) */
+    const val reviewOverlayMergeEnabled = "reviewOverlayMergeEnabled"
+    /** RFC-004 P5: hard cap on enabled merge providers (N≤5) */
+    const val reviewOverlayMergeMax = "reviewOverlayMergeMax"
     const val showRss = "showRss"
     const val bookshelfLayout = "bookshelfLayout"
     const val bookshelfSort = "bookshelfSort"

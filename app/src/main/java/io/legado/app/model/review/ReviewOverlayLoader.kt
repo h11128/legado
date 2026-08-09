@@ -13,11 +13,14 @@ import io.legado.app.model.jsSource.JsSourceReview
 import io.legado.app.model.webBook.WebBook
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
 import kotlin.coroutines.coroutineContext
 
 /**
- * RFC-004: load provider review summary — P1 chapter-bucket and P2 paragraph hard-map.
+ * RFC-004: load provider review summary — P1 chapter-bucket, P2 paragraph map, P5 merge.
  */
 internal object ReviewOverlayLoader {
 
@@ -51,8 +54,10 @@ internal object ReviewOverlayLoader {
         contentBook: Book,
         contentChapter: BookChapter,
         binding: BookReviewBinding,
+        storeSession: Boolean = true,
+        clearOnFail: Boolean = true,
     ): Result {
-        val aligned = alignProvider(contentChapter, binding) ?: return Result.empty()
+        val aligned = alignProvider(contentChapter, binding, clearOnFail) ?: return Result.empty()
         val rawSummary = fetchSummarySafe(aligned.source, aligned.providerBook, aligned.providerChapter)
         return finishBucketOnly(
             contentBook = contentBook,
@@ -64,6 +69,146 @@ internal object ReviewOverlayLoader {
             coverage = null,
             coverageLabel = null,
             paraRefs = emptyMap(),
+            storeSession = storeSession,
+        )
+    }
+
+    /**
+     * RFC-004 §12: parallel per-binding load; sum -1 counts; P2 only on paragraph_primary.
+     */
+    suspend fun loadMergedChapterBucket(
+        contentBook: Book,
+        contentChapter: BookChapter,
+        bindings: List<BookReviewBinding>,
+        localParas: List<Pair<Int, String>>? = null,
+    ): Result = loadMerged(contentBook, contentChapter, bindings, localParas)
+
+    suspend fun loadMerged(
+        contentBook: Book,
+        contentChapter: BookChapter,
+        bindings: List<BookReviewBinding>,
+        localParas: List<Pair<Int, String>>? = null,
+    ): Result {
+        if (bindings.isEmpty()) return Result.empty()
+        if (bindings.size == 1) {
+            val only = bindings[0]
+            return if (localParas != null && localParas.isNotEmpty()) {
+                loadWithParagraphMap(contentBook, contentChapter, only, localParas)
+            } else {
+                loadChapterBucket(contentBook, contentChapter, only)
+            }
+        }
+
+        val primaryBinding = ReviewOverlayMerge.paragraphPrimary(bindings)
+        val perResults = coroutineScope {
+            bindings.map { binding ->
+                async {
+                    runCatching {
+                        val isPrimary =
+                            binding.providerSourceUrl == primaryBinding?.providerSourceUrl
+                        if (isPrimary &&
+                            localParas != null &&
+                            localParas.isNotEmpty() &&
+                            ReviewParagraphAuthority.isParagraphMapOpen(binding.providerSourceUrl) &&
+                            AppConfig.reviewOverlayAllowParagraphIcons
+                        ) {
+                            loadWithParagraphMap(
+                                contentBook,
+                                contentChapter,
+                                binding,
+                                localParas,
+                                storeSession = false,
+                                clearOnFail = false,
+                            )
+                        } else {
+                            loadChapterBucket(
+                                contentBook,
+                                contentChapter,
+                                binding,
+                                storeSession = false,
+                                clearOnFail = false,
+                            )
+                        }
+                    }.onFailure {
+                        AppLog.put(
+                            "ReviewOverlay merge skip=${binding.providerSourceUrl}\n" +
+                                    "${it.localizedMessage}",
+                            it,
+                        )
+                    }.getOrNull()
+                }
+            }.awaitAll()
+        }
+
+        val providerSessions = ArrayList<ReviewOverlaySessionStore.Active>()
+        val bucketCounts = ArrayList<Int>()
+        var paraResult: Result? = null
+        for ((binding, loaded) in bindings.zip(perResults)) {
+            if (loaded == null || loaded.session == null) {
+                AppLog.put("ReviewOverlay merge skip=${binding.providerSourceUrl}")
+                continue
+            }
+            providerSessions.add(loaded.session)
+            bucketCounts.add(loaded.summary.counts[-1] ?: 0)
+            if (binding.providerSourceUrl == primaryBinding?.providerSourceUrl &&
+                loaded.summary.counts.keys.any { it > 0 }
+            ) {
+                paraResult = loaded
+            }
+        }
+
+        val sum = ReviewOverlayMerge.sumChapterBucketCount(bucketCounts)
+        val paragraphPrimary = paraResult?.session
+            ?: providerSessions.firstOrNull {
+                it.binding.providerSourceUrl == primaryBinding?.providerSourceUrl
+            }
+            ?: providerSessions.firstOrNull()
+
+        if (providerSessions.isEmpty()) {
+            ReviewOverlaySessionStore.clearChapter()
+            return Result.empty()
+        }
+
+        ReviewOverlaySessionStore.putMerge(
+            ReviewOverlaySessionStore.MergeActive(
+                contentBookUrl = contentBook.bookUrl,
+                contentChapterIndex = contentChapter.index,
+                providers = providerSessions.toList(),
+                mergedBucketCount = sum,
+                paragraphPrimary = paragraphPrimary,
+            )
+        )
+
+        val displayCounts = LinkedHashMap<Int, Int>()
+        val displayKeys = LinkedHashMap<Int, String>()
+        if (sum > 0) {
+            displayCounts[-1] = sum
+            displayKeys[-1] = "merge:${providerSessions.size}"
+        }
+        paraResult?.let { pr ->
+            for ((k, v) in pr.summary.counts) {
+                if (k == -1) continue
+                displayCounts[k] = v
+            }
+            for ((k, v) in pr.summary.keys) {
+                if (k == -1) continue
+                displayKeys[k] = v
+            }
+        }
+
+        AppLog.put(
+            "ReviewOverlay merge providers=${providerSessions.size} " +
+                    "bucket=$sum primary=${paragraphPrimary?.binding?.providerSourceUrl}"
+        )
+        return Result(
+            summary = ReviewRuleParser.SummaryResult(displayCounts, displayKeys),
+            session = paragraphPrimary,
+            alignQuality = paragraphPrimary?.alignQuality,
+            providerChapterIndex = paragraphPrimary?.providerChapterIndex,
+            authority = paragraphPrimary?.let {
+                ReviewParagraphAuthority.authorityFor(it.binding.providerSourceUrl)
+            } ?: ReviewParagraphAuthority.Kind.Unsupported,
+            coverage = paraResult?.coverage,
         )
     }
 
@@ -76,16 +221,24 @@ internal object ReviewOverlayLoader {
         contentChapter: BookChapter,
         binding: BookReviewBinding,
         localParas: List<Pair<Int, String>>,
+        storeSession: Boolean = true,
+        clearOnFail: Boolean = true,
     ): Result {
         val authority = ReviewParagraphAuthority.authorityFor(binding.providerSourceUrl)
         if (!AppConfig.reviewOverlayAllowParagraphIcons ||
             !ReviewParagraphAuthority.isParagraphMapOpen(authority) ||
             localParas.isEmpty()
         ) {
-            return loadChapterBucket(contentBook, contentChapter, binding)
+            return loadChapterBucket(
+                contentBook,
+                contentChapter,
+                binding,
+                storeSession = storeSession,
+                clearOnFail = clearOnFail,
+            )
         }
 
-        val aligned = alignProvider(contentChapter, binding) ?: return Result.empty()
+        val aligned = alignProvider(contentChapter, binding, clearOnFail) ?: return Result.empty()
         val rawSummary = fetchSummarySafe(aligned.source, aligned.providerBook, aligned.providerChapter)
 
         val providerContent = runCatching {
@@ -114,6 +267,7 @@ internal object ReviewOverlayLoader {
                 coverage = null,
                 coverageLabel = null,
                 paraRefs = emptyMap(),
+                storeSession = storeSession,
             )
         }
 
@@ -150,13 +304,13 @@ internal object ReviewOverlayLoader {
                 coverage = coverage,
                 coverageLabel = coverageLabel,
                 paraRefs = emptyMap(),
+                storeSession = storeSession,
             )
         }
 
         val remapped = ReviewParagraphMapper.remapSummaryToLocal(rawSummary, localToProvider)
         val paraRefs = ReviewParagraphMapper.toParaRefs(localToProvider, rawSummary.keys)
         val chapterBucket = bucketRef(remapped)
-        // Drop paragraph icons that lack clickable paraData (same rule as chapter bucket).
         val displayCounts = LinkedHashMap<Int, Int>()
         val displayKeys = LinkedHashMap<Int, String>()
         chapterBucket?.let {
@@ -183,7 +337,12 @@ internal object ReviewOverlayLoader {
             chapterBucket = chapterBucket,
             paraRefs = paraRefs,
         )
-        ReviewOverlaySessionStore.put(session)
+        if (storeSession) {
+            ReviewOverlaySessionStore.put(session)
+        } else {
+            ReviewOverlaySessionStore.putProviderBook(session.providerBook)
+            ReviewOverlaySessionStore.putProviderToc(session.providerBook.bookUrl, session.providerToc)
+        }
         AppLog.put(
             "ReviewOverlay bind=${binding.providerSourceUrl} align=${aligned.alignQuality} " +
                     "authority=$authority coverage=$coverageLabel " +
@@ -222,6 +381,7 @@ internal object ReviewOverlayLoader {
         coverage: Double?,
         coverageLabel: String?,
         paraRefs: Map<Int, ProviderParaRef>,
+        storeSession: Boolean = true,
     ): Result {
         val bucketSummary = chapterBucketOnly(rawSummary)
         val chapterBucket = bucketRef(bucketSummary)
@@ -243,7 +403,12 @@ internal object ReviewOverlayLoader {
             chapterBucket = chapterBucket,
             paraRefs = paraRefs,
         )
-        ReviewOverlaySessionStore.put(session)
+        if (storeSession) {
+            ReviewOverlaySessionStore.put(session)
+        } else {
+            ReviewOverlaySessionStore.putProviderBook(session.providerBook)
+            ReviewOverlaySessionStore.putProviderToc(session.providerBook.bookUrl, session.providerToc)
+        }
         val coveragePart = coverageLabel?.let { " coverage=$it" }.orEmpty()
         AppLog.put(
             "ReviewOverlay bind=${binding.providerSourceUrl} align=${aligned.alignQuality} " +
@@ -262,10 +427,11 @@ internal object ReviewOverlayLoader {
     private suspend fun alignProvider(
         contentChapter: BookChapter,
         binding: BookReviewBinding,
+        clearOnFail: Boolean = true,
     ): Aligned? {
         val source = appDb.bookSourceDao.getBookSource(binding.providerSourceUrl)
         if (source == null || !ReviewCapability.isReviewCapable(source)) {
-            ReviewOverlaySessionStore.clearChapter()
+            if (clearOnFail) ReviewOverlaySessionStore.clearChapter()
             AppLog.put(
                 "ReviewOverlay bind=${binding.providerSourceUrl} align=n/a bucket=0 " +
                         "(provider source missing or not review-capable)"
@@ -274,7 +440,7 @@ internal object ReviewOverlayLoader {
         }
 
         val providerBook = ensureProviderBook(source, binding) ?: run {
-            ReviewOverlaySessionStore.clearChapter()
+            if (clearOnFail) ReviewOverlaySessionStore.clearChapter()
             AppLog.put(
                 "ReviewOverlay bind=${binding.providerSourceUrl} align=n/a bucket=0 " +
                         "(provider book resolve failed)"
@@ -289,7 +455,7 @@ internal object ReviewOverlayLoader {
             toc,
         )
         if (align == null) {
-            ReviewOverlaySessionStore.clearChapter()
+            if (clearOnFail) ReviewOverlaySessionStore.clearChapter()
             AppLog.put(
                 "ReviewOverlay bind=${binding.providerSourceUrl} align=fail bucket=0 " +
                         "contentChapter=${contentChapter.index}"
@@ -299,7 +465,7 @@ internal object ReviewOverlayLoader {
 
         val providerChapter = toc.getOrNull(align.index)
         if (providerChapter == null || providerChapter.isVolume) {
-            ReviewOverlaySessionStore.clearChapter()
+            if (clearOnFail) ReviewOverlaySessionStore.clearChapter()
             AppLog.put(
                 "ReviewOverlay bind=${binding.providerSourceUrl} align=${align.quality} " +
                         "bucket=0 (provider chapter missing)"

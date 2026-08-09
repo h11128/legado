@@ -35,8 +35,24 @@ object ReviewOverlaySessionStore {
         )
     }
 
+    /** RFC-004 §12 multi-provider chapter session. */
+    data class MergeActive(
+        val contentBookUrl: String,
+        val contentChapterIndex: Int,
+        val providers: List<Active>,
+        val mergedBucketCount: Int,
+        /** Session used for paragraph icons / para clicks. */
+        val paragraphPrimary: Active?,
+    ) {
+        fun providersWithBucket(): List<Active> =
+            providers.filter { it.chapterBucket != null }
+    }
+
     @Volatile
     private var active: Active? = null
+
+    @Volatile
+    private var mergeActive: MergeActive? = null
 
     private val providerBookByUrl = HashMap<String, Book>()
     private val providerTocByUrl = HashMap<String, List<BookChapter>>()
@@ -44,12 +60,14 @@ object ReviewOverlaySessionStore {
     @Synchronized
     fun clear() {
         active = null
+        mergeActive = null
     }
 
     /** Drop chapter-level overlay state; keep provider book/TOC caches. */
     @Synchronized
     fun clearChapter() {
         active = null
+        mergeActive = null
     }
 
     @Synchronized
@@ -67,31 +85,56 @@ object ReviewOverlaySessionStore {
             return
         }
         active = session
+        mergeActive = null
         putProviderBook(session.providerBook)
         putProviderToc(session.providerBook.bookUrl, session.providerToc)
     }
 
     @Synchronized
+    fun putMerge(session: MergeActive) {
+        mergeActive = session
+        active = session.paragraphPrimary ?: session.providers.firstOrNull()
+        for (p in session.providers) {
+            putProviderBook(p.providerBook)
+            putProviderToc(p.providerBook.bookUrl, p.providerToc)
+        }
+    }
+
+    @Synchronized
     fun get(): Active? = active
 
+    @Synchronized
+    fun getMerge(): MergeActive? = mergeActive
+
     fun matchesContentChapter(contentBookUrl: String, contentChapterIndex: Int): Boolean {
-        val session = active ?: return false
-        return session.contentBookUrl == contentBookUrl &&
-                session.contentChapterIndex == contentChapterIndex
+        synchronized(this) {
+            mergeActive?.let {
+                return it.contentBookUrl == contentBookUrl &&
+                        it.contentChapterIndex == contentChapterIndex
+            }
+            val session = active ?: return false
+            return session.contentBookUrl == contentBookUrl &&
+                    session.contentChapterIndex == contentChapterIndex
+        }
     }
 
     @Synchronized
     fun providerBookFor(bookUrl: String): Book? {
         active?.providerBook?.takeIf { it.bookUrl == bookUrl }?.let { return it }
+        mergeActive?.providers?.firstOrNull { it.providerBook.bookUrl == bookUrl }
+            ?.let { return it.providerBook }
         return providerBookByUrl[bookUrl]
     }
 
     @Synchronized
     fun providerChapter(bookUrl: String, chapterIndex: Int): BookChapter? {
-        active?.takeIf { it.providerBook.bookUrl == bookUrl }?.let { session ->
+        fun fromSession(session: Active): BookChapter? {
+            if (session.providerBook.bookUrl != bookUrl) return null
             if (session.providerChapterIndex == chapterIndex) return session.providerChapter
-            session.providerToc.firstOrNull { it.index == chapterIndex }?.let { return it }
+            return session.providerToc.firstOrNull { it.index == chapterIndex }
         }
+        active?.let { fromSession(it)?.let { ch -> return ch } }
+        mergeActive?.providers?.forEach { fromSession(it)?.let { ch -> return ch } }
         return providerTocByUrl[bookUrl]?.firstOrNull { it.index == chapterIndex }
     }
 

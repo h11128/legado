@@ -68,7 +68,17 @@ See `docs/design/sources/README.md`:
 
 Push with `python scripts/push-rfc004-review-sources.py` (or `save_source` `format=js`). Device **API**/`debug_source` evidence is in `docs/design/sources/README.md` (2026-08-09). In-reader overlay bucket logcat for these real URLs is still TODO; fixture overlay evidence below still stands.
 
-Chapter-bucket is expected to work once bound; paragraph icons still need `ContentSplitVerified` (fixture URL only today).
+### P5 multi-provider（合集）
+
+1. Build with Room **v102** (multi-row `book_review_bindings`: `enabled` / `sortOrder` / `role`).
+2. 简介 → **段评源** → **添加段评源**，先后绑定 ≥2 个有能力的源；**管理已绑定**可设段落主源 / 启停 / 移除。
+3. 打开章节：章评气泡 = 各源 `-1` count **之和**（未去重）；logcat `ReviewOverlay merge providers=…`。
+4. 点章评：`ReviewMergeDetailDialog`，条目带源名徽章。
+5. Pref `reviewOverlayMergeEnabled=false` → 只用 sortOrder 最小的一个源。
+
+Device smoke (2026-08-09): `assembleAppDebug` + install → logcat `DB version upgrading from 101 to 102` OK; unit `ReviewOverlayMergeTest` / resolver tests green.
+
+Chapter-bucket is expected to work once bound; paragraph icons still need `ContentSplitVerified` (fixture URL only today) and at most one `paragraph_primary`.
 
 ## Agent run record (2026-08-09)
 

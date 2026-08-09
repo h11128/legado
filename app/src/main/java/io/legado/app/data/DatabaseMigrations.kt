@@ -20,6 +20,7 @@ object DatabaseMigrations {
             migration_31_32, migration_32_33, migration_33_34, migration_34_35,
             migration_35_36, migration_36_37, migration_37_38, migration_38_39,
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
+            migration_101_102,
         )
     }
 
@@ -461,6 +462,60 @@ object DatabaseMigrations {
                     and (books.type & ${BookType.notShelf}) = 0
                 ) = 1
                 """.trimIndent()
+            )
+        }
+    }
+
+    /** RFC-004 P5: multi-provider bindings — drop unique(contentBookUrl), add composite unique + columns. */
+    private val migration_101_102 = object : Migration(101, 102) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `book_review_bindings_new` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `contentBookUrl` TEXT NOT NULL,
+                    `contentName` TEXT NOT NULL,
+                    `contentAuthor` TEXT NOT NULL,
+                    `contentOrigin` TEXT NOT NULL,
+                    `providerSourceUrl` TEXT NOT NULL,
+                    `providerBookUrl` TEXT NOT NULL,
+                    `providerName` TEXT NOT NULL,
+                    `providerAuthor` TEXT NOT NULL,
+                    `bindMode` TEXT NOT NULL,
+                    `enabled` INTEGER NOT NULL DEFAULT 1,
+                    `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                    `role` TEXT NOT NULL DEFAULT 'chapter',
+                    `updatedAt` INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `book_review_bindings_new` (
+                    id, contentBookUrl, contentName, contentAuthor, contentOrigin,
+                    providerSourceUrl, providerBookUrl, providerName, providerAuthor,
+                    bindMode, enabled, sortOrder, role, updatedAt
+                )
+                SELECT
+                    id, contentBookUrl, contentName, contentAuthor, contentOrigin,
+                    providerSourceUrl, providerBookUrl, providerName, providerAuthor,
+                    bindMode, 1, 0, 'chapter', updatedAt
+                FROM `book_review_bindings`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `book_review_bindings`")
+            db.execSQL("ALTER TABLE `book_review_bindings_new` RENAME TO `book_review_bindings`")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_book_review_bindings_contentBookUrl_providerSourceUrl` " +
+                    "ON `book_review_bindings` (`contentBookUrl`, `providerSourceUrl`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_book_review_bindings_contentName_contentAuthor` " +
+                    "ON `book_review_bindings` (`contentName`, `contentAuthor`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_book_review_bindings_providerSourceUrl` " +
+                    "ON `book_review_bindings` (`providerSourceUrl`)"
             )
         }
     }

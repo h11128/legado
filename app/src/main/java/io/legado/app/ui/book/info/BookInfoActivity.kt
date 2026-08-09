@@ -35,6 +35,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.BookReviewBinding
 import io.legado.app.data.entities.BookSource
 import io.legado.app.databinding.ActivityBookInfoBinding
 import io.legado.app.exception.NoStackTraceException
@@ -960,25 +961,29 @@ class BookInfoActivity :
     }
 
     private fun upReviewOrigin(book: Book) {
-        val row = ReviewOverlayBindings.get(book.bookUrl)
-        val text = if (row == null) {
-            getString(R.string.review_origin_unbound)
-        } else {
-            val sourceName = appDb.bookSourceDao.getBookSource(row.providerSourceUrl)?.bookSourceName
-            val label = sourceName?.takeIf { it.isNotBlank() }
-                ?: row.providerSourceUrl.ifBlank { row.providerName }
-            getString(R.string.review_origin_show, label)
+        val rows = ReviewOverlayBindings.list(book.bookUrl)
+        val text = when {
+            rows.isEmpty() -> getString(R.string.review_origin_unbound)
+            rows.size == 1 -> {
+                val row = rows[0]
+                val sourceName = appDb.bookSourceDao.getBookSource(row.providerSourceUrl)?.bookSourceName
+                val label = sourceName?.takeIf { it.isNotBlank() }
+                    ?: row.providerSourceUrl.ifBlank { row.providerName }
+                getString(R.string.review_origin_show, label)
+            }
+            else -> getString(R.string.review_origin_bound_count, rows.size)
         }
         binding.tvReviewOrigin?.text = text
     }
 
     private fun showReviewOriginMenu() {
         val book = viewModel.getBook() ?: return
-        val bound = ReviewOverlayBindings.get(book.bookUrl)
+        val bound = ReviewOverlayBindings.list(book.bookUrl)
         val actions = mutableListOf(
-            getString(R.string.review_origin_pick_title) to "pick",
+            getString(R.string.review_origin_add) to "pick",
         )
-        if (bound != null) {
+        if (bound.isNotEmpty()) {
+            actions.add(getString(R.string.review_origin_manage) to "manage")
             actions.add(getString(R.string.review_origin_clear) to "clear")
         }
         selector(getString(R.string.change_review_origin), actions.map { it.first }) { _, _, i ->
@@ -988,6 +993,44 @@ class BookInfoActivity :
                     upReviewOrigin(book)
                 }
                 "pick" -> pickReviewOriginSource(book)
+                "manage" -> manageReviewOrigins(book, bound)
+            }
+        }
+    }
+
+    private fun manageReviewOrigins(book: Book, bound: List<BookReviewBinding>) {
+        val labels = bound.map { row ->
+            val name = appDb.bookSourceDao.getBookSource(row.providerSourceUrl)?.bookSourceName
+                ?: row.providerSourceUrl
+            val flags = buildString {
+                if (!row.enabled) append(" [off]")
+                if (row.role == BookReviewBinding.ROLE_PARAGRAPH_PRIMARY) append(" [段]")
+            }
+            "$name$flags"
+        }
+        selector(getString(R.string.review_origin_manage), labels) { _, _, i ->
+            val row = bound[i]
+            selector(
+                labels[i],
+                listOf(
+                    getString(R.string.review_origin_set_primary),
+                    getString(R.string.review_origin_toggle_enable),
+                    getString(R.string.review_origin_remove_one),
+                ),
+            ) { _, _, action ->
+                when (action) {
+                    0 -> ReviewOverlayBindings.setParagraphPrimary(
+                        book.bookUrl,
+                        row.providerSourceUrl,
+                    )
+                    1 -> ReviewOverlayBindings.setEnabled(
+                        book.bookUrl,
+                        row.providerSourceUrl,
+                        !row.enabled,
+                    )
+                    2 -> ReviewOverlayBindings.remove(book.bookUrl, row.providerSourceUrl)
+                }
+                upReviewOrigin(book)
             }
         }
     }
@@ -1017,6 +1060,8 @@ class BookInfoActivity :
                 0 -> toastOnUi(R.string.review_origin_bind_miss)
                 1 -> {
                     val hit = hits[0].searchBook
+                    val existed = ReviewOverlayBindings.list(book.bookUrl)
+                        .any { it.providerSourceUrl == source.bookSourceUrl }
                     ReviewOverlayBindings.bindManual(
                         contentBook = book,
                         providerSourceUrl = source.bookSourceUrl,
@@ -1024,7 +1069,10 @@ class BookInfoActivity :
                         providerName = hit.name,
                         providerAuthor = hit.author,
                     )
-                    toastOnUi(R.string.review_origin_bind_ok)
+                    toastOnUi(
+                        if (existed) R.string.review_origin_bind_updated
+                        else R.string.review_origin_bind_ok
+                    )
                     upReviewOrigin(book)
                 }
                 else -> {
@@ -1036,6 +1084,8 @@ class BookInfoActivity :
                         }
                     ) { _, _, i ->
                         val hit = hits[i].searchBook
+                        val existed = ReviewOverlayBindings.list(book.bookUrl)
+                            .any { it.providerSourceUrl == source.bookSourceUrl }
                         ReviewOverlayBindings.bindManual(
                             contentBook = book,
                             providerSourceUrl = source.bookSourceUrl,
@@ -1043,7 +1093,10 @@ class BookInfoActivity :
                             providerName = hit.name,
                             providerAuthor = hit.author,
                         )
-                        toastOnUi(R.string.review_origin_bind_ok)
+                        toastOnUi(
+                            if (existed) R.string.review_origin_bind_updated
+                            else R.string.review_origin_bind_ok
+                        )
                         upReviewOrigin(book)
                     }
                 }

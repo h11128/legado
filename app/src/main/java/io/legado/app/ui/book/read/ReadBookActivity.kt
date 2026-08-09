@@ -85,6 +85,7 @@ import io.legado.app.model.jsSource.JsSourceReview
 import io.legado.app.model.review.ReviewOverlayAutoBind
 import io.legado.app.model.review.ReviewOverlayBindings
 import io.legado.app.model.review.ReviewOverlayLoader
+import io.legado.app.model.review.ReviewOverlayMerge
 import io.legado.app.model.review.ReviewOverlayMode
 import io.legado.app.model.review.ReviewOverlayResolver
 import io.legado.app.model.review.ReviewOverlaySessionStore
@@ -1783,13 +1784,63 @@ class ReadBookActivity : BaseReadBookActivity(),
             return
         }
         val contentBook = ReadBook.book ?: return
-        val binding = ReviewOverlayBindings.get(contentBook.bookUrl)
-        val mode = ReviewOverlayResolver.resolve(contentBook, ReadBook.bookSource, binding)
+        val bindings = ReviewOverlayBindings.listEnabled(contentBook.bookUrl)
+        val mode = ReviewOverlayResolver.resolve(
+            contentBook,
+            ReadBook.bookSource,
+            bindings,
+            AppConfig.reviewOverlayEnabled,
+        )
         if (mode is ReviewOverlayMode.Overlay) {
+            if (!ReviewOverlaySessionStore.matchesContentChapter(contentBook.bookUrl, chapterIndex)) {
+                toastOnUi(R.string.review_empty)
+                return
+            }
+            if (paragraphNum == -1) {
+                val merge = ReviewOverlaySessionStore.getMerge()
+                val withBucket = merge?.providersWithBucket().orEmpty()
+                // Multi-provider chapter chip: always open merge dialog when >1 provider
+                // is in the merge session (even if only one has a bucket), so we never
+                // fall through to paragraphPrimary which may lack chapterBucket.
+                if (merge != null && merge.providers.size > 1 && withBucket.isNotEmpty()) {
+                    showDialogFragment(
+                        ReviewMergeDetailDialog(
+                            totalCount = count,
+                            sourceCount = withBucket.size,
+                        )
+                    )
+                    return
+                }
+                if (withBucket.size == 1) {
+                    val only = withBucket[0]
+                    val ref = only.chapterBucket
+                    if (ref == null || ref.paraData.isBlank()) {
+                        toastOnUi(R.string.review_empty)
+                        return
+                    }
+                    val providerSource = appDb.bookSourceDao.getBookSource(only.providerSourceKey)
+                        ?: return
+                    val ruleHash = if (providerSource.isJsSource()) {
+                        providerSource.mainJs.hashCode()
+                    } else {
+                        providerSource.ruleReview?.hashCode() ?: return
+                    }
+                    showDialogFragment(
+                        ReviewDetailDialog(
+                            paragraphNum = ref.providerParaIndex,
+                            totalCount = count,
+                            chapterIndex = only.providerChapterIndex,
+                            paragraphData = ref.paraData,
+                            bookUrl = only.providerBook.bookUrl,
+                            sourceKey = only.providerSourceKey,
+                            ruleHash = ruleHash,
+                        )
+                    )
+                    return
+                }
+            }
             val overlay = ReviewOverlaySessionStore.get()
-            if (overlay == null ||
-                !ReviewOverlaySessionStore.matchesContentChapter(contentBook.bookUrl, chapterIndex)
-            ) {
+            if (overlay == null) {
                 toastOnUi(R.string.review_empty)
                 return
             }
@@ -1883,10 +1934,15 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
 
         val originSource = ReadBook.bookSource
-        val binding = ReviewOverlayBindings.get(book.bookUrl)
-        when (val mode = ReviewOverlayResolver.resolve(book, originSource, binding)) {
+        val bindings = ReviewOverlayBindings.listEnabled(book.bookUrl)
+        when (val mode = ReviewOverlayResolver.resolve(
+            book,
+            originSource,
+            bindings,
+            AppConfig.reviewOverlayEnabled,
+        )) {
             is ReviewOverlayMode.Overlay -> {
-                loadOverlayReviewSummaryIfNeeded(book, mode.binding, chapterIndex)
+                loadOverlayReviewSummaryIfNeeded(book, mode.bindings, chapterIndex)
             }
             ReviewOverlayMode.Unbound -> {
                 ReviewOverlaySessionStore.clear()
@@ -1914,7 +1970,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             if (ReadBook.book?.bookUrl != bookUrl) return@launch
             withContext(Main) {
                 if (isFinishing || isDestroyed) return@withContext
-                if (ReviewOverlayBindings.get(bookUrl) != null) return@withContext
+                if (ReviewOverlayBindings.list(bookUrl).isNotEmpty()) return@withContext
                 val label = proposal.source.bookSourceName.ifBlank { proposal.source.bookSourceUrl }
                 binding.root.indefiniteSnackbar(
                     getString(R.string.review_origin_auto_bind_ask, label),
@@ -1943,11 +1999,14 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     private fun loadOverlayReviewSummaryIfNeeded(
         book: Book,
-        binding: BookReviewBinding,
+        bindings: List<BookReviewBinding>,
         chapterIndex: Int,
     ) {
-        val key = buildOverlayReviewSummaryKey(book, binding, chapterIndex)
-        val authorityOpen = ReviewParagraphAuthority.isParagraphMapOpen(binding.providerSourceUrl) &&
+        if (bindings.isEmpty()) return
+        val key = buildOverlayReviewSummaryKey(book, bindings, chapterIndex)
+        val primary = ReviewOverlayMerge.paragraphPrimary(bindings)
+        val authorityOpen = primary != null &&
+                ReviewParagraphAuthority.isParagraphMapOpen(primary.providerSourceUrl) &&
                 AppConfig.reviewOverlayAllowParagraphIcons
         val textChapter = ReadBook.curTextChapter
         val layoutReadyForMap = textChapter != null &&
@@ -1981,7 +2040,6 @@ class ReadBookActivity : BaseReadBookActivity(),
 
         val localParas: List<Pair<Int, String>>? = if (authorityOpen) {
             if (!layoutReadyForMap) {
-                // Layout not ready: still load chapter-bucket; upgrade when layout completes.
                 emptyList()
             } else {
                 textChapter!!.getParagraphs(false).mapNotNull { para ->
@@ -1993,7 +2051,6 @@ class ReadBookActivity : BaseReadBookActivity(),
             null
         }
         val mapPendingThisLoad = authorityOpen && !layoutReadyForMap
-        // Mark pending before IO so layout-ready can cancel/restart mid-flight.
         if (mapPendingThisLoad) {
             overlayReviewMapPending = true
         }
@@ -2003,21 +2060,20 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (reviewSummaryAppliedKey != key) {
             ChapterProvider.clearReviewProviders()
         }
+        val bindingFingerprint = bindings.map { "${it.providerSourceUrl}|${it.providerBookUrl}" }
+            .sorted()
+            .joinToString(",")
         overlayReviewLoadCoroutine?.cancel()
         val loadCoroutine = Coroutine.async(lifecycleScope, IO) {
             val contentChapter = appDb.bookChapterDao.getChapter(book.bookUrl, chapterIndex)
                 ?: return@async null
             if (contentChapter.isVolume) return@async null
-            if (localParas != null && localParas.isNotEmpty()) {
-                ReviewOverlayLoader.loadWithParagraphMap(
-                    book,
-                    contentChapter,
-                    binding,
-                    localParas,
-                )
-            } else {
-                ReviewOverlayLoader.loadChapterBucket(book, contentChapter, binding)
-            }
+            ReviewOverlayLoader.loadMergedChapterBucket(
+                book,
+                contentChapter,
+                bindings,
+                localParas?.takeIf { it.isNotEmpty() },
+            )
         }
         overlayReviewLoadCoroutine = loadCoroutine
         loadCoroutine.onSuccess(Main) { loaded ->
@@ -2025,16 +2081,14 @@ class ReadBookActivity : BaseReadBookActivity(),
             releaseReviewSummaryLoadingKey(key)
             if (requestToken != reviewSummaryRequestToken) return@onSuccess
             val currentBook = ReadBook.book ?: return@onSuccess
-            val currentBinding = ReviewOverlayBindings.get(currentBook.bookUrl)
-            if (currentBinding == null ||
-                currentBinding.providerBookUrl != binding.providerBookUrl ||
-                currentBinding.providerSourceUrl != binding.providerSourceUrl
-            ) {
-                return@onSuccess
-            }
+            val currentBindings = ReviewOverlayBindings.listEnabled(currentBook.bookUrl)
+            val currentFp = currentBindings.map { "${it.providerSourceUrl}|${it.providerBookUrl}" }
+                .sorted()
+                .joinToString(",")
+            if (currentFp != bindingFingerprint) return@onSuccess
             val currentKey = buildOverlayReviewSummaryKey(
                 currentBook,
-                currentBinding,
+                currentBindings,
                 ReadBook.durChapterIndex,
             )
             if (currentKey != key) return@onSuccess
@@ -2048,16 +2102,14 @@ class ReadBookActivity : BaseReadBookActivity(),
                     tcNow.chapter.index == chapterIndex &&
                     tcNow.hasBodyContent &&
                     tcNow.isCompleted
-            // Fetch finished after layout became ready without a cancel — apply bucket then upgrade.
             if (mapPendingThisLoad && layoutReadyNow) {
                 overlayReviewMapPending = true
                 applyReviewSummary(key, chapterIndex, loaded.summary)
                 reviewSummaryAppliedKey = null
-                loadOverlayReviewSummaryIfNeeded(currentBook, currentBinding, chapterIndex)
+                loadOverlayReviewSummaryIfNeeded(currentBook, currentBindings, chapterIndex)
                 return@onSuccess
             }
             overlayReviewMapPending = mapPendingThisLoad
-            // Do not pin cache while waiting for layout — otherwise P2 never upgrades.
             if (!mapPendingThisLoad) {
                 synchronized(reviewSummaryCache) {
                     reviewSummaryCache[key] = loaded.summary
@@ -2070,10 +2122,10 @@ class ReadBookActivity : BaseReadBookActivity(),
             if (requestToken != reviewSummaryRequestToken) return@onError
             if (it is CancellationException) return@onError
             val currentBook = ReadBook.book ?: return@onError
-            val currentBinding = ReviewOverlayBindings.get(currentBook.bookUrl) ?: return@onError
+            val currentBindings = ReviewOverlayBindings.listEnabled(currentBook.bookUrl)
             if (buildOverlayReviewSummaryKey(
                     currentBook,
-                    currentBinding,
+                    currentBindings,
                     ReadBook.durChapterIndex,
                 ) != key
             ) return@onError
@@ -2358,10 +2410,18 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     private fun buildOverlayReviewSummaryKey(
         book: Book,
-        binding: BookReviewBinding,
+        bindings: List<BookReviewBinding>,
         chapterIndex: Int,
-    ): String = "overlay|${binding.providerSourceUrl}|${binding.providerBookUrl}|" +
-            "${binding.hashCode()}|${book.bookUrl}#$chapterIndex"
+    ): String {
+        val providers = bindings
+            .map {
+                "${it.providerSourceUrl}|${it.providerBookUrl}|${it.role}|${it.enabled}|${it.sortOrder}"
+            }
+            .sorted()
+            .joinToString(",")
+        val primary = ReviewOverlayMerge.paragraphPrimary(bindings)?.providerSourceUrl.orEmpty()
+        return "overlay|$providers|primary=$primary|${book.bookUrl}#$chapterIndex"
+    }
 
     private fun releaseReviewSummaryLoadingKey(key: String) {
         if (reviewSummaryLoadingKey == key) {

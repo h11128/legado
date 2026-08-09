@@ -360,6 +360,20 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.reviewOverlayAllowParagraphIcons, value)
         }
 
+    /** RFC-004 §12: merge multiple providers into one chapter-bucket list. */
+    var reviewOverlayMergeEnabled: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.reviewOverlayMergeEnabled, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.reviewOverlayMergeEnabled, value)
+        }
+
+    /** RFC-004 §12: hard cap on enabled providers per content book (N≤5). */
+    var reviewOverlayMergeMax: Int
+        get() = appCtx.getPrefInt(PreferKey.reviewOverlayMergeMax, 5).coerceIn(1, 5)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.reviewOverlayMergeMax, value.coerceIn(1, 5))
+        }
+
     var threadCount: Int
         get() = appCtx.getPrefInt(PreferKey.threadCount, 32)
         set(value) {
