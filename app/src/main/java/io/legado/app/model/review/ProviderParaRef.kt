@@ -17,4 +17,6 @@ data class ReviewOverlaySession(
     val providerChapterIndex: Int,
     val providerChapterUrl: String,
     val chapterBucket: ProviderParaRef?,
+    /** Local body review id → provider ref (P2). Empty when chapter-bucket only. */
+    val paraRefs: Map<Int, ProviderParaRef> = emptyMap(),
 )

@@ -353,6 +353,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.reviewOverlayAutoBind, value)
         }
 
+    /** RFC-004 §6.10: P2 paragraph icons when provider authority is open. */
+    var reviewOverlayAllowParagraphIcons: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.reviewOverlayAllowParagraphIcons, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.reviewOverlayAllowParagraphIcons, value)
+        }
+
     var threadCount: Int
         get() = appCtx.getPrefInt(PreferKey.threadCount, 32)
         set(value) {

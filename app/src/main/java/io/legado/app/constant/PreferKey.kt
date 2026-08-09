@@ -50,6 +50,8 @@ object PreferKey {
     const val reviewOverlayEnabled = "reviewOverlayEnabled"
     /** RFC-004: auto-discover review provider (default off) */
     const val reviewOverlayAutoBind = "reviewOverlayAutoBind"
+    /** RFC-004: allow P2 paragraph icons when authority open */
+    const val reviewOverlayAllowParagraphIcons = "reviewOverlayAllowParagraphIcons"
     const val showRss = "showRss"
     const val bookshelfLayout = "bookshelfLayout"
     const val bookshelfSort = "bookshelfSort"

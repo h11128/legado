@@ -87,6 +87,8 @@ import io.legado.app.model.review.ReviewOverlayLoader
 import io.legado.app.model.review.ReviewOverlayMode
 import io.legado.app.model.review.ReviewOverlayResolver
 import io.legado.app.model.review.ReviewOverlaySessionStore
+import io.legado.app.model.review.ReviewParagraphAuthority
+import io.legado.app.model.review.ProviderParaRef
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.isJsonObject
@@ -168,6 +170,7 @@ import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -310,6 +313,12 @@ class ReadBookActivity : BaseReadBookActivity(),
     private var reviewSummaryAppliedKey: String? = null
     private var reviewSummaryLoadingKey: String? = null
     private var reviewSummaryRequestToken = 0L
+    /**
+     * True when overlay applied chapter-bucket only because layout was not ready for P2 hard-map.
+     * Cleared after a map attempt (success or coverage fallback) or when leaving overlay.
+     */
+    private var overlayReviewMapPending = false
+    private var overlayReviewLoadCoroutine: Coroutine<*>? = null
     private val reviewSummaryCache = object :
         LinkedHashMap<String, ReviewRuleParser.SummaryResult>(8, 0.75f, true) {
         override fun removeEldestEntry(
@@ -779,6 +788,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         reviewSummaryRequestToken++
         reviewSummaryAppliedKey = null
         reviewSummaryLoadingKey = null
+        overlayReviewMapPending = false
+        overlayReviewLoadCoroutine?.cancel()
+        overlayReviewLoadCoroutine = null
         synchronized(reviewSummaryCache) {
             reviewSummaryCache.clear()
         }
@@ -1776,12 +1788,11 @@ class ReadBookActivity : BaseReadBookActivity(),
                 toastOnUi(R.string.review_empty)
                 return
             }
-            if (paragraphNum != -1) {
-                // P1: overlay only shows chapter-bucket (-1).
-                return
+            val ref: ProviderParaRef? = when {
+                paragraphNum == -1 -> overlay.chapterBucket
+                else -> overlay.paraRefs[paragraphNum]
             }
-            val ref = overlay.chapterBucket
-            if (ref == null) {
+            if (ref == null || ref.paraData.isBlank()) {
                 toastOnUi(R.string.review_empty)
                 return
             }
@@ -1794,7 +1805,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
             showDialogFragment(
                 ReviewDetailDialog(
-                    paragraphNum = -1,
+                    paragraphNum = ref.providerParaIndex,
                     totalCount = count,
                     chapterIndex = overlay.providerChapterIndex,
                     paragraphData = ref.paraData,
@@ -1889,6 +1900,30 @@ class ReadBookActivity : BaseReadBookActivity(),
         chapterIndex: Int,
     ) {
         val key = buildOverlayReviewSummaryKey(book, binding, chapterIndex)
+        val authorityOpen = ReviewParagraphAuthority.isParagraphMapOpen(binding.providerSourceUrl) &&
+                AppConfig.reviewOverlayAllowParagraphIcons
+        val textChapter = ReadBook.curTextChapter
+        val layoutReadyForMap = textChapter != null &&
+                textChapter.chapter.index == chapterIndex &&
+                textChapter.hasBodyContent &&
+                textChapter.isCompleted
+
+        // Layout finished: invalidate bucket-only pin so P2 can upgrade on the same key.
+        if (overlayReviewMapPending && authorityOpen && layoutReadyForMap) {
+            if (reviewSummaryAppliedKey == key) {
+                reviewSummaryAppliedKey = null
+            }
+            synchronized(reviewSummaryCache) {
+                reviewSummaryCache.remove(key)
+            }
+            if (reviewSummaryLoadingKey == key) {
+                overlayReviewLoadCoroutine?.cancel()
+                overlayReviewLoadCoroutine = null
+                reviewSummaryRequestToken++
+                reviewSummaryLoadingKey = null
+            }
+        }
+
         if (reviewSummaryAppliedKey == key || reviewSummaryLoadingKey == key) return
         synchronized(reviewSummaryCache) { reviewSummaryCache[key] }?.let { cached ->
             if (ReviewOverlaySessionStore.matchesContentChapter(book.bookUrl, chapterIndex)) {
@@ -1897,17 +1932,49 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
         }
 
+        val localParas: List<Pair<Int, String>>? = if (authorityOpen) {
+            if (!layoutReadyForMap) {
+                // Layout not ready: still load chapter-bucket; upgrade when layout completes.
+                emptyList()
+            } else {
+                textChapter!!.getParagraphs(false).mapNotNull { para ->
+                    val id = para.realNum - para.firstLine.reviewTitleOffset
+                    if (id > 0 && !para.firstLine.isTitle) id to para.text else null
+                }
+            }
+        } else {
+            null
+        }
+        val mapPendingThisLoad = authorityOpen && !layoutReadyForMap
+        // Mark pending before IO so layout-ready can cancel/restart mid-flight.
+        if (mapPendingThisLoad) {
+            overlayReviewMapPending = true
+        }
+
         reviewSummaryLoadingKey = key
         val requestToken = ++reviewSummaryRequestToken
         if (reviewSummaryAppliedKey != key) {
             ChapterProvider.clearReviewProviders()
         }
-        Coroutine.async(lifecycleScope, IO) {
+        overlayReviewLoadCoroutine?.cancel()
+        val loadCoroutine = Coroutine.async(lifecycleScope, IO) {
             val contentChapter = appDb.bookChapterDao.getChapter(book.bookUrl, chapterIndex)
                 ?: return@async null
             if (contentChapter.isVolume) return@async null
-            ReviewOverlayLoader.loadChapterBucket(book, contentChapter, binding)
-        }.onSuccess(Main) { loaded ->
+            if (localParas != null && localParas.isNotEmpty()) {
+                ReviewOverlayLoader.loadWithParagraphMap(
+                    book,
+                    contentChapter,
+                    binding,
+                    localParas,
+                )
+            } else {
+                ReviewOverlayLoader.loadChapterBucket(book, contentChapter, binding)
+            }
+        }
+        overlayReviewLoadCoroutine = loadCoroutine
+        loadCoroutine.onSuccess(Main) { loaded ->
+            if (loadCoroutine.isCancelled) return@onSuccess
             releaseReviewSummaryLoadingKey(key)
             if (requestToken != reviewSummaryRequestToken) return@onSuccess
             val currentBook = ReadBook.book ?: return@onSuccess
@@ -1929,13 +1996,32 @@ class ReadBookActivity : BaseReadBookActivity(),
                 clearReviewSummaryProviders()
                 return@onSuccess
             }
-            synchronized(reviewSummaryCache) {
-                reviewSummaryCache[key] = loaded.summary
+            val tcNow = ReadBook.curTextChapter
+            val layoutReadyNow = tcNow != null &&
+                    tcNow.chapter.index == chapterIndex &&
+                    tcNow.hasBodyContent &&
+                    tcNow.isCompleted
+            // Fetch finished after layout became ready without a cancel — apply bucket then upgrade.
+            if (mapPendingThisLoad && layoutReadyNow) {
+                overlayReviewMapPending = true
+                applyReviewSummary(key, chapterIndex, loaded.summary)
+                reviewSummaryAppliedKey = null
+                loadOverlayReviewSummaryIfNeeded(currentBook, currentBinding, chapterIndex)
+                return@onSuccess
+            }
+            overlayReviewMapPending = mapPendingThisLoad
+            // Do not pin cache while waiting for layout — otherwise P2 never upgrades.
+            if (!mapPendingThisLoad) {
+                synchronized(reviewSummaryCache) {
+                    reviewSummaryCache[key] = loaded.summary
+                }
             }
             applyReviewSummary(key, chapterIndex, loaded.summary)
         }.onError {
+            if (loadCoroutine.isCancelled) return@onError
             releaseReviewSummaryLoadingKey(key)
             if (requestToken != reviewSummaryRequestToken) return@onError
+            if (it is CancellationException) return@onError
             val currentBook = ReadBook.book ?: return@onError
             val currentBinding = ReviewOverlayBindings.get(currentBook.bookUrl) ?: return@onError
             if (buildOverlayReviewSummaryKey(
@@ -2121,6 +2207,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         reviewSummaryRequestToken++
         reviewSummaryAppliedKey = null
         reviewSummaryLoadingKey = null
+        overlayReviewMapPending = false
+        overlayReviewLoadCoroutine?.cancel()
+        overlayReviewLoadCoroutine = null
         ChapterProvider.clearReviewProviders()
     }
 

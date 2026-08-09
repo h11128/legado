@@ -5,7 +5,7 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookReviewBinding
 
 /**
- * In-memory overlay session while reading (RFC-004 P1 chapter-bucket).
+ * In-memory overlay session while reading (RFC-004 P1 bucket + P2 para map).
  * Process-local only; not persisted.
  */
 object ReviewOverlaySessionStore {
@@ -22,6 +22,8 @@ object ReviewOverlaySessionStore {
         val alignQuality: Double,
         /** Present only when provider summary has paraIndex=-1 with count>0. */
         val chapterBucket: ProviderParaRef?,
+        /** Local body review id → provider ref. Empty when P2 closed or coverage fail. */
+        val paraRefs: Map<Int, ProviderParaRef> = emptyMap(),
     ) {
         fun toOverlaySession(): ReviewOverlaySession = ReviewOverlaySession(
             providerSourceUrl = providerSourceKey,
@@ -29,6 +31,7 @@ object ReviewOverlaySessionStore {
             providerChapterIndex = providerChapterIndex,
             providerChapterUrl = providerChapter.url,
             chapterBucket = chapterBucket,
+            paraRefs = paraRefs,
         )
     }
 
@@ -51,6 +54,18 @@ object ReviewOverlaySessionStore {
 
     @Synchronized
     fun put(session: Active) {
+        val cur = active
+        // Never let a late chapter-bucket-only put wipe a richer P2 session for the same chapter.
+        if (cur != null &&
+            cur.contentBookUrl == session.contentBookUrl &&
+            cur.contentChapterIndex == session.contentChapterIndex &&
+            cur.binding.providerSourceUrl == session.binding.providerSourceUrl &&
+            cur.binding.providerBookUrl == session.binding.providerBookUrl &&
+            cur.paraRefs.isNotEmpty() &&
+            session.paraRefs.isEmpty()
+        ) {
+            return
+        }
         active = session
         putProviderBook(session.providerBook)
         putProviderToc(session.providerBook.bookUrl, session.providerToc)
