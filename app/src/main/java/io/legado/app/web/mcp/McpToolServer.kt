@@ -9,6 +9,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.IntentData
+import io.legado.app.help.book.SearchBookShelfHelp
 import io.legado.app.help.http.CookieManager
 import io.legado.app.help.http.CookieStore
 import io.legado.app.help.http.HttpLogRecord
@@ -681,6 +682,35 @@ object McpToolServer {
                 } finally {
                     debugMutex.unlock()
                 }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                err(error.localizedMessage ?: error.toString())
+            }
+        }
+
+        server.addTool(
+            name = "cleanup_author_placeholders",
+            description = "按 RFC-003 全库整理书架：同书名下空/佚名与唯一真实作者合并（merge-into+retire），" +
+                "≥2 真实作者不猜，不删本地书。返回扫描/合并/退役统计。",
+            inputSchema = ToolSchema(
+                properties = buildJsonObject {},
+            ),
+        ) { _ ->
+            try {
+                val report = withContext(Dispatchers.IO) {
+                    SearchBookShelfHelp.cleanupAllAuthorPlaceholders()
+                }
+                ok(
+                    buildString {
+                        appendLine("书架作者占位清理完成（RFC-003）")
+                        appendLine("titlesScanned=${report.titlesScanned}")
+                        appendLine("titlesMerged=${report.titlesMerged}")
+                        appendLine("retired=${report.retired}")
+                        appendLine("booksBefore=${report.booksBefore}")
+                        appendLine("booksAfter=${report.booksAfter}")
+                    }
+                )
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {

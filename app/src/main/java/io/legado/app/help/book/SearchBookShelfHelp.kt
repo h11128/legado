@@ -62,6 +62,52 @@ object SearchBookShelfHelp {
         }
     }
 
+    data class CleanupReport(
+        val titlesScanned: Int,
+        val titlesMerged: Int,
+        val booksBefore: Int,
+        val booksAfter: Int,
+        val retired: Int,
+    )
+
+    /**
+     * One-shot whole-library same-name cleanup (RFC-003 ops).
+     * Same rules as [cleanupSameName]: sole-real merge-into/retire; never delete local;
+     * `|S|≥2` leaves weaks alone.
+     */
+    fun cleanupAllAuthorPlaceholders(): CleanupReport {
+        var report = CleanupReport(0, 0, 0, 0, 0)
+        appDb.runInTransaction {
+            val all = appDb.bookDao.all
+            val before = all.size
+            val names = all.map { it.name.trim() }.filter { it.isNotEmpty() }.toSet()
+            var titlesMerged = 0
+            var retired = 0
+            for (name in names) {
+                val n0 = AppStore.getBooksByName(name).size
+                coalesceSameName(AppStore, name)
+                val n1 = AppStore.getBooksByName(name).size
+                if (n1 < n0) {
+                    titlesMerged++
+                    retired += n0 - n1
+                }
+            }
+            report = CleanupReport(
+                titlesScanned = names.size,
+                titlesMerged = titlesMerged,
+                booksBefore = before,
+                booksAfter = appDb.bookDao.all.size,
+                retired = retired,
+            )
+        }
+        AppLog.put(
+            "RFC-003 shelf cleanup: scanned=${report.titlesScanned} " +
+                "mergedTitles=${report.titlesMerged} retired=${report.retired} " +
+                "books ${report.booksBefore}->${report.booksAfter}"
+        )
+        return report
+    }
+
     /**
      * Retire [incoming] into [canonical] with satellite retarget (RFC-003 §4.9).
      * Does not insert chapters for the retired URL.

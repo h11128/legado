@@ -192,7 +192,8 @@ Same trimmed title:
 ### 4.10 Cleanup trigger
 
 On **add-to-shelf** for title `T`, run same-name cleanup for `T` (§4.8–4.9) subject to `|S|` rules above.  
-No full-library scan required in v1.
+**Ops one-shot:** `SearchBookShelfHelp.cleanupAllAuthorPlaceholders()` / MCP `cleanup_author_placeholders` may scan the whole library with the same per-title rules (not a product UI button).  
+No automatic background full-library scan.
 
 ### 4.11 Mandatory call sites
 
