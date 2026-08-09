@@ -1,12 +1,13 @@
 # Source repair retrospective
 
 
-## 2026-08-09 batch6 — zbcxw / so.27k
+## 2026-08-09 batch6 — zbcxw / so.27k / 80xs
 
 | URL | 结果 | 要点 |
 |-----|------|------|
 | `m.zbcxw.cn` | skip | NXDOMAIN；hunt/OSINT 无后继；已禁用 |
 | `so.27k.net` | skip | parking 壳；so+www 已禁用；书架 13 换源 |
+| `www.80xs.la` | **fixed migrate** | →`wap.80ge.info`；须 SQL INSERT 进同一份 DB 再 push，忌 MCP save 后推旧快照 |
 
 ## 2026-08-09 batch5 — shuquge / sodu / iyueba
 
