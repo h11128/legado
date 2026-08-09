@@ -120,6 +120,7 @@ Known good probe book (when present): **《信仰诸天》朝不保夕** with or
 
 | Date | Result | Evidence |
 |---|---|---|
+| 2026-08-08f | PASS unit + device soft-stitch | QQ《同时穿越，用装备栏打穿诸天》refLen=199→`too_short`; `stitch_soft_noref`×17 kept (was Hijack); log `temp/legado_change_source_session_2026-08-08_180654.txt`. Full early-stop N/A (120s cut; many QQ too_short_abs) |
 | 2026-08-08e | auto-change on **简介页** + shared attemptedBookUrl | BookInfo bar/strip; read/manga fallback; `AutoChangeSource.attemptedBookUrl` |
 | 2026-08-08 | code: auto-change on info/toc fail | `AutoChangeSource` helper + ReadBook/ReadManga hooks; unit `AutoChangeSourceTest`; no device session this step |
 | 2026-08-08b | auto-change cap=30 + progress UI | `limitCandidates(30)`; `AUTO_CHANGE_MS=45s`; read `upMsg` / manga loading `done/total` |

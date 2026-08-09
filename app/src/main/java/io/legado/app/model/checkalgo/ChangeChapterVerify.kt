@@ -76,21 +76,24 @@ object ChangeChapterVerify {
         /** Optional known-good chapter body; boost only, not required. */
         val referenceContent: String? = null,
         /**
-         * When false, local body must not hard-kill candidates via ref_sim / stitch_weak_ref
-         * (pagination TOC / chrome / uniform slices). Default true keeps legacy callers safe.
+         * When false, local body must not hard-kill candidates via ref_sim / stitch
+         * (pagination TOC / chrome / uniform slices / paywall teasers).
+         * Default true keeps legacy callers safe (bare stitch spam still fails).
          */
         val referenceTrusted: Boolean = true,
     )
 
     data class LocalReferenceTrust(
         val trusted: Boolean,
-        /** ok | page_toc | page_chrome | uniform_lengths */
+        /** ok | page_toc | page_chrome | uniform_lengths | too_short */
         val reason: String,
     )
 
     /**
      * Whether a bookshelf chapter is a trustworthy change-source reference ruler.
      * Page-split sources (「第 N 部分」+ keyboard chrome) are not.
+     * Paywall / truncated previews shorter than [REFERENCE_MIN_CHARS] are not
+     * (they cannot produce refSim and must not arm stitch hard-kills).
      * Near-equal sibling lengths alone do not untrust (many real novels are stable);
      * they only reinforce when the title also lacks a real chapter marker.
      */
@@ -104,6 +107,11 @@ object ChangeChapterVerify {
             return LocalReferenceTrust(trusted = false, reason = "page_toc")
         }
         val body = referenceContent?.trim().orEmpty()
+        if (body.isNotEmpty() && body.length < REFERENCE_MIN_CHARS) {
+            // QQ / official apps often cache a ~paywall teaser (e.g. 199 chars).
+            // Too short for digram refSim, yet still long enough to look "real".
+            return LocalReferenceTrust(trusted = false, reason = "too_short")
+        }
         if (body.isNotEmpty()) {
             val head = body.take(200)
             if (pageChromeMarkers.any { head.contains(it) || body.contains(it) }) {
@@ -236,24 +244,21 @@ object ChangeChapterVerify {
             )
         }
         // Stitch alone often false-positives on dialogue/scene breaks.
-        // Hard-fail when no usable refSim, or trusted local ref is weak.
-        // Untrusted local (page-split) must not stitch_weak_ref-kill mainstream chapters.
-        if (stitch && (refSim == null || refSim < MULTI_SOURCE_AUTH_REF_MIN)) {
-            val hardKill = when {
-                refSim == null -> true
-                refTrusted -> true
-                else -> false
-            }
-            if (hardKill) {
-                return ContentEvalDiag(
-                    quality = ContentQuality.Hijack,
-                    contentLen = text.length,
-                    stitch = true,
-                    refSim = refSim,
-                    expectedChars = expected,
-                    reason = if (refSim == null) "stitch" else "stitch_weak_ref",
-                )
-            }
+        // Hard-fail only with a *trusted* ruler (empty default context stays trusted,
+        // so bare stitch spam still Hijacks). Untrusted / paywall-short local must not
+        // stitch-kill — including when refSim is null because the teaser is < REFERENCE_MIN.
+        if (stitch &&
+            refTrusted &&
+            (refSim == null || refSim < MULTI_SOURCE_AUTH_REF_MIN)
+        ) {
+            return ContentEvalDiag(
+                quality = ContentQuality.Hijack,
+                contentLen = text.length,
+                stitch = true,
+                refSim = refSim,
+                expectedChars = expected,
+                reason = if (refSim == null) "stitch" else "stitch_weak_ref",
+            )
         }
         if (highPrecisionShellMarkers.any { text.contains(it) } &&
             text.length < RELATIVE_MIN_EXPECTED * 2
@@ -269,6 +274,7 @@ object ChangeChapterVerify {
         }
         val reason = when {
             stitch && !refTrusted && refSim != null -> "stitch_soft_unref"
+            stitch && !refTrusted -> "stitch_soft_noref"
             stitch -> "ok_stitch_override"
             !refTrusted && refSim != null && refSim < MULTI_SOURCE_AUTH_REF_MIN -> "ok_unref_peer"
             else -> "ok"

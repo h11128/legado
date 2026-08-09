@@ -232,9 +232,9 @@ class ChangeChapterVerifyTest {
         ).joinToString("\n\n")
         assertTrue(stitched.length >= ChangeChapterVerify.MIN_CONTENT_CHARS)
         assertTrue(ChangeChapterVerify.looksLikeStitchedParagraphs(stitched))
-        assertTrue(
-            ChangeChapterVerify.evaluateContent(stitched) is ChangeChapterVerify.ContentQuality.Hijack
-        )
+        val bare = ChangeChapterVerify.evaluateContentDiag(stitched)
+        assertTrue(bare.quality is ChangeChapterVerify.ContentQuality.Hijack)
+        assertEquals("stitch", bare.reason)
 
         val coherent = listOf(
             "罗峰站在黑洞边缘，感受宇宙深处传来的威压，宇宙之力在经脉中游荡不止一刻。",
@@ -496,6 +496,70 @@ class ChangeChapterVerifyTest {
     }
 
     @Test
+    fun assessLocalReferenceTrustRejectsPaywallShortTeaser() {
+        // Device evidence 2026-08-08: QQ book.qq.com cache refLen=199, trusted was wrongly ok.
+        val teaser = "段德被困在仙府深处，林凡握紧装备栏。" + "试读".repeat(80)
+        assertTrue(
+            "teaserLen=${teaser.length}",
+            teaser.length in ChangeChapterVerify.MIN_CONTENT_CHARS until ChangeChapterVerify.REFERENCE_MIN_CHARS,
+        )
+        val trust = ChangeChapterVerify.assessLocalReferenceTrust(
+            localTitle = "第86章 救出段德",
+            referenceContent = teaser,
+        )
+        assertFalse(trust.trusted)
+        assertEquals("too_short", trust.reason)
+
+        val exact = "x".repeat(ChangeChapterVerify.REFERENCE_MIN_CHARS)
+        assertEquals(ChangeChapterVerify.REFERENCE_MIN_CHARS, exact.length)
+        val okAtMin = ChangeChapterVerify.assessLocalReferenceTrust(
+            localTitle = "第86章 救出段德",
+            referenceContent = exact,
+        )
+        assertTrue(okAtMin.trusted)
+        assertEquals("ok", okAtMin.reason)
+    }
+
+    @Test
+    fun paywallShortLocalDoesNotStitchKillMainstreamChapter() {
+        // Same shape as 同时穿越换源: short trusted-looking teaser + dialogue chapter
+        // that looksLikeStitchedParagraphs (scene breaks) → was Hijack reason=stitch.
+        val teaser = "段德被困在仙府深处，林凡握紧装备栏。" + "试读".repeat(80)
+        assertTrue(
+            teaser.length in ChangeChapterVerify.MIN_CONTENT_CHARS until ChangeChapterVerify.REFERENCE_MIN_CHARS,
+        )
+        val candidate = listOf(
+            "白烨一愣，心想，5连号？还是99999，这要是能接通才鬼呢！这白烨分明是戏耍自己。",
+            "刘振西面色严厉，沉声说道：别耍小聪明，把你爸妈电话给我！要不你自己打。",
+            "白烨的手机忽然响了，来电显示是老爸，刘振西直接夺了过来接通免提。",
+            "周围宿舍的人听见了这边的响动，也走了过来盯着白烨宿舍门口围观。",
+        ).joinToString("\n\n") + "内容".repeat(40)
+        assertTrue(ChangeChapterVerify.looksLikeStitchedParagraphs(candidate))
+
+        val trust = ChangeChapterVerify.assessLocalReferenceTrust(
+            localTitle = "第86章 救出段德",
+            referenceContent = teaser,
+        )
+        assertFalse(trust.trusted)
+
+        val diag = ChangeChapterVerify.evaluateContentDiag(
+            candidate,
+            ChangeChapterVerify.ContentEvalContext(
+                expectedChars = if (trust.trusted) teaser.length else null,
+                referenceContent = teaser,
+                referenceTrusted = trust.trusted,
+            ),
+        )
+        assertTrue(
+            "paywall short must not Hijack: reason=${diag.reason} len=${diag.contentLen}",
+            diag.quality is ChangeChapterVerify.ContentQuality.Ok,
+        )
+        assertEquals("stitch_soft_noref", diag.reason)
+        assertNull(diag.refSim)
+        assertNull(diag.expectedChars)
+    }
+
+    @Test
     fun untrustedStillFailsAbsoluteShortAndShell() {
         val shortDiag = ChangeChapterVerify.evaluateContentDiag(
             "太短",
@@ -559,7 +623,9 @@ class ChangeChapterVerifyTest {
             untrustedKeep.quality is ChangeChapterVerify.ContentQuality.Ok,
         )
         assertTrue(
-            untrustedKeep.reason == "stitch_soft_unref" || untrustedKeep.reason == "ok_unref_peer",
+            untrustedKeep.reason == "stitch_soft_unref" ||
+                untrustedKeep.reason == "ok_unref_peer" ||
+                untrustedKeep.reason == "stitch_soft_noref",
         )
     }
 
