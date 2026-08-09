@@ -62,8 +62,11 @@ See `docs/design/sources/README.md`:
 
 - `起点本章说(段评源)` → `https://m.qidian.com#rfc004-review`
 - `微信读书划线(段评源)` → `https://weread.qq.com#rfc004-review`
+- `番茄书评(段评源)` → `https://fanqienovel.com#rfc004-review`（社区镜像书评章评桶；七猫验签未通）
+- `晋江章评(段评源)` → `https://www.jjwxc.net#rfc004-review`
+- `QQ阅读书吧(段评源)` → `https://book.qq.com#rfc004-review`（书吧 HTML；真段评 API 未公开）
 
-Push with `python scripts/push-rfc004-review-sources.py` (or `save_source` `format=js`). Device **API**/`debug_source` evidence is in `docs/design/sources/README.md` (2026-08-09). In-reader overlay bucket logcat for these two URLs is still TODO; fixture overlay evidence below still stands.
+Push with `python scripts/push-rfc004-review-sources.py` (or `save_source` `format=js`). Device **API**/`debug_source` evidence is in `docs/design/sources/README.md` (2026-08-09). In-reader overlay bucket logcat for these real URLs is still TODO; fixture overlay evidence below still stands.
 
 Chapter-bucket is expected to work once bound; paragraph icons still need `ContentSplitVerified` (fixture URL only today).
 
