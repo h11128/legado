@@ -102,6 +102,13 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - hunt empty。已有启用孪生 `https://www.69shuba.com`（先前迁通；搜索或仍 CF）。
 - 已禁用 xyz。Trap: `cf_520_origin_error_hunt_empty`。
 
+
+## 2026-08-09 154.37.154.143（番茄小说）deep dig
+
+- 裸 IP PC/手机 POST search **60s timeout**；hunt empty。
+- 源 `Host: m.xhsxsw.com` / toc Host `www.xhsxsw.com` → 打开是「官网首页」停车壳，无搜索/目录。
+- 已禁用。Trap: `ip_url_host_header_parked`。
+
 ## 2026-08-09 书架「失效」标签源抽查 + deep diagnose 关门
 
 - 抽查 10 个大源：表与队列见 `docs/guides/shelf-stale-tag-source-queue.md`。

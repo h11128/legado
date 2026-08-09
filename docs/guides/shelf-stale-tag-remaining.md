@@ -94,5 +94,6 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | `http://www.bamxs.com` | **skip** | 23.225 超时；hunt empty；已禁用 |
 | `http://www.wuxianxs.cc` | **skip** | 首页 403；hunt empty；已禁用 |
 | `https://www.69shu.xyz` | **skip** | CF 520；孪生 69shuba 已启用；已禁用 |
+| `http://154.37.154.143` | **skip** | IP 超时；xhsxsw Host 停车壳；已禁用 |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。
