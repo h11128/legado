@@ -75,7 +75,7 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | `http://www.31xs.com` | fail:搜索失效 | 表单 `onsubmit=false` 纯 JS；常见 search 路径 404 |
 | `http://www.b520.cc` | skip | 首页通；搜索路径 404 |
 | `https://m.ttshu8.com` | fail:搜索失效 | POST `/search.html` → **500** |
-| `https://haitang123.net` | skip | fingerprint 停车跳转 |
+| `https://haitang123.net` | **fixed migrate** | 原站超时；用已有 `https://m.haitang4.com`（校验成功）；旧源 disable |
 | `http://apitt.kanshushenapp.com/` | skip | 随机跳 `gegedangbook.com`（L2 超时） |
 
 串行日志：`temp/shelf_restore/queue/serial_9.log`
