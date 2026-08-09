@@ -104,6 +104,17 @@
     <string name="offline_cache_t">离线缓存</string>
     <string name="offline_cache_s">缓存选择的章节到本地</string>
     <string name="change_origin">换源</string>
+    <string name="review_origin_unbound">段评源：未绑定</string>
+    <string name="review_origin_show">段评源：%s</string>
+    <string name="change_review_origin">段评源</string>
+    <string name="review_origin_pick_title">选择段评源</string>
+    <string name="review_origin_none_capable">没有已启用的段评能力书源</string>
+    <string name="review_origin_bind_ok">已绑定段评源</string>
+    <string name="review_origin_bind_multi">匹配到多本，请选择</string>
+    <string name="review_origin_bind_miss">该源未找到同名书</string>
+    <string name="review_origin_clear">清除段评源</string>
+    <string name="review_origin_searching">正在搜索段评源…</string>
+
     <string name="about_description">
         \u3000\u3000这是一款使用 Kotlin 全新开发的开源的阅读软件，欢迎您的加入。
     </string>

@@ -30,6 +30,7 @@ import io.legado.app.model.SourceCallBack
 import io.legado.app.model.checkalgo.AutoChangeProgressUi
 import io.legado.app.model.checkalgo.AutoChangeSource
 import io.legado.app.model.localBook.LocalBook
+import io.legado.app.model.review.ReviewOverlayBindings
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.read.page.entities.TextChapter
@@ -300,11 +301,16 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         changeSourceCoroutine?.cancel()
         changeSourceCoroutine = execute {
             ReadBook.upMsg(context.getString(R.string.loading))
+            val previousBookUrl = ReadBook.book?.bookUrl
             ReadBook.book?.migrateTo(book, toc)
             book.removeType(BookType.updateError)
             ReadBook.book?.delete()
             appDb.bookDao.insert(book)
             appDb.bookChapterDao.insert(*toc.toTypedArray())
+            ReviewOverlayBindings.migrateOnChangeSource(
+                previousBookUrl,
+                book,
+            )
             ReadBook.resetData(book)
             ReadBook.upMsg(null)
             ReadBook.loadContent(resetPageOffset = true)

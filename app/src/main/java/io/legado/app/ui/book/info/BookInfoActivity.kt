@@ -73,6 +73,8 @@ import io.legado.app.model.BookCover
 import io.legado.app.model.checkalgo.bindAutoChangeProgress
 import io.legado.app.model.checkalgo.bindAutoChangeProgressStrip
 import io.legado.app.model.remote.RemoteBookWebDav
+import io.legado.app.model.review.ReviewOverlayBindings
+import io.legado.app.model.review.ReviewOverlayMatch
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.autoTask.AutoTaskEditActivity
 import io.legado.app.ui.autoTask.ImportAutoTaskDialog
@@ -565,6 +567,7 @@ class BookInfoActivity :
         tvName.text = book.name
         tvAuthor.text = getString(R.string.author_show, book.getRealAuthor())
         tvOrigin.text = getString(R.string.origin_show, book.originName)
+        upReviewOrigin(book)
         tvLasted.text = getString(R.string.lasted_show, book.latestChapterTitle)
         showBookIntro(book)
         if (book.isWebFile) {
@@ -956,6 +959,101 @@ class BookInfoActivity :
         editMenuItem?.isVisible = viewModel.inBookshelf
     }
 
+    private fun upReviewOrigin(book: Book) {
+        val row = ReviewOverlayBindings.get(book.bookUrl)
+        val text = if (row == null) {
+            getString(R.string.review_origin_unbound)
+        } else {
+            val sourceName = appDb.bookSourceDao.getBookSource(row.providerSourceUrl)?.bookSourceName
+            val label = sourceName?.takeIf { it.isNotBlank() }
+                ?: row.providerSourceUrl.ifBlank { row.providerName }
+            getString(R.string.review_origin_show, label)
+        }
+        binding.tvReviewOrigin?.text = text
+    }
+
+    private fun showReviewOriginMenu() {
+        val book = viewModel.getBook() ?: return
+        val bound = ReviewOverlayBindings.get(book.bookUrl)
+        val actions = mutableListOf(
+            getString(R.string.review_origin_pick_title) to "pick",
+        )
+        if (bound != null) {
+            actions.add(getString(R.string.review_origin_clear) to "clear")
+        }
+        selector(getString(R.string.change_review_origin), actions.map { it.first }) { _, _, i ->
+            when (actions[i].second) {
+                "clear" -> {
+                    ReviewOverlayBindings.clear(book.bookUrl)
+                    upReviewOrigin(book)
+                }
+                "pick" -> pickReviewOriginSource(book)
+            }
+        }
+    }
+
+    private fun pickReviewOriginSource(book: Book) {
+        val capable = ReviewOverlayMatch.listCapableEnabledSources()
+        if (capable.isEmpty()) {
+            toastOnUi(R.string.review_origin_none_capable)
+            return
+        }
+        selector(
+            getString(R.string.review_origin_pick_title),
+            capable.map { it.bookSourceName.ifBlank { it.bookSourceUrl } }
+        ) { _, _, i ->
+            bindReviewOrigin(book, capable[i])
+        }
+    }
+
+    private fun bindReviewOrigin(book: Book, source: BookSource) {
+        waitDialog.setText(getString(R.string.review_origin_searching))
+        waitDialog.show()
+        viewModel.execute {
+            ReviewOverlayMatch.searchSameBookHits(book, source)
+        }.onSuccess { hits ->
+            waitDialog.dismiss()
+            when (hits.size) {
+                0 -> toastOnUi(R.string.review_origin_bind_miss)
+                1 -> {
+                    val hit = hits[0].searchBook
+                    ReviewOverlayBindings.bindManual(
+                        contentBook = book,
+                        providerSourceUrl = source.bookSourceUrl,
+                        providerBookUrl = hit.bookUrl,
+                        providerName = hit.name,
+                        providerAuthor = hit.author,
+                    )
+                    toastOnUi(R.string.review_origin_bind_ok)
+                    upReviewOrigin(book)
+                }
+                else -> {
+                    toastOnUi(R.string.review_origin_bind_multi)
+                    selector(
+                        getString(R.string.review_origin_bind_multi),
+                        hits.map {
+                            "${it.searchBook.name} · ${it.searchBook.author}".trim(' ', '·')
+                        }
+                    ) { _, _, i ->
+                        val hit = hits[i].searchBook
+                        ReviewOverlayBindings.bindManual(
+                            contentBook = book,
+                            providerSourceUrl = source.bookSourceUrl,
+                            providerBookUrl = hit.bookUrl,
+                            providerName = hit.name,
+                            providerAuthor = hit.author,
+                        )
+                        toastOnUi(R.string.review_origin_bind_ok)
+                        upReviewOrigin(book)
+                    }
+                }
+            }
+        }.onError {
+            waitDialog.dismiss()
+            toastOnUi(it.localizedMessage ?: getString(R.string.review_origin_bind_miss))
+        }
+    }
+
     private fun upGroup(groupId: Long) {
         viewModel.loadGroup(groupId) {
             if (it.isNullOrEmpty()) {
@@ -1032,6 +1130,12 @@ class BookInfoActivity :
             viewModel.getBook()?.let { book ->
                 showDialogFragment(ChangeBookSourceDialog(book.name, book.author))
             }
+        }
+        binding.tvChangeReviewSource?.setOnClickListener {
+            showReviewOriginMenu()
+        }
+        binding.tvReviewOrigin?.setOnClickListener {
+            showReviewOriginMenu()
         }
         tvTocView.setOnClickListener {
             if (viewModel.chapterListData.value.isNullOrEmpty()) {

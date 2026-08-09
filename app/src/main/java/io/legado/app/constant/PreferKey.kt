@@ -46,6 +46,10 @@ object PreferKey {
     const val nextKeys = "nextKeyCodes"
     const val showDiscovery = "showDiscovery"
     const val enableReview = "enableReview"
+    /** RFC-004: master switch for cross-source review overlay */
+    const val reviewOverlayEnabled = "reviewOverlayEnabled"
+    /** RFC-004: auto-discover review provider (default off) */
+    const val reviewOverlayAutoBind = "reviewOverlayAutoBind"
     const val showRss = "showRss"
     const val bookshelfLayout = "bookshelfLayout"
     const val bookshelfSort = "bookshelfSort"

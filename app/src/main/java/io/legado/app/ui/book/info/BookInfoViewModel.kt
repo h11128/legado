@@ -45,6 +45,7 @@ import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.checkalgo.AutoChangeProgressUi
 import io.legado.app.model.checkalgo.AutoChangeSource
 import io.legado.app.model.localBook.LocalBook
+import io.legado.app.model.review.ReviewOverlayBindings
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.model.SourceCallBack
 import io.legado.app.ui.login.SourceLoginJsExtensions
@@ -485,6 +486,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
     fun changeTo(source: BookSource, book: Book, toc: List<BookChapter>) {
         changeSourceCoroutine?.cancel()
         changeSourceCoroutine = execute {
+            val previousBookUrl = bookData.value?.bookUrl
             bookSource = source.also {
                 hasCustomBtn = it.customButton
             }
@@ -498,6 +500,10 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                 appDb.bookDao.insert(book)
                 appDb.bookChapterDao.insert(*toc.toTypedArray())
             }
+            ReviewOverlayBindings.migrateOnChangeSource(
+                previousBookUrl,
+                book,
+            )
             bookData.postValue(book)
             chapterListData.postValue(toc)
         }.onFinally {

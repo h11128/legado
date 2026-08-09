@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| Status | **Proposed (Rev 1.1)** — Rev 1 Criticals closed; click context + bind migration uniqueness patched |
+| Status | **Accepted for P1 implementation (Rev 1.1)** — P0 supply remains manual-only until a verified review-capable sample exists |
 | Date | 2026-08-09 |
 | Repo | `legado` (Android app + optional Web read) |
 | Related code | `ReviewRule` / `ReviewRuleParser` / `JsSourceReview` / `ReadBookActivity.loadReviewSummaryIfNeeded` / `ReviewDetailDialog`; align: `BookAuthorIdentity`, `SearchBookMerge`, `ChangeChapterVerify.alignResult` / `digramJaccard`; ask: RFC-001/002 change-source |
@@ -479,6 +479,7 @@ Settings: 段评可来自与正文不同的评论源；无评论源时功能保�
 | 2026-08-09 | Product premise: 段评 must not require every content source to ship review rules |
 | 2026-08-09 | Rev 1: kill soft-map icons; P1 chapter-only milestone; authority gate for P2; binding migration on 换源; supply gate; auto-bind default off + confirm; `ProviderParaRef` click invariant; discrete align accept set `{1.0,0.95,0.7}` |
 | 2026-08-09 | Rev 1.1: overlay detail must carry full provider book/chapter context; name/author bind migrate only when unique |
+| 2026-08-09 | P1a landed: binding table + manual UI + URL-only migrate (name/author fallback deferred — steal risk); providerName = provider book title |
 
 ---
 
@@ -489,3 +490,4 @@ Settings: 段评可来自与正文不同的评论源；无评论源时功能保�
 | 0 | 2026-08-09 | Initial proposal |
 | 1 | 2026-08-09 | Address design-review Critical C1–C6 + Warnings W1–W4/W6 |
 | 1.1 | 2026-08-09 | Patch Rev 1 re-review P0s: §6.9 provider context; §6.8 unique migrate fallback |
+| 1.1-P1a | 2026-08-09 | Implementation: Room bindings, capability, bind UI; migrate URL-only |

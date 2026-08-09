@@ -339,6 +339,20 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.enableReview, value)
         }
 
+    /** RFC-004: allow binding a review provider separate from content origin. */
+    var reviewOverlayEnabled: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.reviewOverlayEnabled, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.reviewOverlayEnabled, value)
+        }
+
+    /** RFC-004 §6.7: auto discovery default off (confirm required when enabled later). */
+    var reviewOverlayAutoBind: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.reviewOverlayAutoBind, false)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.reviewOverlayAutoBind, value)
+        }
+
     var threadCount: Int
         get() = appCtx.getPrefInt(PreferKey.threadCount, 32)
         set(value) {
