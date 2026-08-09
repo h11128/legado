@@ -41,6 +41,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookHighlight
 import io.legado.app.data.entities.BookProgress
+import io.legado.app.data.entities.BookReviewBinding
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.rule.ReviewRule
 import io.legado.app.exception.NoStackTraceException
@@ -81,6 +82,11 @@ import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.ReviewRuleParser
 import io.legado.app.model.jsSource.JsSourceReview
+import io.legado.app.model.review.ReviewOverlayBindings
+import io.legado.app.model.review.ReviewOverlayLoader
+import io.legado.app.model.review.ReviewOverlayMode
+import io.legado.app.model.review.ReviewOverlayResolver
+import io.legado.app.model.review.ReviewOverlaySessionStore
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.isJsonObject
@@ -779,6 +785,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         synchronized(reviewSummaryPrefetchingKeys) {
             reviewSummaryPrefetchingKeys.clear()
         }
+        ReviewOverlaySessionStore.clear()
+        ReviewOverlaySessionStore.clearCaches()
         ChapterProvider.clearReviewProviders()
     }
 
@@ -1757,16 +1765,55 @@ class ReadBookActivity : BaseReadBookActivity(),
             toastOnUi(R.string.review_empty)
             return
         }
+        val contentBook = ReadBook.book ?: return
+        val binding = ReviewOverlayBindings.get(contentBook.bookUrl)
+        val mode = ReviewOverlayResolver.resolve(contentBook, ReadBook.bookSource, binding)
+        if (mode is ReviewOverlayMode.Overlay) {
+            val overlay = ReviewOverlaySessionStore.get()
+            if (overlay == null ||
+                !ReviewOverlaySessionStore.matchesContentChapter(contentBook.bookUrl, chapterIndex)
+            ) {
+                toastOnUi(R.string.review_empty)
+                return
+            }
+            if (paragraphNum != -1) {
+                // P1: overlay only shows chapter-bucket (-1).
+                return
+            }
+            val ref = overlay.chapterBucket
+            if (ref == null) {
+                toastOnUi(R.string.review_empty)
+                return
+            }
+            val providerSource = appDb.bookSourceDao.getBookSource(overlay.providerSourceKey)
+                ?: return
+            val ruleHash = if (providerSource.isJsSource()) {
+                providerSource.mainJs.hashCode()
+            } else {
+                providerSource.ruleReview?.hashCode() ?: return
+            }
+            showDialogFragment(
+                ReviewDetailDialog(
+                    paragraphNum = -1,
+                    totalCount = count,
+                    chapterIndex = overlay.providerChapterIndex,
+                    paragraphData = ref.paraData,
+                    bookUrl = overlay.providerBook.bookUrl,
+                    sourceKey = overlay.providerSourceKey,
+                    ruleHash = ruleHash,
+                )
+            )
+            return
+        }
         val source = ReadBook.bookSource ?: return
         if (source.isJsSource()) {
-            val book = ReadBook.book ?: return
             showDialogFragment(
                 ReviewDetailDialog(
                     paragraphNum = paragraphNum,
                     totalCount = count,
                     chapterIndex = chapterIndex,
                     paragraphData = ChapterProvider.getReviewKeyById(paragraphNum, chapterIndex),
-                    bookUrl = book.bookUrl,
+                    bookUrl = contentBook.bookUrl,
                     sourceKey = source.getKey(),
                     ruleHash = source.mainJs.hashCode(),
                 )
@@ -1789,14 +1836,13 @@ class ReadBookActivity : BaseReadBookActivity(),
             toastOnUi(R.string.review_detail_rule_missing)
             return
         }
-        val book = ReadBook.book ?: return
         showDialogFragment(
             ReviewDetailDialog(
                 paragraphNum = paragraphNum,
                 totalCount = count,
                 chapterIndex = chapterIndex,
                 paragraphData = ChapterProvider.getReviewKeyById(paragraphNum, chapterIndex),
-                bookUrl = book.bookUrl,
+                bookUrl = contentBook.bookUrl,
                 sourceKey = source.getKey(),
                 ruleHash = rule.hashCode()
             )
@@ -1804,11 +1850,8 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     private fun loadReviewSummaryIfNeeded() {
-        val source = ReadBook.bookSource ?: run {
-            clearReviewSummaryProviders()
-            return
-        }
         val book = ReadBook.book ?: run {
+            ReviewOverlaySessionStore.clear()
             clearReviewSummaryProviders()
             return
         }
@@ -1818,10 +1861,104 @@ class ReadBookActivity : BaseReadBookActivity(),
             textChapter.chapter.index == chapterIndex &&
             !textChapter.hasBodyContent
         ) {
+            ReviewOverlaySessionStore.clearChapter()
             clearReviewSummaryProviders()
             return
         }
 
+        val originSource = ReadBook.bookSource
+        val binding = ReviewOverlayBindings.get(book.bookUrl)
+        when (val mode = ReviewOverlayResolver.resolve(book, originSource, binding)) {
+            is ReviewOverlayMode.Overlay -> {
+                loadOverlayReviewSummaryIfNeeded(book, mode.binding, chapterIndex)
+            }
+            ReviewOverlayMode.Unbound -> {
+                ReviewOverlaySessionStore.clear()
+                clearReviewSummaryProviders()
+            }
+            ReviewOverlayMode.NativeOnly, ReviewOverlayMode.Native -> {
+                ReviewOverlaySessionStore.clear()
+                loadNativeReviewSummaryIfNeeded(book, originSource, chapterIndex)
+            }
+        }
+    }
+
+    private fun loadOverlayReviewSummaryIfNeeded(
+        book: Book,
+        binding: BookReviewBinding,
+        chapterIndex: Int,
+    ) {
+        val key = buildOverlayReviewSummaryKey(book, binding, chapterIndex)
+        if (reviewSummaryAppliedKey == key || reviewSummaryLoadingKey == key) return
+        synchronized(reviewSummaryCache) { reviewSummaryCache[key] }?.let { cached ->
+            if (ReviewOverlaySessionStore.matchesContentChapter(book.bookUrl, chapterIndex)) {
+                applyReviewSummary(key, chapterIndex, cached)
+                return
+            }
+        }
+
+        reviewSummaryLoadingKey = key
+        val requestToken = ++reviewSummaryRequestToken
+        if (reviewSummaryAppliedKey != key) {
+            ChapterProvider.clearReviewProviders()
+        }
+        Coroutine.async(lifecycleScope, IO) {
+            val contentChapter = appDb.bookChapterDao.getChapter(book.bookUrl, chapterIndex)
+                ?: return@async null
+            if (contentChapter.isVolume) return@async null
+            ReviewOverlayLoader.loadChapterBucket(book, contentChapter, binding)
+        }.onSuccess(Main) { loaded ->
+            releaseReviewSummaryLoadingKey(key)
+            if (requestToken != reviewSummaryRequestToken) return@onSuccess
+            val currentBook = ReadBook.book ?: return@onSuccess
+            val currentBinding = ReviewOverlayBindings.get(currentBook.bookUrl)
+            if (currentBinding == null ||
+                currentBinding.providerBookUrl != binding.providerBookUrl ||
+                currentBinding.providerSourceUrl != binding.providerSourceUrl
+            ) {
+                return@onSuccess
+            }
+            val currentKey = buildOverlayReviewSummaryKey(
+                currentBook,
+                currentBinding,
+                ReadBook.durChapterIndex,
+            )
+            if (currentKey != key) return@onSuccess
+            if (loaded == null) {
+                ReviewOverlaySessionStore.clearChapter()
+                clearReviewSummaryProviders()
+                return@onSuccess
+            }
+            synchronized(reviewSummaryCache) {
+                reviewSummaryCache[key] = loaded.summary
+            }
+            applyReviewSummary(key, chapterIndex, loaded.summary)
+        }.onError {
+            releaseReviewSummaryLoadingKey(key)
+            if (requestToken != reviewSummaryRequestToken) return@onError
+            val currentBook = ReadBook.book ?: return@onError
+            val currentBinding = ReviewOverlayBindings.get(currentBook.bookUrl) ?: return@onError
+            if (buildOverlayReviewSummaryKey(
+                    currentBook,
+                    currentBinding,
+                    ReadBook.durChapterIndex,
+                ) != key
+            ) return@onError
+            ReviewOverlaySessionStore.clearChapter()
+            clearReviewSummaryProviders()
+            AppLog.put("加载跨源段评统计出错\n${it.localizedMessage}", it)
+        }
+    }
+
+    private fun loadNativeReviewSummaryIfNeeded(
+        book: Book,
+        source: BookSource?,
+        chapterIndex: Int,
+    ) {
+        if (source == null) {
+            clearReviewSummaryProviders()
+            return
+        }
         if (source.isJsSource()) {
             loadJsReviewSummaryIfNeeded(book, source, chapterIndex)
             return
@@ -2082,6 +2219,13 @@ class ReadBookActivity : BaseReadBookActivity(),
         reviewHash: Int,
         chapterIndex: Int
     ): String = "${source.getKey()}|${book.bookUrl}|$reviewHash#$chapterIndex"
+
+    private fun buildOverlayReviewSummaryKey(
+        book: Book,
+        binding: BookReviewBinding,
+        chapterIndex: Int,
+    ): String = "overlay|${binding.providerSourceUrl}|${binding.providerBookUrl}|" +
+            "${binding.hashCode()}|${book.bookUrl}#$chapterIndex"
 
     private fun releaseReviewSummaryLoadingKey(key: String) {
         if (reviewSummaryLoadingKey == key) {

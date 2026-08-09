@@ -15,6 +15,7 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.localBook.LocalBook
+import io.legado.app.model.review.ReviewOverlayBindings
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.model.SourceCallBack
 import io.legado.app.utils.FileUtils
@@ -107,10 +108,13 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
                     .onFailure {
                         AppLog.put("获取目录出错\n${it.localizedMessage}", it, true)
                     }.getOrNull()?.let { toc ->
+                        val previousBookUrl = book.bookUrl
                         book.migrateTo(newBook, toc)
                         book.removeType(BookType.updateError)
+                        book.delete()
                         appDb.bookDao.insert(newBook)
                         appDb.bookChapterDao.insert(*toc.toTypedArray())
+                        ReviewOverlayBindings.migrateOnChangeSource(previousBookUrl, newBook)
                     }
                 delay(changeSourceDelay)
             }

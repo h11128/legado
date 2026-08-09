@@ -29,6 +29,8 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
+import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.help.glide.ImageLoader
@@ -39,6 +41,7 @@ import io.legado.app.model.analyzeRule.AnalyzeUrl.Companion.getMediaItem
 import io.legado.app.model.analyzeRule.ReviewRuleParser
 import io.legado.app.model.analyzeRule.ReviewRuleParser.DetailItem as ReviewDetailItem
 import io.legado.app.model.jsSource.JsSourceReview
+import io.legado.app.model.review.ReviewOverlaySessionStore
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.gone
 import io.legado.app.utils.isAbsUrl
@@ -399,6 +402,21 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
         }
     }
 
+    private fun resolveReviewBook(targetBookUrl: String): Book? {
+        ReviewOverlaySessionStore.providerBookFor(targetBookUrl)?.let { return it }
+        ReadBook.book?.takeIf { it.bookUrl == targetBookUrl }?.let { return it }
+        return null
+    }
+
+    private fun resolveReviewChapter(
+        targetBookUrl: String,
+        targetChapterIndex: Int,
+    ): BookChapter? {
+        ReviewOverlaySessionStore.providerChapter(targetBookUrl, targetChapterIndex)
+            ?.let { return it }
+        return appDb.bookChapterDao.getChapter(targetBookUrl, targetChapterIndex)
+    }
+
     private fun loadDetailPage(paragraphNum: Int, page: Int, append: Boolean) {
         if (isLoading) return
         if (!append) {
@@ -419,11 +437,9 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
         if (!hasMore) return
         isLoading = true
         Coroutine.async(lifecycleScope, IO, start = CoroutineStart.LAZY) {
-            val source = ReadBook.bookSource ?: return@async null
-            if (source.getKey() != sourceKey) return@async null
-            val book = ReadBook.book ?: return@async null
-            if (book.bookUrl != bookUrl) return@async null
-            val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, chapterIndex) ?: return@async null
+            val source = appDb.bookSourceDao.getBookSource(sourceKey) ?: return@async null
+            val book = resolveReviewBook(bookUrl) ?: return@async null
+            val chapter = resolveReviewChapter(bookUrl, chapterIndex) ?: return@async null
             if (source.isJsSource()) {
                 if (source.mainJs.hashCode() != ruleHash) return@async null
                 val result = JsSourceReview.getReviewDetailAwait(
@@ -552,12 +568,10 @@ class ReviewDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
         val page = (replyPageByParentKey[parentKey] ?: 0) + 1
         renderUiItems()
         Coroutine.async(lifecycleScope, IO, start = CoroutineStart.LAZY) {
-            val source = ReadBook.bookSource ?: return@async null
-            if (source.getKey() != sourceKey || source.isJsSource()) return@async null
-            val book = ReadBook.book ?: return@async null
-            if (book.bookUrl != bookUrl) return@async null
-            val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, chapterIndex)
-                ?: return@async null
+            val source = appDb.bookSourceDao.getBookSource(sourceKey) ?: return@async null
+            if (source.isJsSource()) return@async null
+            val book = resolveReviewBook(bookUrl) ?: return@async null
+            val chapter = resolveReviewChapter(bookUrl, chapterIndex) ?: return@async null
             val rule = source.ruleReview ?: return@async null
             if (!rule.enabled || rule.hashCode() != ruleHash) return@async null
             val replyUrlRule = rule.reviewQuoteUrl?.takeIf { it.isNotBlank() }
