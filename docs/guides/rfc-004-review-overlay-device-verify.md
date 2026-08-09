@@ -62,11 +62,15 @@ Same bind as P1. Content book chapter text should be **similar** to fixture para
 |------|----------|
 | APK | `assembleAppDebug` + `adb install -r` `com.legado.app.debug` |
 | Fixture | MCP `save_source` → `legado-fixture://review-overlay` enabled |
-| Binding | `book_review_bindings` → content《综漫：我同时穿越了99个世界》+ fixture provider |
+| Binding (manual P1) | `book_review_bindings` → content《综漫：我同时穿越了99个世界》+ fixture provider |
 | Overlay log | `ReviewOverlay bind=legado-fixture://review-overlay align=0.7 authority=ContentSplitVerified coverage=0/4 (<0.5) → chapter-bucket only` |
 | Chapter bucket | `… coverage=0/4 bucket=2` (P1 path OK; digram coverage fail expected on dissimilar body text) |
-| P2 icons | Not asserted on this book (coverage gate correctly blocked wrong para icons) |
+| P2 icons | Not asserted on dissimilar body (coverage gate correctly blocked wrong para icons) |
+| **P3 auto-bind** | Pref `reviewOverlayAutoBind=true`; unbound《爱的艺术》(empty author); UI snackbar「发现段评源「RFC004段评提供方(夹具)」，是否绑定？」; tap 确认 → `book_review_bindings` row `bindMode=auto` |
 | Prefs P4 | Switches in `pref_config_read.xml` (阅读设置) |
 | Unit | `:app:testDebugUnitTest --tests 'io.legado.app.model.review.*'` BUILD SUCCESSFUL |
 
-Commits: P2 `1968aa58a` · P3 `3d17ee2da` · P4 `dca536b88` (PE `#682`).
+Commits: P2 `1968aa58a` · P3 `3d17ee2da` · P4 `dca536b88` · verify `62c269d04` (PE `#682`).
+
+Re-run overlay: `python scripts/rfc004-overlay-device-session.py`  
+Re-run P3 snackbar: enable 自动发现段评源, clear binding, open unbound book with weak/empty author (fixture returns `夹具作者`).
