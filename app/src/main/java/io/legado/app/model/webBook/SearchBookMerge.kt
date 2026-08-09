@@ -1,54 +1,31 @@
 package io.legado.app.model.webBook
 
 import io.legado.app.data.entities.SearchBook
+import io.legado.app.help.book.BookAuthorIdentity
 
 /**
- * Search-result merge identity.
- *
- * Baseline: same [SearchBook.name] and same [SearchBook.author].
- *
- * Empty-author rule (user: options 3+1):
- * - If the same name has **exactly one** distinct non-empty author among peers
- *   (plus the two books being compared), an empty-author hit may merge into that
- *   sole-author row (and vice versa).
- * - If the same name has **two or more** distinct non-empty authors, empty-author
- *   hits stay separate (do not guess which book).
- *
- * Note: merge runs online as sources stream in, so "unique author" is evaluated
- * against the **current** bucket. An empty hit merged early into author A is not
- * split later if author B arrives for the same title.
+ * Search-result merge (RFC-003). Delegates identity to [BookAuthorIdentity].
  */
 object SearchBookMerge {
+
+    fun effectiveAuthor(raw: String?): String = BookAuthorIdentity.effectiveAuthor(raw)
 
     fun sameBookForMerge(
         existing: SearchBook,
         incoming: SearchBook,
         peers: List<SearchBook>,
-    ): Boolean {
-        if (existing.name != incoming.name) return false
-        val a1 = existing.author.trim()
-        val a2 = incoming.author.trim()
-        if (a1 == a2) return true
-        if (a1.isNotEmpty() && a2.isNotEmpty()) return false
+    ): Boolean = BookAuthorIdentity.sameSearchBook(existing, incoming, peers)
 
-        val authors = linkedSetOf<String>()
-        for (peer in peers) {
-            if (peer.name != existing.name) continue
-            val a = peer.author.trim()
-            if (a.isNotEmpty()) authors.add(a)
-        }
-        if (a1.isNotEmpty()) authors.add(a1)
-        if (a2.isNotEmpty()) authors.add(a2)
-        if (authors.size != 1) return false
-        val sole = authors.first()
-        return (a1.isEmpty() || a1 == sole) && (a2.isEmpty() || a2 == sole)
-    }
-
-    /** Fold [incoming] into [target]: origins + keep non-empty author. */
+    /** Fold [incoming] into [target]: origins + keep real author. */
     fun absorb(target: SearchBook, incoming: SearchBook) {
         target.addOrigin(incoming.origin)
-        if (target.author.isBlank() && incoming.author.isNotBlank()) {
-            target.author = incoming.author
+        val targetAuthor = BookAuthorIdentity.effectiveAuthor(target.author)
+        val incomingAuthor = BookAuthorIdentity.effectiveAuthor(incoming.author)
+        when {
+            targetAuthor.isEmpty() && incomingAuthor.isNotEmpty() ->
+                target.author = incomingAuthor
+            targetAuthor.isEmpty() && target.author.isNotBlank() ->
+                target.author = ""
         }
         if (target.intro.isNullOrBlank() && !incoming.intro.isNullOrBlank()) {
             target.intro = incoming.intro
@@ -56,5 +33,33 @@ object SearchBookMerge {
         if (target.coverUrl.isNullOrBlank() && !incoming.coverUrl.isNullOrBlank()) {
             target.coverUrl = incoming.coverUrl
         }
+    }
+
+    /**
+     * Rebuild display rows from raw per-source hits (RFC-003 §4.6).
+     * Peers for each title = all raw hits with that trimmed name.
+     */
+    fun rebuildFromRawHits(rawHits: List<SearchBook>): List<SearchBook> {
+        if (rawHits.isEmpty()) return emptyList()
+        val merged = arrayListOf<SearchBook>()
+        for (hit in rawHits) {
+            val working = hit.copy()
+            val namePeers = rawHits.filter {
+                BookAuthorIdentity.equalName(it.name, working.name)
+            }
+            var absorbed = false
+            for (existing in merged) {
+                if (!BookAuthorIdentity.equalName(existing.name, working.name)) continue
+                if (sameBookForMerge(existing, working, namePeers)) {
+                    absorb(existing, working)
+                    absorbed = true
+                    break
+                }
+            }
+            if (!absorbed) {
+                merged.add(working)
+            }
+        }
+        return merged
     }
 }

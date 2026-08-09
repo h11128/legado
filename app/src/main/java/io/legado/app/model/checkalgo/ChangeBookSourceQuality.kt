@@ -1,6 +1,7 @@
 package io.legado.app.model.checkalgo
 
 import io.legado.app.data.entities.SearchBook
+import io.legado.app.help.book.BookAuthorIdentity
 import java.net.URLDecoder
 import kotlin.math.abs
 
@@ -54,12 +55,6 @@ object ChangeBookSourceQuality {
 
     private val nonNovelHostPrefixes = listOf(
         "translate.google.",
-    )
-
-    /** Authors that mean “missing” on search pages — treat as empty for empty-latest gate. */
-    private val placeholderAuthors = setOf(
-        "未知", "无", "佚名", "无名氏", "无名", "未知作者", "作者未知", "作者不详", "不详",
-        "暂无", "暂无作者", "none", "null", "unknown", "n/a", "na",
     )
 
     /**
@@ -173,10 +168,8 @@ object ChangeBookSourceQuality {
     }
 
     private fun meaningfulAuthor(raw: String?): String? {
-        val author = raw?.trim().orEmpty()
-        if (author.isEmpty()) return null
-        if (author.lowercase() in placeholderAuthors) return null
-        return author
+        val author = BookAuthorIdentity.effectiveAuthor(raw)
+        return author.ifEmpty { null }
     }
 
     /**

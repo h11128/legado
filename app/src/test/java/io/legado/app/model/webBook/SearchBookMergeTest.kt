@@ -32,12 +32,20 @@ class SearchBookMergeTest {
     fun emptyAuthorMergesIntoSoleNonEmptyAuthor() {
         val withAuthor = book("同时穿越了99个世界", "凤嘲凰", "https://a.com")
         val empty = book("同时穿越了99个世界", "", "https://empty.com")
+        val peers = listOf(withAuthor, empty)
+        assertTrue(SearchBookMerge.sameBookForMerge(withAuthor, empty, peers))
+        assertTrue(SearchBookMerge.sameBookForMerge(empty, withAuthor, peers))
+    }
+
+    @Test
+    fun placeholderYimingMergesLikeEmptyAuthor() {
+        val withAuthor = book("同时穿越了99个世界", "凤嘲凰", "https://a.com")
+        val yiming = book("同时穿越了99个世界", "佚名", "https://popofree.com")
         assertTrue(
-            SearchBookMerge.sameBookForMerge(withAuthor, empty, listOf(withAuthor))
+            SearchBookMerge.sameBookForMerge(withAuthor, yiming, listOf(withAuthor))
         )
-        assertTrue(
-            SearchBookMerge.sameBookForMerge(empty, withAuthor, listOf(empty))
-        )
+        SearchBookMerge.absorb(yiming, withAuthor)
+        assertEquals("凤嘲凰", yiming.author)
     }
 
     @Test
@@ -99,5 +107,42 @@ class SearchBookMergeTest {
         val b = book("同名书", "作者乙", "https://b.com")
         val empty = book("同名书", "", "https://empty.com")
         assertFalse(SearchBookMerge.sameBookForMerge(a, empty, listOf(a, b)))
+    }
+
+    @Test
+    fun rebuildMergesYimingIntoSoleRealAndKeepsOrigins() {
+        val yiming = book("高考后", "佚名", "https://popofree.com")
+        val real = book("高考后", "七月观天", "https://good.com")
+        val merged = SearchBookMerge.rebuildFromRawHits(listOf(yiming, real))
+        assertEquals(1, merged.size)
+        assertEquals("七月观天", merged.single().author)
+        assertTrue(merged.single().origins.contains("https://popofree.com"))
+        assertTrue(merged.single().origins.contains("https://good.com"))
+    }
+
+    @Test
+    fun rebuildKeepsEmptySeparateWhenTwoRealsPresent() {
+        val empty = book("同名书", "", "https://empty.com")
+        val a = book("同名书", "作者甲", "https://a.com")
+        val b = book("同名书", "作者乙", "https://b.com")
+        val merged = SearchBookMerge.rebuildFromRawHits(listOf(empty, a, b))
+        assertEquals(3, merged.size)
+        assertTrue(merged.any { it.author == "作者甲" })
+        assertTrue(merged.any { it.author == "作者乙" })
+        assertTrue(merged.any { SearchBookMerge.effectiveAuthor(it.author).isEmpty() })
+    }
+
+    @Test
+    fun rebuildUndoesStickyMergeWhenSecondRealArrivesInRaw() {
+        // Raw order: empty, 甲, 乙 — rebuild must not leave empty stuck only on 甲.
+        val empty = book("同名书", "佚名", "https://empty.com")
+        val a = book("同名书", "作者甲", "https://a.com")
+        val b = book("同名书", "作者乙", "https://b.com")
+        val merged = SearchBookMerge.rebuildFromRawHits(listOf(empty, a, b))
+        assertEquals(3, merged.size)
+        val authors = merged.map { SearchBookMerge.effectiveAuthor(it.author) }.toSet()
+        assertTrue(authors.contains("作者甲"))
+        assertTrue(authors.contains("作者乙"))
+        assertTrue(authors.contains(""))
     }
 }

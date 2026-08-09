@@ -49,6 +49,8 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private var searchKey: String = ""
     private var bookSourceParts = emptyList<BookSourcePart>()
     private var searchBooks = arrayListOf<SearchBook>()
+    /** Raw per-source hits for RFC-003 rebuild (never absorb these in place). */
+    private var rawSearchHits = arrayListOf<SearchBook>()
     private var searchJob: Job? = null
     private var workingState = MutableStateFlow(true)
     private var activeProgress = AtomicReference<SearchProgressReporter?>()
@@ -76,6 +78,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                 close()
             }
             searchBooks.clear()
+            rawSearchHits.clear()
             bookSourceParts = emptyList()
             mSearchId = searchId
             searchPage = 1
@@ -173,6 +176,11 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
             }.onCompletion { error ->
                 withContext(NonCancellable) {
                     RespondTimeUpdater.flush()
+                    // §4.6(b): final rebuild when query completes or cancels.
+                    runCatching {
+                        rebuildDisplay(precision, key)
+                        callBack.onSearchSuccess(searchBooks)
+                    }
                 }
                 when {
                     error == null -> progress.finish {
@@ -192,57 +200,39 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
 
     private suspend fun mergeItems(newDataS: List<SearchBook>, precision: Boolean, key: String) {
         if (newDataS.isNotEmpty()) {
-            val copyData = ArrayList(searchBooks)
-            val equalData = arrayListOf<SearchBook>()
-            val containsData = arrayListOf<SearchBook>()
-            val tagsData = arrayListOf<SearchBook>()
-            val otherData = arrayListOf<SearchBook>()
-            copyData.forEach {
+            for (book in newDataS) {
                 currentCoroutineContext().ensureActive()
-                if (it.name == key || it.author == key) {
-                    equalData.add(it)
-                } else if (it.kind?.contains(key) == true) {
-                    tagsData.add(it)
-                } else if (it.name.contains(key) || it.author.contains(key)) {
-                    containsData.add(it)
-                } else {
-                    otherData.add(it)
-                }
+                rawSearchHits.add(book.copy())
             }
-            suspend fun mergeIntoBucket(bucket: MutableList<SearchBook>, nBook: SearchBook) {
-                var hasSame = false
-                for (pBook in bucket) {
-                    currentCoroutineContext().ensureActive()
-                    if (SearchBookMerge.sameBookForMerge(pBook, nBook, bucket)) {
-                        SearchBookMerge.absorb(pBook, nBook)
-                        hasSame = true
-                        break
-                    }
-                }
-                if (!hasSame) {
-                    bucket.add(nBook)
-                }
-            }
-            newDataS.forEach { nBook ->
-                currentCoroutineContext().ensureActive()
-                when {
-                    nBook.name == key || nBook.author == key -> mergeIntoBucket(equalData, nBook)
-                    nBook.kind?.contains(key) == true -> mergeIntoBucket(tagsData, nBook)
-                    nBook.name.contains(key) || nBook.author.contains(key) ->
-                        mergeIntoBucket(containsData, nBook)
-                    !precision -> mergeIntoBucket(otherData, nBook)
-                }
-            }
-            currentCoroutineContext().ensureActive()
-            equalData.sortByDescending { it.origins.size }
-            equalData.addAll(tagsData.sortedByDescending { it.origins.size })
-            equalData.addAll(containsData.sortedByDescending { it.origins.size })
-            if (!precision) {
-                equalData.addAll(otherData)
-            }
-            currentCoroutineContext().ensureActive()
-            searchBooks = equalData
         }
+        rebuildDisplay(precision, key)
+    }
+
+    /** RFC-003 §4.6: authoritative list is only rebuild output from raw hits. */
+    private suspend fun rebuildDisplay(precision: Boolean, key: String) {
+        val merged = SearchBookMerge.rebuildFromRawHits(rawSearchHits)
+        val equalData = arrayListOf<SearchBook>()
+        val containsData = arrayListOf<SearchBook>()
+        val tagsData = arrayListOf<SearchBook>()
+        val otherData = arrayListOf<SearchBook>()
+        for (book in merged) {
+            currentCoroutineContext().ensureActive()
+            when {
+                book.name == key || book.author == key -> equalData.add(book)
+                book.kind?.contains(key) == true -> tagsData.add(book)
+                book.name.contains(key) || book.author.contains(key) -> containsData.add(book)
+                !precision -> otherData.add(book)
+            }
+        }
+        currentCoroutineContext().ensureActive()
+        equalData.sortByDescending { it.origins.size }
+        equalData.addAll(tagsData.sortedByDescending { it.origins.size })
+        equalData.addAll(containsData.sortedByDescending { it.origins.size })
+        if (!precision) {
+            equalData.addAll(otherData)
+        }
+        currentCoroutineContext().ensureActive()
+        searchBooks = equalData
     }
 
     fun pause() {
