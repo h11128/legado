@@ -112,9 +112,10 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 
 ## 2026-08-09 www.qingzichan.net deep dig
 
-- PC timeout / 连接被关；手机校验 `Failed to connect …38.55.186.43:80`（POST /search ConnectException）。
-- hunt empty；`gegedang.com` 标题「官网首页」停车壳。已禁用。
-- Trap: `known:host_phone_timeout_no_mirror`。
+- **首轮**：PC timeout / 手机连不上 38.55.186.43:80；hunt empty；`gegedang.com` 官网壳。
+- **再挖（2026-08-09）**：`:80` 仍超时；**https** 通但整站已换成「6080新视觉影视」；手机打开 `/ggd/82390/` → 301 `6080xsjys.com`，目录空。
+- 格格党孪生 `ax81.com` 同路径 `/ggd/82390/` 是**另一本书**（极品道士下山≠修仙从华娱开始），不可 remap。
+- http+https 均已禁用；书架 6 靠自动换源。Trap: `name_similar_video_not_novel_twin`。
 
 
 ## 2026-08-09 m.boshishuwu.com deep dig
