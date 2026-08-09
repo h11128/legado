@@ -860,5 +860,171 @@ class ChangeBookSourceQualityTest {
             ),
         )
     }
+
+    @Test
+    fun tocTitleAffinityUnknownWhenEitherSideEmpty() {
+        assertEquals(
+            -1.0,
+            ChangeBookSourceQuality.tocTitleAffinity(emptyList(), listOf("第1章 序")),
+            0.0,
+        )
+        assertEquals(
+            -1.0,
+            ChangeBookSourceQuality.tocTitleAffinity(listOf("第1章 序"), emptyList()),
+            0.0,
+        )
+    }
+
+    @Test
+    fun tocIdentityFalseWhenTitlesDiverge() {
+        val local = (1..80).map { "第${it}章 白虎线剧情$it" }
+        val junk = listOf(
+            "乱仑系列（未删节）",
+            "交易(校园NP，高H，全C)",
+            "窑子开张了(H)",
+            "被合租糙汉室友肏到哭",
+        ) + (1..20).map { "快穿诱行第${it}章" }
+        assertEquals(
+            false,
+            ChangeBookSourceQuality.tocIdentity(
+                localTotal = 189,
+                candidateTotal = junk.size,
+                localTitles = local,
+                candidateTitles = junk,
+            ),
+        )
+    }
+
+    @Test
+    fun tocIdentityFalseWhenMidAffinityButSizeBandFails() {
+        // Controlled mid affinity: only chapters 1 & 35 share exact bodies with cand (~2/12),
+        // other local bodies share almost no digrams with junk titles; size band fails.
+        val local = (1..189).map { i ->
+            when (i) {
+                1 -> "第1章 白虎开场戏码甲"
+                35 -> "第35章 青龙中段剧情乙"
+                else -> "第${i}章 紫薇后半独有戊己庚$i"
+            }
+        }
+        val cand = listOf(
+            "第1章 白虎开场戏码甲",
+            "第35章 青龙中段剧情乙",
+        ) + (1..52).map { "乱仑系列垃圾标题辛壬$it" }
+        val affinity = ChangeBookSourceQuality.tocTitleAffinity(local, cand)
+        assertTrue(
+            "affinity=$affinity expected mid band [${ChangeBookSourceQuality.TOC_TITLE_AFFINITY_BAD}," +
+                "${ChangeBookSourceQuality.TOC_TITLE_AFFINITY_OK})",
+            affinity >= ChangeBookSourceQuality.TOC_TITLE_AFFINITY_BAD &&
+                affinity < ChangeBookSourceQuality.TOC_TITLE_AFFINITY_OK,
+        )
+        assertFalse(ChangeBookSourceQuality.tocConsistent(189, cand.size))
+        assertEquals(
+            false,
+            ChangeBookSourceQuality.tocIdentity(
+                localTotal = 189,
+                candidateTotal = cand.size,
+                localTitles = local,
+                candidateTitles = cand,
+            ),
+        )
+    }
+
+    @Test
+    fun tocIdentityTrueForTruncatedSameBookHighAffinity() {
+        // Short pirate TOC that still shares almost all sampled titles ⇒ true despite size fail.
+        val local = (1..60).map { "第${it}章 白虎线剧情$it" }
+        val cand = (1..48).map { "第${it}章 白虎线剧情$it" }
+        assertEquals(
+            true,
+            ChangeBookSourceQuality.tocIdentity(
+                localTotal = 189,
+                candidateTotal = cand.size,
+                localTitles = local,
+                candidateTitles = cand,
+            ),
+        )
+    }
+
+    @Test
+    fun tocIdentityNullWhenTitlesMissingButSizeOk() {
+        assertEquals(
+            null,
+            ChangeBookSourceQuality.tocIdentity(
+                localTotal = 100,
+                candidateTotal = 90,
+                localTitles = emptyList(),
+                candidateTitles = emptyList(),
+            ),
+        )
+    }
+
+    @Test
+    fun tocIdentityFalseWhenTitlesMissingAndSizeBandFails() {
+        assertEquals(
+            false,
+            ChangeBookSourceQuality.tocIdentity(
+                localTotal = 189,
+                candidateTotal = 54,
+                localTitles = emptyList(),
+                candidateTitles = emptyList(),
+            ),
+        )
+    }
+
+    @Test
+    fun tocTitleAffinityIgnoresBareChapterNumBodies() {
+        val local = listOf("第1章", "第2章", "第3章")
+        val cand = listOf("第10章", "第20章", "第30章")
+        assertEquals(
+            0.0,
+            ChangeBookSourceQuality.tocTitleAffinity(local, cand),
+            0.0,
+        )
+    }
+
+    @Test
+    fun smartScoreTocMatchDemotesStrongly() {
+        val base = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2493,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            latestMatch = null,
+            tocMatch = null,
+            respondTimeMs = 400,
+        )
+        val badToc = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2493,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            latestMatch = null,
+            tocMatch = false,
+            respondTimeMs = 400,
+        )
+        val okToc = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2493,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            latestMatch = true,
+            tocMatch = true,
+            respondTimeMs = 400,
+        )
+        assertTrue("badToc=$badToc should be below base=$base by ≥ toc penalty",
+            base - badToc >= ChangeBookSourceQuality.WRONG_BOOK_TOC_PENALTY)
+        assertTrue("badToc=$badToc okToc=$okToc", badToc < okToc)
+        // Length bonus must be capped when tocMatch=false (same as latest mismatch).
+        val uncappedLen = ChangeBookSourceQuality.smartScore(
+            measuredChars = 11595,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            tocMatch = null,
+            respondTimeMs = 400,
+        )
+        val cappedLen = ChangeBookSourceQuality.smartScore(
+            measuredChars = 11595,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            tocMatch = false,
+            respondTimeMs = 400,
+        )
+        assertTrue(
+            "uncapped=$uncappedLen capped=$cappedLen",
+            uncappedLen - cappedLen >= ChangeBookSourceQuality.WRONG_BOOK_TOC_PENALTY,
+        )
+    }
 }
 

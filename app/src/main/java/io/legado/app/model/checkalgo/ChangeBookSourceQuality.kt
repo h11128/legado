@@ -357,14 +357,14 @@ object ChangeBookSourceQuality {
      * 0..100 smart score for 换源 list. Pending / unknown → -1 (UI shows —).
      *
      * Within a verdict tier, length (continuous) + respondTime spread scores.
-     * [latestMatch] is independent of soft-meta badge visibility: hard tip mismatch
-     * must demote wrong-book long bodies (device: PO18 11595-char Ok ranked first).
+     * [latestMatch] / [tocMatch] are hard same-book signals (strong demote, not remove).
      */
     fun smartScore(
         measuredChars: Int,
         verdict: QualityVerdict?,
         contentRefSim: Double? = null,
         latestMatch: Boolean? = null,
+        tocMatch: Boolean? = null,
         tocMismatch: Boolean = false,
         respondTimeMs: Int = -1,
         userScore: Int = 0,
@@ -383,7 +383,7 @@ object ChangeBookSourceQuality {
         }
         val tipMatch = latestMatch
         var lengthBonus = lengthSmartBonus(measuredChars, expectedChars)
-        if (tipMatch == false) {
+        if (tipMatch == false || tocMatch == false) {
             // Wrong-book long shells must not win on raw length alone.
             lengthBonus = lengthBonus.coerceAtMost(WRONG_BOOK_LENGTH_CAP)
         }
@@ -402,7 +402,11 @@ object ChangeBookSourceQuality {
             false -> -WRONG_BOOK_LATEST_PENALTY
             null -> 0
         }
-        if (tocMismatch) score -= 3
+        score += when (tocMatch) {
+            true -> 5
+            false -> -WRONG_BOOK_TOC_PENALTY
+            null -> if (tocMismatch) -3 else 0
+        }
         score += respondSmartBonus(respondTimeMs)
         score += when {
             userScore > 0 -> 8
@@ -452,6 +456,11 @@ object ChangeBookSourceQuality {
     const val WRONG_BOOK_LENGTH_CAP = 4
     /** Hard latest mismatch penalty — must outweigh length/speed on wrong Ok rows. */
     const val WRONG_BOOK_LATEST_PENALTY = 22
+    /** Hard TOC identity mismatch (title affinity / size band). */
+    const val WRONG_BOOK_TOC_PENALTY = 20
+    const val TOC_TITLE_SAMPLE = 12
+    const val TOC_TITLE_AFFINITY_OK = 0.28
+    const val TOC_TITLE_AFFINITY_BAD = 0.12
 
     /**
      * TOC sizes are consistent enough to be the same book progression.
@@ -461,6 +470,75 @@ object ChangeBookSourceQuality {
         if (localTotal <= 0 || candidateTotal <= 0) return true
         val ratio = candidateTotal.toDouble() / localTotal.toDouble()
         return ratio in TOC_MIN_RATIO..TOC_MAX_RATIO
+    }
+
+    /**
+     * Mean max digram affinity of sampled local chapter titles vs candidate TOC.
+     * Returns -1.0 when either side has no usable titles.
+     */
+    fun tocTitleAffinity(
+        localTitles: List<String>,
+        candidateTitles: List<String>,
+        sampleSize: Int = TOC_TITLE_SAMPLE,
+    ): Double {
+        val local = localTitles.map { it.trim() }.filter { it.isNotEmpty() }
+        val cand = candidateTitles.map { it.trim() }.filter { it.isNotEmpty() }
+        if (local.isEmpty() || cand.isEmpty()) return -1.0
+        val probes = sampleTitlesEvenly(local, sampleSize)
+        val candBodies = cand.map { titleBodyAfterChapterNum(it, fallbackToFull = false) }
+        var sum = 0.0
+        for (title in probes) {
+            val body = titleBodyAfterChapterNum(title, fallbackToFull = false)
+            if (body.isEmpty()) {
+                sum += 0.0
+                continue
+            }
+            var best = 0.0
+            for (other in candBodies) {
+                if (other.isEmpty()) continue
+                val sim = ChangeChapterVerify.digramJaccard(body, other)
+                if (sim > best) best = sim
+            }
+            sum += best
+        }
+        return sum / probes.size
+    }
+
+    /**
+     * Same-book TOC identity for 换源 strong demote (not hard remove).
+     * High title affinity ⇒ true even when chapter counts differ (truncated pirate).
+     * Low affinity, or mid affinity + size band fail ⇒ false.
+     */
+    fun tocIdentity(
+        localTotal: Int,
+        candidateTotal: Int,
+        localTitles: List<String>,
+        candidateTitles: List<String>,
+    ): Boolean? {
+        val affinity = tocTitleAffinity(localTitles, candidateTitles)
+        val sizeOk = tocConsistent(localTotal, candidateTotal)
+        if (affinity < 0) {
+            return when {
+                localTotal <= 0 || candidateTotal <= 0 -> null
+                !sizeOk -> false
+                else -> null
+            }
+        }
+        if (affinity >= TOC_TITLE_AFFINITY_OK) return true
+        if (affinity < TOC_TITLE_AFFINITY_BAD) return false
+        return if (!sizeOk) false else null
+    }
+
+    private fun sampleTitlesEvenly(titles: List<String>, sampleSize: Int): List<String> {
+        if (titles.size <= sampleSize) return titles
+        if (sampleSize <= 1) return listOf(titles.first())
+        val out = ArrayList<String>(sampleSize)
+        val last = titles.lastIndex
+        for (i in 0 until sampleSize) {
+            val idx = (i * last.toDouble() / (sampleSize - 1)).toInt()
+            out.add(titles[idx])
+        }
+        return out
     }
 
     /**
@@ -491,9 +569,13 @@ object ChangeBookSourceQuality {
     }
 
     /** Drop leading 「第N章/回/…」 so shared chapter numbers do not inflate digram scores. */
-    internal fun titleBodyAfterChapterNum(title: String): String {
+    internal fun titleBodyAfterChapterNum(
+        title: String,
+        fallbackToFull: Boolean = true,
+    ): String {
         val stripped = title.replace(chapterPrefix, "").trim()
-        return stripped.ifEmpty { title.trim() }
+        if (stripped.isNotEmpty()) return stripped
+        return if (fallbackToFull) title.trim() else ""
     }
 
     private val chapterPrefix =

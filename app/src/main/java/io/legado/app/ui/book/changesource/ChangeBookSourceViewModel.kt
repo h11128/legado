@@ -537,6 +537,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 bookSourceParts.clear()
                 tocMap.clear()
                 bookMap.clear()
+                localTocTitlesCache = null
                 tocMapChapterCount = 0
                 wordCountEvalContext = null
                 wordCountEvalByLocalIndex.clear()
@@ -1071,7 +1072,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         if (AppConfig.changeSourceLoadWordCount) {
             loadBookWordCount(source, book, chapters)
         } else {
-            publishSearchBook(book.toSearchBook(), tocSize = chapters.size)
+            publishSearchBook(
+                book.toSearchBook(),
+                tocSize = chapters.size,
+                candTitles = chapters.map { it.title },
+            )
         }
     }
 
@@ -1192,14 +1197,22 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         if (contentBad) {
             mergeTier(searchBook.bookUrl, ChangeBookSourceQuality.TIER_CONTENT_BAD)
             missContentBadCount.incrementAndGet()
-            publishSearchBook(searchBook, tocSize = chapters.size)
+            publishSearchBook(
+                searchBook,
+                tocSize = chapters.size,
+                candTitles = chapters.map { it.title },
+            )
             applyBookQualityGates(force = false)
         } else {
             if (verdict == ChangeBookSourceQuality.QualityVerdict.Ok && processedContent != null) {
                 probeContentSamples[searchBook.bookUrl] = processedContent
                 qualityOkCount.incrementAndGet()
             }
-            publishSearchBook(searchBook, tocSize = chapters.size)
+            publishSearchBook(
+                searchBook,
+                tocSize = chapters.size,
+                candTitles = chapters.map { it.title },
+            )
             applyBookQualityGates(force = false)
         }
     }
@@ -1257,37 +1270,61 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         )
     }
 
-    private fun publishSearchBook(searchBook: SearchBook, tocSize: Int? = null) {
-        annotateMetaQuality(searchBook, tocSize)
+    private fun publishSearchBook(
+        searchBook: SearchBook,
+        tocSize: Int? = null,
+        candTitles: List<String>? = null,
+    ) {
+        annotateMetaQuality(searchBook, tocSize = tocSize, candTitles = candTitles)
         searchCallback?.searchSuccess(searchBook)
     }
 
-    private fun annotateMetaQuality(searchBook: SearchBook, tocSize: Int?) {
+    private fun annotateMetaQuality(
+        searchBook: SearchBook,
+        tocSize: Int? = null,
+        candTitles: List<String>? = null,
+    ) {
         val hitKey = searchBook.bookUrl
         val local = oldBook
         val referenceTrusted = wordCountEvalContext?.referenceTrusted != false
         val tags = searchBook.qualityTags.toMutableList()
-        var tocMismatch = false
+        var softTocMismatch = false
         val latestMatch = ChangeBookSourceQuality.latestMatchesLocal(
             local?.latestChapterTitle,
             searchBook.latestChapterTitle,
         )
-        if (tocSize != null &&
+        val candSize = tocSize ?: candTitles?.size
+        val tocMatch = if (candSize != null && candSize > 0) {
+            ChangeBookSourceQuality.tocIdentity(
+                localTotal = local?.totalChapterNum ?: 0,
+                candidateTotal = candSize,
+                localTitles = localTocTitles(),
+                candidateTitles = candTitles.orEmpty(),
+            )
+        } else {
+            // Keep prior hard identity when this publish has no TOC yet.
+            searchBook.tocMatch
+        }
+        if (tocMatch == false) {
+            mergeTier(hitKey, ChangeBookSourceQuality.TIER_TOC_BAD)
+            val label = getApplication<Application>().getString(R.string.change_source_toc_mismatch)
+            if (label !in tags) tags.add(label)
+        } else if (
+            tocMatch == null &&
+            candSize != null &&
             local != null &&
-            !ChangeBookSourceQuality.tocConsistent(local.totalChapterNum, tocSize)
+            !ChangeBookSourceQuality.tocConsistent(local.totalChapterNum, candSize) &&
+            ChangeBookSourceQuality.shouldShowTocMismatchBadge(
+                searchBook.chapterWordCount,
+                contentRefSimByOrigin[hitKey],
+                referenceTrusted = referenceTrusted,
+                verdict = searchBook.qualityVerdict,
+            )
         ) {
-            if (ChangeBookSourceQuality.shouldShowTocMismatchBadge(
-                    searchBook.chapterWordCount,
-                    contentRefSimByOrigin[hitKey],
-                    referenceTrusted = referenceTrusted,
-                    verdict = searchBook.qualityVerdict,
-                )
-            ) {
-                mergeTier(hitKey, ChangeBookSourceQuality.TIER_TOC_BAD)
-                tocMismatch = true
-                val label = getApplication<Application>().getString(R.string.change_source_toc_mismatch)
-                if (label !in tags) tags.add(label)
-            }
+            mergeTier(hitKey, ChangeBookSourceQuality.TIER_TOC_BAD)
+            softTocMismatch = true
+            val label = getApplication<Application>().getString(R.string.change_source_toc_mismatch)
+            if (label !in tags) tags.add(label)
         }
         // Hard tip mismatch always surfaces as a tag + score penalty, even when soft-meta
         // badge gates would hide "tip lag" on quality-OK + trusted local ref.
@@ -1298,35 +1335,60 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             if (label !in tags) tags.add(label)
         }
         searchBook.qualityTags = tags
+        searchBook.tocMatch = tocMatch
         refreshSmartScore(
             searchBook,
             latestMatch = latestMatch,
-            tocMismatch = tocMismatch,
+            tocMatch = tocMatch,
+            tocMismatch = softTocMismatch,
         )
     }
 
     protected fun refreshSmartScore(
         searchBook: SearchBook,
         latestMatch: Boolean? = null,
+        tocMatch: Boolean? = null,
         tocMismatch: Boolean? = null,
     ) {
         val tipMatch = latestMatch ?: ChangeBookSourceQuality.latestMatchesLocal(
             oldBook?.latestChapterTitle,
             searchBook.latestChapterTitle,
         )
-        val toc = tocMismatch ?: searchBook.qualityTags.any {
-            it.contains("目录") || it.contains("TOC", ignoreCase = true)
+        // Persist hard TOC identity on SearchBook so later refreshSmartScore calls
+        // (gates / user score / content demote) do not wash −20 into soft −3.
+        val hardToc = tocMatch ?: searchBook.tocMatch
+        if (tocMatch != null) {
+            searchBook.tocMatch = tocMatch
+        }
+        val softToc = when {
+            hardToc != null -> false
+            tocMismatch != null -> tocMismatch
+            else -> searchBook.qualityTags.any {
+                it.contains("目录") || it.contains("TOC", ignoreCase = true)
+            }
         }
         searchBook.smartScore = ChangeBookSourceQuality.smartScore(
             measuredChars = searchBook.chapterWordCount,
             verdict = searchBook.qualityVerdict,
             contentRefSim = contentRefSimByOrigin[searchBook.bookUrl],
             latestMatch = tipMatch,
-            tocMismatch = toc,
+            tocMatch = hardToc,
+            tocMismatch = softToc,
             respondTimeMs = searchBook.respondTime,
             userScore = getBookScore(searchBook),
             expectedChars = wordCountEvalContext?.expectedChars,
         )
+    }
+
+    /** Local chapter titles for TOC identity (session-cached). */
+    private var localTocTitlesCache: List<String>? = null
+
+    private fun localTocTitles(): List<String> {
+        localTocTitlesCache?.let { return it }
+        val book = oldBook ?: return emptyList()
+        val titles = appDb.bookChapterDao.getChapterList(book.bookUrl).map { it.title }
+        localTocTitlesCache = titles
+        return titles
     }
 
     /** Drop unfinished deep-probe pending rows after early-stop cancels deep jobs. */

@@ -80,6 +80,14 @@ data class SearchBook(
     @IgnoredOnParcel
     var smartScore: Int = -1
 
+    /**
+     * Hard TOC identity vs local book (session-only).
+     * null = unknown / not evaluated; false = strong demote in [smartScore].
+     */
+    @Ignore
+    @IgnoredOnParcel
+    var tocMatch: Boolean? = null
+
     override fun equals(other: Any?) = other is SearchBook && other.bookUrl == bookUrl
 
     override fun hashCode() = bookUrl.hashCode()
