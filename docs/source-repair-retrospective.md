@@ -12,6 +12,7 @@
 | `www.wuxianxs.cc` | skip | 403；同名站假友 |
 | `m.75zwz.com` | **fixed** | 清陈旧「发现失效」 |
 | `m.shuqixs.cc` | skip | CF Just a moment / 403 |
+| `m.shuhui8.cc` | skip | →shuhui9 后 search 空 + verify.html 墙 |
 
 ## 2026-08-09 tongrenquan.org — apex DNS 死、m. 活（known trap）
 
