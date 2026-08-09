@@ -96,7 +96,9 @@ Stop a stuck readable worker: `powershell -File scripts/shelf_restore/stop_reada
 
 Bookshelf books whose origin is still **enabled**, but source comment/group still says `搜索失效` / `Error` — spot-check + per-source repair queue:
 
-- Guide: [`shelf-stale-tag-source-queue.md`](shelf-stale-tag-source-queue.md)  
-- Runtime log: `temp/shelf_restore/queue/stale_tag_repair_queue.jsonl`  
+- Guide: [`shelf-stale-tag-source-queue.md`](shelf-stale-tag-source-queue.md)（top-10 已关门）  
+- Remaining candidates: [`shelf-stale-tag-remaining.md`](shelf-stale-tag-remaining.md)  
+- Runtime: `temp/shelf_restore/queue/stale_tag_repair_queue.jsonl`  
+- Remaining JSON / priority URLs: `temp/shelf_restore/queue/stale_tag_remaining_candidates.json`, `stale_tag_fixable_priority.urls.txt`  
 
 Unreadable shelf rows may rely on **auto-换源**; do not delete shelf-referenced URLs without origin check.  
