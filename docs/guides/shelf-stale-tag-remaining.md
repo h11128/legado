@@ -69,7 +69,7 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | URL | 结果 | 证据 |
 |-----|------|------|
 | `https://m.wfxs.tw` | **fixed / 校验成功** | 搜索改 `/s/?q=`+`.result-card`；目录 `/booklist/{id}/1.html` `#html_box`；正文 `#read_conent_box` |
-| `https://m.75zw.com` | skip | TLS 证书变成 facebook 域名；oneshot 已 disable |
+| `https://m.75zw.com` | **fixed migrate** | DNS 已 NXDOMAIN；→ `https://m.75zwz.com`（打开/目录/正文 OK；搜索仍返回热门假结果）；书架 15 remap |
 | `https://www.75zwz.com/` | fail:搜索失效 | 首页通；搜索页无结果节点 |
 | `https://m.lrxs.org` | skip | 占位页「Web accesible」跳转 Google |
 | `http://www.31xs.com` | fail:搜索失效 | 表单 `onsubmit=false` 纯 JS；常见 search 路径 404 |
