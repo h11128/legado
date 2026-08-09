@@ -151,6 +151,7 @@ def save_clone(
     origin_name: str | None,
     *,
     rewrite: bool,
+    db_path: Path | None = None,
 ) -> tuple[bool, str]:
     s = rewrite_host(donor, origin) if rewrite else deepcopy(donor)
     s["bookSourceUrl"] = origin
@@ -172,6 +173,18 @@ def save_clone(
     )
     msg = mcp.save_source(s, preserve_enabled=False)
     ok = "失败" not in msg
+    if ok and db_path is not None:
+        try:
+            from lib.legado_db_mutate import upsert_book_source
+
+            con = sqlite3.connect(str(db_path))
+            try:
+                upsert_book_source(con, s)
+                con.commit()
+            finally:
+                con.close()
+        except Exception as e:
+            print(f"warn: local upsert after clone failed: {e}", flush=True)
     return ok, msg[:160]
 
 
@@ -269,7 +282,9 @@ def main() -> int:
     else:
         mcp = LegadoMcp(connect_retries=8)
         for origin, tag, donor, on, rewrite in plan:
-            ok, msg = save_clone(mcp, origin, donor, tag, on, rewrite=rewrite)
+            ok, msg = save_clone(
+                mcp, origin, donor, tag, on, rewrite=rewrite, db_path=db
+            )
             row = {
                 "origin": origin,
                 "donor": donor.get("bookSourceUrl"),

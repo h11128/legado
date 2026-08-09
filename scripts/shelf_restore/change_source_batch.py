@@ -312,7 +312,10 @@ def main() -> None:
     )
     con.close()
     if not args.dry_run and not args.no_push and changed:
-        push_legado_db(db, pkg=PKG)
+        # Origins we remapped onto must survive; merge_live_sources also
+        # preserves any MCP mid-run saves.
+        require = sorted({c["to_origin"] for c in changed if c.get("to_origin")})
+        push_legado_db(db, pkg=PKG, require_source_urls=require or None)
         print("pushed")
     elif args.dry_run:
         print("dry-run: no push")

@@ -27,13 +27,16 @@ Slow session side-effects (same turn): fixed `sleep(3)×N` check polls after `fi
 | Layer | Change |
 |-------|--------|
 | Library | `pull_legado_db(..., wal=True)` checkpoints WAL into dest |
-| Library | `push_legado_db(..., require_source_urls=[…])` refuses stale snapshots |
+| Library | `push_legado_db(..., merge_live_sources=True)` **default**: re-pull device; merge URLs absent from work **and** absent from `{db}.pull_urls.json` baseline (clock-free; intentional deletes stay deleted) |
+| Library | `push_legado_db(..., require_source_urls=[…])` hard-refuse if listed URLs missing |
 | Library | `scripts/lib/legado_db_mutate.py` — `with_legado_db` / `upsert_book_source` / disable / remap |
 | CLI | `python scripts/legado-db-mutate.py …` |
-| MCP | `LegadoMcp.wait_check_done()` early-exit (no sleep×40) |
+| MCP | `LegadoMcp.wait_check_done()` early-exit on `running`/`finishedAt` |
+| shelf_restore | `readable_until_done` / `clone_donors` upsert into work DB after MCP save; batch/remap pass `require_source_urls` |
 | Skill trap | `adb_db_push_stale_snapshot_wipes_source` |
 | Discipline | MUST use mutate helper; ban MCP-save-then-stale-push |
-| Hook | `legado_adb_push_stale_mcp_race_ask` — ASK on any shell `push_legado_db(` except `legado-db-mutate.py` |
+| Hook | `legado_adb_push_stale_mcp_race_ask` — ASK on any shell `push_legado_db(` |
+
 
 ## Agent checklist
 

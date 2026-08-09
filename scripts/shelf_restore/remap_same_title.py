@@ -172,7 +172,21 @@ def main() -> int:
 
     if args.push and not args.dry_run:
         require_device()
-        push_legado_db(db, pkg=args.pkg)
+        # Keep enabled origins referenced by remaining shelf books.
+        con2 = sqlite3.connect(str(db))
+        try:
+            require = [
+                r[0]
+                for r in con2.execute(
+                    """
+                    SELECT DISTINCT origin FROM books
+                    WHERE origin IN (SELECT bookSourceUrl FROM book_sources WHERE enabled=1)
+                    """
+                )
+            ]
+        finally:
+            con2.close()
+        push_legado_db(db, pkg=args.pkg, require_source_urls=require or None)
         print("pushed", db)
     return 0
 

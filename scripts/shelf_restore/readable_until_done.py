@@ -180,9 +180,17 @@ def push_db() -> None:
         books = con.execute("select count(*) from books").fetchone()[0]
         if ic != "ok" or books < 10:
             raise RuntimeError(f"refuse push: integrity={ic} books={books}")
+        # URLs we must keep (working copy + anything MCP added mid-run via merge)
+        require = [
+            r[0]
+            for r in con.execute(
+                "SELECT bookSourceUrl FROM book_sources WHERE bookSourceComment "
+                "LIKE '%shelf-readable-restore%'"
+            )
+        ]
     finally:
         con.close()
-    push_legado_db(DB, pkg=PKG)
+    push_legado_db(DB, pkg=PKG, require_source_urls=require or None)
     time.sleep(2)
 
 
@@ -436,7 +444,18 @@ def _main_inner() -> None:
         )
         s["bookSourceComment"] = (s.get("bookSourceComment") or "") + "\n# shelf-readable-restore"
         msg = mcp.save_source(s)
-        return "失败" not in msg
+        ok = "失败" not in msg
+        if ok:
+            # Keep working DB in sync so a later push cannot wipe this URL
+            # even if merge_live_sources is somehow skipped.
+            try:
+                from lib.legado_db_mutate import upsert_book_source
+
+                upsert_book_source(con, s)
+                con.commit()
+            except Exception as e:
+                print(f"warn: local upsert after save_donor failed: {e}", flush=True)
+        return ok
 
     def apply_update(
         book_url_before: str,

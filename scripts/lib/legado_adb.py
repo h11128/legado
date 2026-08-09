@@ -102,6 +102,44 @@ def _adb_cat_bytes(pkg: str, remote_rel: str) -> bytes:
     )
 
 
+def _pull_urls_sidecar(dest: Path) -> Path:
+    return Path(str(dest) + ".pull_urls.json")
+
+
+def write_pull_urls_sidecar(dest: Path, urls: list[str]) -> Path:
+    """Record bookSourceUrl set at pull time (for safe post-MCP merge)."""
+    import json
+    import time
+
+    side = _pull_urls_sidecar(dest)
+    side.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pulled_at_ms": int(time.time() * 1000),
+                "urls": sorted(urls),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return side
+
+
+def read_pull_urls_sidecar(dest: Path) -> set[str] | None:
+    import json
+
+    side = _pull_urls_sidecar(dest)
+    if not side.is_file():
+        return None
+    try:
+        data = json.loads(side.read_text(encoding="utf-8"))
+        return {str(u) for u in (data.get("urls") or [])}
+    except (OSError, json.JSONDecodeError, TypeError):
+        return None
+
+
 def pull_legado_db(
     dest: Path,
     pkg: str = DEFAULT_PKG,
@@ -115,6 +153,9 @@ def pull_legado_db(
     MCP ``save_source`` often lands in the WAL only. Copying ``legado.db``
     alone then pushing that file **wipes** those rows. Default ``wal=True``
     pulls ``-wal``/``-shm`` beside dest and checkpoints into dest.
+
+    Also writes ``{dest}.pull_urls.json`` so ``push_legado_db(merge_live_sources)``
+    can merge only URLs that appeared on device *after* this pull.
     """
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -147,9 +188,95 @@ def pull_legado_db(
         ic = con.execute("pragma integrity_check").fetchone()[0]
         if ic != "ok":
             raise RuntimeError(f"integrity_check={ic}")
+        urls = [
+            r[0]
+            for r in con.execute("SELECT bookSourceUrl FROM book_sources")
+        ]
     finally:
         con.close()
+    write_pull_urls_sidecar(dest, urls)
     return dest
+
+
+def merge_book_sources_from_live_db(
+    work: Path,
+    live_db: Path,
+    *,
+    baseline_urls: set[str] | None = None,
+) -> list[str]:
+    """Copy ``book_sources`` rows in ``live_db`` that are missing from ``work``.
+
+    Local (work) rows for the same URL are kept. Returns inserted URLs.
+
+    If ``baseline_urls`` is provided (from ``{work}.pull_urls.json``):
+    - missing URL that was in baseline → intentional delete → skip
+    - missing URL not in baseline → appeared after pull (MCP) → insert
+
+    If ``baseline_urls`` is None: insert every live URL missing from work
+    (max wipe-protection; may resurrect intentional deletes).
+    """
+    work = Path(work)
+    live_db = Path(live_db)
+    live = sqlite3.connect(str(live_db))
+    dest = sqlite3.connect(str(work), timeout=60.0)
+    inserted: list[str] = []
+    try:
+        live_cols = [c[1] for c in live.execute("PRAGMA table_info(book_sources)")]
+        work_cols = [c[1] for c in dest.execute("PRAGMA table_info(book_sources)")]
+        if not live_cols or live_cols != work_cols:
+            raise RuntimeError(
+                f"book_sources schema mismatch live={live_cols!r} work={work_cols!r}"
+            )
+        have = {
+            r[0]
+            for r in dest.execute("SELECT bookSourceUrl FROM book_sources")
+        }
+        col_sql = ",".join(live_cols)
+        placeholders = ",".join("?" for _ in live_cols)
+        for row in live.execute(f"SELECT {col_sql} FROM book_sources"):
+            url = row[0]
+            if url in have:
+                continue
+            if baseline_urls is not None and url in baseline_urls:
+                # Present at original pull, omitted from work → intentional.
+                continue
+            dest.execute(
+                f"INSERT INTO book_sources ({col_sql}) VALUES ({placeholders})",
+                list(row),
+            )
+            inserted.append(str(url))
+            have.add(url)
+        dest.commit()
+    finally:
+        dest.close()
+        live.close()
+    return inserted
+
+
+def merge_live_book_sources_into(
+    work: Path,
+    pkg: str = DEFAULT_PKG,
+    *,
+    live_copy: Path | None = None,
+) -> list[str]:
+    """Pull device DB and insert post-pull MCP ``book_sources`` missing from ``work``.
+
+    Uses ``{work}.pull_urls.json`` baseline from ``pull_legado_db`` (clock-free).
+    Without sidecar, merges all missing live URLs (safer against wipe).
+    Does **not** merge ``books``.
+    """
+    work = Path(work)
+    baseline = read_pull_urls_sidecar(work)
+    tmp = Path(live_copy) if live_copy else work.parent / f".{work.name}.live_merge.db"
+    pull_legado_db(tmp, pkg=pkg, stop_app=True, wal=True, min_bytes=1000)
+    try:
+        return merge_book_sources_from_live_db(work, tmp, baseline_urls=baseline)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+            _pull_urls_sidecar(tmp).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def push_legado_db(
@@ -160,16 +287,33 @@ def push_legado_db(
     min_bytes: int = 1000,
     min_books: int = 10,
     require_source_urls: list[str] | None = None,
+    merge_live_sources: bool = True,
 ) -> None:
     """Push a working copy into the app's databases/legado.db (clears WAL).
 
-    Pass ``require_source_urls`` for any URL that must survive the push
-    (typically sources you just INSERTed). Pushing a pull taken *before*
-    MCP saved a new URL will delete that source — refuse if listed URLs
-    are missing from ``src``.
+    Default ``merge_live_sources=True`` re-pulls the device DB and inserts
+    ``book_sources`` that are missing from ``src`` **and** were not in
+    ``{src}.pull_urls.json`` (written by ``pull_legado_db``). That keeps
+    MCP saves after the original pull without resurrecting intentional deletes.
+
+    Pass ``require_source_urls`` for hard guarantees (e.g. URLs you just
+    INSERTed into ``src``). Set ``merge_live_sources=False`` only for
+    isolated fixture pushes that must not touch the phone first.
     """
+    src = Path(src)
     if not src.is_file() or src.stat().st_size < min_bytes:
         raise RuntimeError(f"refuse push of tiny/missing db: {src}")
+
+    merged: list[str] = []
+    if merge_live_sources:
+        merged = merge_live_book_sources_into(src, pkg=pkg)
+        if merged:
+            print(
+                f"push_legado_db: merged {len(merged)} live book_sources "
+                f"(first={merged[0]!r})",
+                file=sys.stderr,
+            )
+
     con = sqlite3.connect(str(src))
     try:
         ic = con.execute("pragma integrity_check").fetchone()[0]
@@ -192,11 +336,11 @@ def push_legado_db(
                     + ", ".join(missing)
                     + " — INSERT in this file first, or re-pull after MCP save"
                 )
-        else:
+        elif not merge_live_sources:
             print(
-                "warning: push_legado_db without require_source_urls — "
-                "MCP-saved sources missing from this file will be wiped "
-                "(use scripts/legado-db-mutate.py or pass require_source_urls)",
+                "warning: push_legado_db(merge_live_sources=False) without "
+                "require_source_urls — MCP-saved sources missing from this "
+                "file will be wiped",
                 file=sys.stderr,
             )
     finally:

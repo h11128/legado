@@ -30,7 +30,10 @@ Create and repair share the same close-out / improve gate — do not wait for th
  2026-08-09). Prefer `python scripts/legado-db-mutate.py` or
  `scripts.lib.legado_db_mutate.with_legado_db` — upsert/disable/remap in **one**
  pull, pass `require_source_urls`, then push. `pull_legado_db` is WAL-aware by
- default. Device check: `LegadoMcp.wait_check_done` (no fixed sleep×N).
+ default. **`push_legado_db` defaults `merge_live_sources=True`**: re-pulls device
+ and merges URLs that appeared after `{db}.pull_urls.json` baseline (intentional
+ deletes stay deleted; no phone/PC clock). Device check: `LegadoMcp.wait_check_done`
+ (no fixed sleep×N).
  Trap: `adb_db_push_stale_snapshot_wipes_source`.
  Postmortem: `docs/postmortem/2026-08-09-adb-db-push-wipes-mcp-source.md`.
 3. **One phone = one check/debug job** (MCP single-flight). Do **parallel PC** work
