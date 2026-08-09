@@ -80,6 +80,8 @@ Device smoke (2026-08-09): `assembleAppDebug` + install → logcat `DB version u
 
 P5 merge smoke (2026-08-09): `python scripts/rfc004-overlay-device-session.py --merge` → dual bind (fixture + 起点段评源) → logcat `ReviewOverlay merge providers=1 bucket=2` (peer align skip expected; merge path exercised).
 
+P5 merge **UI** (2026-08-09): save fixture B `legado-fixture://review-overlay-b` → `python scripts/rfc004-p5-merge-ui-session.py` → logcat `merge providers=2 bucket=5` → tap 章评角标 → `本章评论（2 源）` / `共 5 条评论` + 源徽章 → tap 行 → `ReviewDetailDialog` `共 2 条评论`（该源详情，A19）.
+
 
 Chapter-bucket is expected to work once bound; paragraph icons still need `ContentSplitVerified` (fixture URL only today) and at most one `paragraph_primary`.
 
