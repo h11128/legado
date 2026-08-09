@@ -71,11 +71,23 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | `https://m.wfxs.tw` | **fixed / 校验成功** | 搜索改 `/s/?q=`+`.result-card`；目录 `/booklist/{id}/1.html` `#html_box`；正文 `#read_conent_box` |
 | `https://m.75zw.com` | **fixed migrate** | DNS 已 NXDOMAIN；→ `https://m.75zwz.com`（打开/目录/正文 OK；搜索仍返回热门假结果）；书架 15 remap |
 | `https://www.75zwz.com/` | fail:搜索失效 | 首页通；搜索页无结果节点 |
-| `https://m.lrxs.org` | skip | 占位页「Web accesible」跳转 Google |
-| `http://www.31xs.com` | fail:搜索失效 | 表单 `onsubmit=false` 纯 JS；常见 search 路径 404 |
-| `http://www.b520.cc` | skip | 首页通；搜索路径 404 |
-| `https://m.ttshu8.com` | fail:搜索失效 | POST `/search.html` → **500** |
+| `https://m.lrxs.org` | skip（深挖确认） | 占位页「Web accesible」→Google；hunt empty；已禁用 |
+| `http://www.31xs.com` | **fixed**（无搜索） | 见下方 deep dig：正文 `qsbs.bb`；发现/打开校验成功 |
+| `http://www.b520.cc` | skip（深挖） | TOC `href="/"`；孪生手机不可达；见下方 |
+| `https://m.ttshu8.com` | **fixed**（无搜索） | POST 搜索 500；打开路径校验成功；见下方 |
 | `https://haitang123.net` | **fixed migrate** | 原站超时；用已有 `https://m.haitang4.com`（校验成功）；旧源 disable |
-| `http://apitt.kanshushenapp.com/` | skip | 随机跳 `gegedangbook.com`（L2 超时） |
+| `http://apitt.kanshushenapp.com/` | skip（深挖确认） | 跳转 gegedangbook 超时；`api_search` 404；hunt empty；已禁用 |
 
 串行日志：`temp/shelf_restore/queue/serial_9.log`
+
+## 2026-08-09 deep dig (session)
+
+| URL | Result | Evidence |
+|-----|--------|----------|
+| `http://www.31xs.com` | **fixed**（无搜索） | 搜索 meta refresh 回首页；正文 `qsbs.bb` base64；发现/打开校验成功 |
+| `http://www.b520.cc` | **skip** | TOC 几乎全 `href="/"`；孪生 `biquge5200.cc`/`b5200.org` PC 可搜可目录，手机 `23.224.*` Cronet 60s timeout |
+| `https://m.ttshu8.com` | **fixed**（无搜索） | POST `searchkey`→500；打开/目录/正文 OK，`checkSearch=false` 校验成功 |
+| `https://m.lrxs.org` | **skip** | Web accesible→Google；hunt empty；已禁用 |
+| `http://apitt.kanshushenapp.com/` | **skip** | api_search 404；gegedangbook 超时；hunt empty；已禁用 |
+
+说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。
