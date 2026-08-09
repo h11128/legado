@@ -1,6 +1,14 @@
 # Source repair retrospective
 
 
+## 2026-08-09 batch4 — 147xs / 16kbook / 31xs
+
+| URL | 结果 | 要点 |
+|-----|------|------|
+| `147xs.org` | skip | http 404；https 广告跳转壳 |
+| `16kbook.co` | **fixed migrate** | →`.net`；`article@html` 校验成功 |
+| `31xs.net` | skip | 403；`.com` 搜死 + 旧 ID 错书 |
+
 ## 2026-08-09 batch3 — dajiadu8 / baimashuwu / 18ys / 猫眼
 
 | URL | 结果 | 要点 |
