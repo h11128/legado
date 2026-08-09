@@ -82,6 +82,8 @@ P5 merge smoke (2026-08-09): `python scripts/rfc004-overlay-device-session.py --
 
 P5 merge **UI** (2026-08-09): save fixture B `legado-fixture://review-overlay-b` → `python scripts/rfc004-p5-merge-ui-session.py` → logcat `merge providers=2 bucket=5` → tap 章评角标 → `本章评论（2 源）` / `共 5 条评论` + 源徽章 → tap 行 → `ReviewDetailDialog` `共 2 条评论`（该源详情，A19）.
 
+P5 **real providers** (2026-08-09): 《诡秘之主》+ `起点本章说` + `QQ阅读书吧` → `python scripts/rfc004-p5-real-providers-ui-session.py` → logcat `merge providers=2 bucket=11194`（起点 11174 + QQ 20）→ UI `本章评论（2 源）` / 真本章说正文（如「赞美愚者」「king crimson!」）→ 行点击进起点详情 `共 11174 条评论`.
+
 
 Chapter-bucket is expected to work once bound; paragraph icons still need `ContentSplitVerified` (fixture URL only today) and at most one `paragraph_primary`.
 
