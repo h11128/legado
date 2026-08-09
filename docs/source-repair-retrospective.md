@@ -236,3 +236,10 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - Fake name from URL decode fixed: bookList empty on 词条未找到; name from h1/.word
 - Verify: novel key → 0 books; hello check 校验成功
 - App: isAcceptableChangeSourceHit (usable latest, author when local set, non-book intro)
+
+### 2026-08-09 PO18文学 https://www.jile1.com (toc related-list)
+- Trap: `multi_list_charts_toc` — 双 `ul.list-group.list-charts`；第二块是相关推荐黄链（非「最新几章」）
+- Fix: `ruleToc.chapterList` → `class.list-charts.0@li@a`（只取第一块正文目录）
+- Debug: 目录总数 **48**，最新/末章「第四十八章 显露真身」（不再吞推荐位）
+- Verify: `start_check_sources` → **校验成功** (~2.3s, keyword=我的)
+- Note: 换源 tocIdentity 降权仍保留作产品护栏；本修只清这家脏目录
