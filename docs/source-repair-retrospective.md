@@ -136,9 +136,12 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - Trap: `known:域名广告劫持 (pyzht)`。
 
 
-## 2026-08-09 m.92yanqing.com deep dig
+## 2026-08-09 m.92yanqing.com deep dig（再挖）
 
-- 手机 POST `/search/` Cronet 60s timeout；PC 不通；hunt empty。已禁用。
+- Gate `l1_unreachable`；`m`/`www`/apex 的 http+https 首页、POST `/search/`、书架 `/read/70675/` **PC 全 timeout**。
+- 手机：搜索 debug 35s 无响应；打开详情 `read/70675/` 30s 无响应。
+- `m.92yanqing.net` NXDOMAIN（库内已禁用）；hunt empty；旁路 `92yq.com`=「你好乐清」门户，`/read/…` 404，非孪生。
+- 手机 DB 将 `https://m.92yanqing.com` 置 `enabled=0`（此前文档写已禁用但源仍开着）。书架 5 靠自动换源。
 - Trap: `known:host_phone_timeout_no_mirror`。
 
 ## 2026-08-09 www.00ksw.com deep dig
