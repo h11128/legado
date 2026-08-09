@@ -248,13 +248,41 @@ if [[ "$START_SEEN" != "1" ]]; then
 fi
 
 DEADLINE=$((SECONDS + TIMEOUT_S))
+FINISH_SEEN=0
 while (( SECONDS < DEADLINE )); do
   if grep -q " finish " "$LOG" 2>/dev/null; then
     echo "log finish seen"
+    FINISH_SEEN=1
     break
   fi
   sleep 2
 done
+
+# Timed out without finish: force-stop the dialog so App wind-down emits finish.
+if [[ "$FINISH_SEEN" != "1" ]]; then
+  echo "WARN: no finish within ${TIMEOUT_S}s — force-stopping search" >&2
+  ui_dump "${OUT_REL}/_cs_ui_timeout.xml" || true
+  BTN="$(find_start_stop "${OUT_REL}/_cs_ui_timeout.xml" 2>/dev/null || echo "missing 0 0")"
+  STATE="$(echo "$BTN" | awk '{print $1}')"
+  X="$(echo "$BTN" | awk '{print $2}')"
+  Y="$(echo "$BTN" | awk '{print $3}')"
+  if [[ "$STATE" == "stop" && "$X" != "0" ]]; then
+    echo "force-stop tap ($X $Y)"
+    adb shell input tap "$X" "$Y"
+    FORCE_DEADLINE=$((SECONDS + 30))
+    while (( SECONDS < FORCE_DEADLINE )); do
+      if grep -q " finish " "$LOG" 2>/dev/null; then
+        echo "log finish seen after force-stop"
+        FINISH_SEEN=1
+        break
+      fi
+      sleep 1
+    done
+  else
+    echo "WARN: could not find stop button (state=$STATE)" >&2
+  fi
+fi
+
 sleep 2
 cleanup
 trap - EXIT

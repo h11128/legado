@@ -242,8 +242,17 @@ object ChangeBookSourceQuality {
     }
 
 
-    /** Stop asking more sources once this many quality-OK probes exist. */
+    /** Stop asking more sources once this many useful (Ok/Weak) probes exist. */
     const val EARLY_STOP_QUALITY_OK = 20
+
+    /** Plateau early-stop only after at least this many useful probes. */
+    const val EARLY_STOP_MIN_USEFUL_FOR_PLATEAU = 5
+
+    /**
+     * After [EARLY_STOP_MIN_USEFUL_FOR_PLATEAU] useful hits, stop when this many asks
+     * complete with no further useful increment (diminishing returns on huge pools).
+     */
+    const val EARLY_STOP_PLATEAU_ASKS = 150
 
     /** Minimum chapterWordCount to count as quality-OK for early-stop. */
     const val QUALITY_OK_MIN_CHARS = 400
@@ -279,11 +288,41 @@ object ChangeBookSourceQuality {
     const val TIER_SOFT_FAIL = 6
     const val TIER_UNKNOWN = 7
 
+    /** Why (or whether) early-stop should fire. */
+    enum class EarlyStopDecision {
+        None,
+        Target,
+        Plateau,
+    }
+
+    /** Content-probed rows that count toward early-stop「好源」. */
+    fun isEarlyStopUsefulVerdict(verdict: QualityVerdict?): Boolean =
+        verdict == QualityVerdict.Ok || verdict == QualityVerdict.Weak
+
+    /**
+     * Early-stop when useful count hits [target], or when useful growth plateaus
+     * after [minUsefulForPlateau] on a large ask pool.
+     */
     fun shouldEarlyStop(
-        qualityOkCount: Int,
+        usefulCount: Int,
         enabled: Boolean,
         target: Int = EARLY_STOP_QUALITY_OK,
-    ): Boolean = enabled && qualityOkCount >= target
+        completedAsks: Int = 0,
+        lastUsefulAtCompleted: Int = 0,
+        minUsefulForPlateau: Int = EARLY_STOP_MIN_USEFUL_FOR_PLATEAU,
+        plateauAsks: Int = EARLY_STOP_PLATEAU_ASKS,
+    ): EarlyStopDecision {
+        if (!enabled) return EarlyStopDecision.None
+        if (usefulCount >= target) return EarlyStopDecision.Target
+        if (
+            usefulCount >= minUsefulForPlateau &&
+            plateauAsks > 0 &&
+            completedAsks - lastUsefulAtCompleted >= plateauAsks
+        ) {
+            return EarlyStopDecision.Plateau
+        }
+        return EarlyStopDecision.None
+    }
 
     fun isQualityOkWordCount(chapterWordCount: Int): Boolean =
         chapterWordCount >= QUALITY_OK_MIN_CHARS

@@ -137,7 +137,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     /** Last content digram Jaccard vs local ref (origin → sim); used to suppress tip badges. */
     private val contentRefSimByOrigin = ConcurrentHashMap<String, Double>()
     private val completedProbeCount = AtomicInteger(0)
+    /** Useful content probes (Ok+Weak) toward early-stop「好源」. */
     private val qualityOkCount = AtomicInteger(0)
+    /** [completedProbeCount] value when [qualityOkCount] last increased. */
+    private val lastUsefulAtCompleted = AtomicInteger(0)
     private val earlyStopped = AtomicBoolean(false)
     /** Session counters for finish summary (logcat / AppLog). */
     private val searchHitCount = AtomicInteger(0)
@@ -550,6 +553,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 deepJobs.clear()
                 completedProbeCount.set(0)
                 qualityOkCount.set(0)
+                lastUsefulAtCompleted.set(0)
                 earlyStopped.set(false)
                 searchHitCount.set(0)
                 listPublishCount.set(0)
@@ -647,6 +651,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 deepJobs.clear()
                 completedProbeCount.set(0)
                 qualityOkCount.set(0)
+                lastUsefulAtCompleted.set(0)
                 earlyStopped.set(false)
                 _changeSourceProgress.value = ChangeSourceProgressUi()
                 askHostBucket = CheckHostTokenBucket(
@@ -804,22 +809,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     }
                     source
                 }.onEachIndexed { _, _ ->
-                    if (ChangeBookSourceQuality.shouldEarlyStop(
-                            qualityOkCount = qualityOkCount.get(),
-                            enabled = AppConfig.changeSourceEarlyStop,
-                            target = AppConfig.changeSourceEarlyStopCount,
-                        )
-                    ) {
-                        if (earlyStopped.compareAndSet(false, true)) {
-                            ChangeSourceLog.i(
-                                "early-stop qualityOk=${qualityOkCount.get()} " +
-                                    "target=${AppConfig.changeSourceEarlyStopCount}"
-                            )
-                            deepJobs.forEach { it.cancel() }
-                            publishProgress(early = true, force = true)
-                            currentCoroutineContext().cancel()
-                        }
-                    }
+                    tryTriggerEarlyStop()
                 }.onCompletion { cause ->
                     withContext(NonCancellable + IO) {
                         try {
@@ -1204,9 +1194,13 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             )
             applyBookQualityGates(force = false)
         } else {
-            if (verdict == ChangeBookSourceQuality.QualityVerdict.Ok && processedContent != null) {
-                probeContentSamples[searchBook.bookUrl] = processedContent
-                qualityOkCount.incrementAndGet()
+            if (ChangeBookSourceQuality.isEarlyStopUsefulVerdict(verdict)) {
+                if (verdict == ChangeBookSourceQuality.QualityVerdict.Ok &&
+                    processedContent != null
+                ) {
+                    probeContentSamples[searchBook.bookUrl] = processedContent
+                }
+                noteUsefulQuality()
             }
             publishSearchBook(
                 searchBook,
@@ -1217,46 +1211,81 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }
 
+    private fun noteUsefulQuality() {
+        // Set lastUseful before increment so concurrent tryTriggerEarlyStop cannot
+        // see a raised usefulCount with a stale lastUsefulAtCompleted (false plateau).
+        lastUsefulAtCompleted.set(completedProbeCount.get())
+        qualityOkCount.incrementAndGet()
+        tryTriggerEarlyStop()
+    }
+
+    private fun unnoteUsefulQualityIfNeeded(verdict: ChangeBookSourceQuality.QualityVerdict?) {
+        if (!ChangeBookSourceQuality.isEarlyStopUsefulVerdict(verdict)) return
+        qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
+    }
+
+    /** Target or plateau early-stop; safe to call from ask or deep threads. */
+    private fun tryTriggerEarlyStop() {
+        val decision = ChangeBookSourceQuality.shouldEarlyStop(
+            usefulCount = qualityOkCount.get(),
+            enabled = AppConfig.changeSourceEarlyStop,
+            target = AppConfig.changeSourceEarlyStopCount,
+            completedAsks = completedProbeCount.get(),
+            lastUsefulAtCompleted = lastUsefulAtCompleted.get(),
+        )
+        if (decision == ChangeBookSourceQuality.EarlyStopDecision.None) return
+        if (!earlyStopped.compareAndSet(false, true)) return
+        ChangeSourceLog.i(
+            "early-stop qualityOk=${qualityOkCount.get()} " +
+                "target=${AppConfig.changeSourceEarlyStopCount} " +
+                "reason=${decision.name.lowercase()} " +
+                "completed=${completedProbeCount.get()}"
+        )
+        deepJobs.forEach { it.cancel() }
+        publishProgress(early = true, force = true)
+        task?.cancel()
+    }
+
     /** Remove a pending/failed origin from the on-screen list + DB row. */
     private fun dropSearchBookOrigin(origin: String, reason: String) {
-        val (removed, wasOk) = synchronized(searchBooks) {
+        val (removed, wasUseful) = synchronized(searchBooks) {
             val doomed = searchBooks.filter { it.origin == origin }
             if (doomed.isEmpty()) return@synchronized Pair(emptyList(), false)
-            val ok = doomed.any {
-                it.qualityVerdict == ChangeBookSourceQuality.QualityVerdict.Ok
+            val useful = doomed.any {
+                ChangeBookSourceQuality.isEarlyStopUsefulVerdict(it.qualityVerdict)
             }
             searchBooks.removeAll { it.origin == origin }
-            Pair(doomed, ok)
+            Pair(doomed, useful)
         }
         if (removed.isEmpty()) return
-        if (wasOk) {
+        if (wasUseful) {
             qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
             probeContentSamples.remove(origin)
         }
         runCatching { appDb.searchBookDao.delete(*removed.toTypedArray()) }
         searchCallback?.upAdapter()
         ChangeSourceLog.i(
-            "list- drop origin=$origin reason=$reason wasOk=$wasOk size=${searchBooks.size}"
+            "list- drop origin=$origin reason=$reason wasOk=$wasUseful size=${searchBooks.size}"
         )
     }
 
     /** Remove one search hit (by bookUrl) so aggregator siblings stay listed. */
     private fun dropSearchBookHit(searchBook: SearchBook, reason: String) {
         val bookUrl = searchBook.bookUrl
-        val (removed, wasOk) = synchronized(searchBooks) {
+        val (removed, wasUseful) = synchronized(searchBooks) {
             val doomed = searchBooks.filter { it.bookUrl == bookUrl }
             if (doomed.isEmpty()) return@synchronized Pair(emptyList(), false)
-            val ok = doomed.any {
-                it.qualityVerdict == ChangeBookSourceQuality.QualityVerdict.Ok
+            val useful = doomed.any {
+                ChangeBookSourceQuality.isEarlyStopUsefulVerdict(it.qualityVerdict)
             }
             searchBooks.removeAll { it.bookUrl == bookUrl }
-            Pair(doomed, ok)
+            Pair(doomed, useful)
         }
         if (removed.isEmpty()) return
         if (reason == "content-bad" || reason.startsWith("consensus:")) {
             missContentBadCount.incrementAndGet()
         }
-        if (wasOk) {
+        if (wasUseful) {
             qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
         }
         probeContentSamples.remove(bookUrl)
@@ -1265,7 +1294,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         runCatching { appDb.searchBookDao.delete(*removed.toTypedArray()) }
         searchCallback?.upAdapter()
         ChangeSourceLog.i(
-            "list- drop hit origin=${searchBook.origin} reason=$reason wasOk=$wasOk " +
+            "list- drop hit origin=${searchBook.origin} reason=$reason wasOk=$wasUseful " +
                 "url=${bookUrl.take(80)} size=${searchBooks.size}"
         )
     }
@@ -1467,10 +1496,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private fun demoteSearchHitContent(searchBook: SearchBook, badge: String) {
         mergeTier(searchBook.bookUrl, ChangeBookSourceQuality.TIER_CONTENT_BAD)
         probeContentSamples.remove(searchBook.bookUrl)
-        val wasOk = searchBook.qualityVerdict == ChangeBookSourceQuality.QualityVerdict.Ok
-        if (wasOk) {
-            qualityOkCount.updateAndGet { (it - 1).coerceAtLeast(0) }
-        }
+        unnoteUsefulQualityIfNeeded(searchBook.qualityVerdict)
         // Keep measured char count; mark hijack via verdict + quality tag.
         searchBook.qualityVerdict = ChangeBookSourceQuality.QualityVerdict.Hijack
         if (badge !in searchBook.qualityTags) {
@@ -1492,7 +1518,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         searchCallback?.upAdapter()
         ChangeSourceLog.i(
             "list~ demote content-bad origin=${searchBook.origin} badge=$badge " +
-                "wasOk=$wasOk url=${searchBook.bookUrl.take(80)} size=${searchBooks.size}"
+                "url=${searchBook.bookUrl.take(80)} size=${searchBooks.size}"
         )
     }
 

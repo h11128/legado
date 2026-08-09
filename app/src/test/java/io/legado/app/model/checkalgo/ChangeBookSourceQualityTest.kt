@@ -274,10 +274,91 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
-    fun earlyStopUsesThreshold() {
-        assertFalse(ChangeBookSourceQuality.shouldEarlyStop(19, enabled = true, target = 20))
-        assertTrue(ChangeBookSourceQuality.shouldEarlyStop(20, enabled = true, target = 20))
-        assertFalse(ChangeBookSourceQuality.shouldEarlyStop(100, enabled = false, target = 20))
+    fun earlyStopUsesThresholdAndPlateau() {
+        assertEquals(
+            ChangeBookSourceQuality.EarlyStopDecision.None,
+            ChangeBookSourceQuality.shouldEarlyStop(19, enabled = true, target = 20),
+        )
+        assertEquals(
+            ChangeBookSourceQuality.EarlyStopDecision.Target,
+            ChangeBookSourceQuality.shouldEarlyStop(20, enabled = true, target = 20),
+        )
+        assertEquals(
+            ChangeBookSourceQuality.EarlyStopDecision.None,
+            ChangeBookSourceQuality.shouldEarlyStop(100, enabled = false, target = 20),
+        )
+        assertEquals(
+            ChangeBookSourceQuality.EarlyStopDecision.Plateau,
+            ChangeBookSourceQuality.shouldEarlyStop(
+                usefulCount = 5,
+                enabled = true,
+                target = 20,
+                completedAsks = 200,
+                lastUsefulAtCompleted = 50,
+            ),
+        )
+        assertEquals(
+            ChangeBookSourceQuality.EarlyStopDecision.None,
+            ChangeBookSourceQuality.shouldEarlyStop(
+                usefulCount = 4,
+                enabled = true,
+                target = 20,
+                completedAsks = 200,
+                lastUsefulAtCompleted = 50,
+            ),
+        )
+        assertEquals(
+            ChangeBookSourceQuality.EarlyStopDecision.Target,
+            ChangeBookSourceQuality.shouldEarlyStop(
+                usefulCount = 20,
+                enabled = true,
+                target = 20,
+                completedAsks = 200,
+                lastUsefulAtCompleted = 50,
+            ),
+        )
+        assertEquals(
+            ChangeBookSourceQuality.EarlyStopDecision.None,
+            ChangeBookSourceQuality.shouldEarlyStop(
+                usefulCount = 5,
+                enabled = true,
+                target = 20,
+                completedAsks = 199,
+                lastUsefulAtCompleted = 50,
+                plateauAsks = 150,
+            ),
+        )
+        assertEquals(
+            ChangeBookSourceQuality.EarlyStopDecision.None,
+            ChangeBookSourceQuality.shouldEarlyStop(
+                usefulCount = 5,
+                enabled = true,
+                target = 20,
+                completedAsks = 500,
+                lastUsefulAtCompleted = 50,
+                plateauAsks = 0,
+            ),
+        )
+    }
+
+    @Test
+    fun earlyStopUsefulVerdictIsOkOrWeak() {
+        assertTrue(
+            ChangeBookSourceQuality.isEarlyStopUsefulVerdict(
+                ChangeBookSourceQuality.QualityVerdict.Ok,
+            ),
+        )
+        assertTrue(
+            ChangeBookSourceQuality.isEarlyStopUsefulVerdict(
+                ChangeBookSourceQuality.QualityVerdict.Weak,
+            ),
+        )
+        assertFalse(
+            ChangeBookSourceQuality.isEarlyStopUsefulVerdict(
+                ChangeBookSourceQuality.QualityVerdict.TooShort,
+            ),
+        )
+        assertFalse(ChangeBookSourceQuality.isEarlyStopUsefulVerdict(null))
     }
 
     @Test

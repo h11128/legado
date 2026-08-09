@@ -33,7 +33,11 @@ RE_FINISH = re.compile(
     r"missEmpty=(?P<missEmpty>\d+) missTimeout=(?P<missTimeout>\d+) missError=(?P<missError>\d+) "
     r"missContentBad=(?P<missContentBad>\d+)"
 )
-RE_EARLY = re.compile(r"early-stop qualityOk=(?P<qualityOk>\d+) target=(?P<target>\d+)")
+RE_EARLY = re.compile(
+    r"early-stop qualityOk=(?P<qualityOk>\d+) target=(?P<target>\d+)"
+    r"(?: reason=(?P<reason>\w+))?"
+    r"(?: completed=(?P<completed>\d+))?"
+)
 RE_WORD = re.compile(r"phase word-eval origin=\S+ reason=(?P<reason>\S+)")
 RE_WORD_MS = re.compile(
     r"phase word origin=\S+ chars=(?P<chars>-?\d+) .*?"
@@ -88,9 +92,12 @@ def parse(text: str) -> dict:
 
     max_in_flight = max((int(m.group("inFlight")) for m in progresses), default=0)
     max_deep = max((int(m.group("deep")) for m in progresses), default=0)
+    max_quality_ok = max((int(m.group("qualityOk")) for m in progresses), default=0)
     deep_cap = int(progresses[0].group("deepCap")) if progresses else 0
     ask_cap = int(progresses[0].group("askCap")) if progresses else 0
 
+    finish_quality = int(finish.group("qualityOk")) if finish else 0
+    early_quality = int(early.group("qualityOk")) if early else 0
     gates = {
         "has_start": start is not None,
         "has_finish": finish is not None,
@@ -98,21 +105,27 @@ def parse(text: str) -> dict:
         "deep_within_cap": max_deep <= deep_cap if deep_cap else True,
         "list_drop_on_bad": drop_reasons.get("content-bad", 0) > 0
         or word_reasons.get("ok", 0) + word_reasons.get("ok_stitch_override", 0) > 0,
-        "quality_ok_useful": (int(finish.group("qualityOk")) if finish else 0) >= 5
-        or (early is not None),
+        "quality_ok_useful": finish_quality >= 5
+        or early is not None
+        or max_quality_ok >= 5
+        or early_quality >= 5,
         "early_stop_honored": early is not None
         or (finish is not None and finish.group("early") == "false"),
         # Soft by default — require --expect-http-limits for FAIL (old logs lack the line).
         "http_limits_raised": http_limits is not None,
     }
-    # If earlyStop pref was on and target reached, expect early=true
+    # If earlyStop pref was on and an early-stop line exists (target or plateau) → honored.
     if start and start.group("earlyStop") == "true" and early:
         gates["early_stop_honored"] = True
     elif start and start.group("earlyStop") == "true" and finish and finish.group("early") != "true":
-        # finished full pool without early — only fail if qualityOk never hit target
+        # Finished full pool without early — fail only if never reached target *and*
+        # progress never showed a useful plateau floor (qualityOk never useful).
         target = int(start.group("earlyStopTarget"))
-        q = int(finish.group("qualityOk")) if finish else 0
+        q = max(finish_quality, max_quality_ok)
         gates["early_stop_honored"] = q < target
+    elif start and start.group("earlyStop") == "true" and finish is None and early is None:
+        # Timed out mid-pool with earlyStop armed and no stop event.
+        gates["early_stop_honored"] = False
 
     soft_gates = {"http_limits_raised", "deep_within_cap"}
     failed = [k for k, v in gates.items() if not v and k not in soft_gates]
@@ -129,6 +142,7 @@ def parse(text: str) -> dict:
         "early_stop": {k: early.group(k) for k in early.groupdict()} if early else None,
         "max_in_flight": max_in_flight,
         "max_deep": max_deep,
+        "max_quality_ok": max_quality_ok,
         "ask_cap": ask_cap,
         "deep_cap": deep_cap,
         "list_plus": len(RE_LIST_PLUS.findall(text)),
@@ -184,6 +198,7 @@ def to_markdown(data: dict, log_path: str) -> str:
         f"| prefs | loadWordCount={s.get('loadWordCount')} earlyStop={s.get('earlyStop')} target={s.get('earlyStopTarget')} |",
         f"| max inFlight / askCap | {data['max_in_flight']} / {data['ask_cap']} |",
         f"| max deep / deepCap | {data['max_deep']} / {data['deep_cap']} |",
+        f"| max qualityOk (progress) | {data.get('max_quality_ok')} |",
         f"| hits / list+ | {data['hits']} / {data['list_plus']} |",
         f"| http-limits | {data.get('http_limits') or '(none)'} |",
         f"| word_ok ms p50/p90 | {t.get('ms_p50')}/{t.get('ms_p90')} (n={t.get('n')}) |",
