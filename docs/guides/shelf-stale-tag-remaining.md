@@ -122,5 +122,6 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `http://m.hetunxs.com` | **skip**（已禁用） | CF `Attention Required` **403**（PC/手机同）；hunt empty；OSINT 无后继。书架 3 靠换源。Trap：`http_403_home_hunt_empty` |
 | `https://www.xinshuw.com` | **skip**（已禁用） | gate migrate→`.cc` 是 **Z-Blog 媒体假友**（旧 `/novel_*`/搜索 404）；OSINT `xinshuw.net` 手机 POST **CF 522**；`hunt --probe` empty。书架 2 靠换源。Trap：`migrate_false_friend_cms`（初记 `主机跳转`） |
 | `https://quark.sm.cn/` | **skip**（含孪生已禁用） | DOM 改 `qk-title-text` 后能搜到书，但首条第三方 `maoshu520` **403**/目录空；聚合源无稳定本站 TOC。书架 3 靠换源。Trap：`meta_search_third_party_toc_dead` |
+| `http://www.huanxiangji.com` | **fixed migrate** | → `https://www.huanxiangji.net`；桌面 UA **403 blocked**，改 Android Mobile UA；TOC `.section-list`；搜索 POST 仍 403；`checkSearch=false`+发现 **校验成功**。书架 2 origin remap（站内无同名精确书靠换源）。Trap：`desktop_ua_blocked_mobile_ok` / `主机跳转` |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
