@@ -114,6 +114,7 @@
     <string name="review_origin_bind_miss">该源未找到同名书</string>
     <string name="review_origin_clear">清除段评源</string>
     <string name="review_origin_searching">正在搜索段评源…</string>
+    <string name="review_origin_auto_bind_ask">发现段评源「%1$s」，是否绑定？</string>
 
     <string name="about_description">
         \u3000\u3000这是一款使用 Kotlin 全新开发的开源的阅读软件，欢迎您的加入。

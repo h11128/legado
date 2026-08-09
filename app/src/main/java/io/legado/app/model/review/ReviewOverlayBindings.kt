@@ -36,6 +36,41 @@ object ReviewOverlayBindings {
         providerName: String,
         providerAuthor: String,
     ) {
+        bind(
+            contentBook = contentBook,
+            providerSourceUrl = providerSourceUrl,
+            providerBookUrl = providerBookUrl,
+            providerName = providerName,
+            providerAuthor = providerAuthor,
+            bindMode = BookReviewBinding.MODE_MANUAL,
+        )
+    }
+
+    fun bindAuto(
+        contentBook: Book,
+        providerSourceUrl: String,
+        providerBookUrl: String,
+        providerName: String,
+        providerAuthor: String,
+    ) {
+        bind(
+            contentBook = contentBook,
+            providerSourceUrl = providerSourceUrl,
+            providerBookUrl = providerBookUrl,
+            providerName = providerName,
+            providerAuthor = providerAuthor,
+            bindMode = BookReviewBinding.MODE_AUTO,
+        )
+    }
+
+    private fun bind(
+        contentBook: Book,
+        providerSourceUrl: String,
+        providerBookUrl: String,
+        providerName: String,
+        providerAuthor: String,
+        bindMode: String,
+    ) {
         upsert(
             BookReviewBinding(
                 contentBookUrl = contentBook.bookUrl,
@@ -46,7 +81,7 @@ object ReviewOverlayBindings {
                 providerBookUrl = providerBookUrl,
                 providerName = providerName,
                 providerAuthor = providerAuthor,
-                bindMode = BookReviewBinding.MODE_MANUAL,
+                bindMode = bindMode,
             )
         )
     }

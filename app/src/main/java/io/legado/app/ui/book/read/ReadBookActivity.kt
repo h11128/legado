@@ -82,6 +82,7 @@ import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.ReviewRuleParser
 import io.legado.app.model.jsSource.JsSourceReview
+import io.legado.app.model.review.ReviewOverlayAutoBind
 import io.legado.app.model.review.ReviewOverlayBindings
 import io.legado.app.model.review.ReviewOverlayLoader
 import io.legado.app.model.review.ReviewOverlayMode
@@ -92,6 +93,7 @@ import io.legado.app.model.review.ProviderParaRef
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.isJsonObject
+import io.legado.app.utils.indefiniteSnackbar
 import io.legado.app.model.localBook.EpubFile
 import io.legado.app.model.localBook.MobiFile
 import io.legado.app.receiver.NetworkChangedListener
@@ -319,6 +321,9 @@ class ReadBookActivity : BaseReadBookActivity(),
      */
     private var overlayReviewMapPending = false
     private var overlayReviewLoadCoroutine: Coroutine<*>? = null
+    /** RFC-004 P3: at most one auto-bind propose per content bookUrl per Activity instance. */
+    private val reviewAutoBindProposedUrls = HashSet<String>()
+    private var reviewAutoBindJob: Job? = null
     private val reviewSummaryCache = object :
         LinkedHashMap<String, ReviewRuleParser.SummaryResult>(8, 0.75f, true) {
         override fun removeEldestEntry(
@@ -1886,10 +1891,52 @@ class ReadBookActivity : BaseReadBookActivity(),
             ReviewOverlayMode.Unbound -> {
                 ReviewOverlaySessionStore.clear()
                 clearReviewSummaryProviders()
+                maybeProposeReviewAutoBind(book)
             }
             ReviewOverlayMode.NativeOnly, ReviewOverlayMode.Native -> {
                 ReviewOverlaySessionStore.clear()
                 loadNativeReviewSummaryIfNeeded(book, originSource, chapterIndex)
+            }
+        }
+    }
+
+    /**
+     * RFC-004 P3: async auto-discovery when unbound. Never silent-bind; snackbar confirm required.
+     * At most one propose attempt per content bookUrl for this Activity instance.
+     */
+    private fun maybeProposeReviewAutoBind(book: Book) {
+        if (!AppConfig.reviewOverlayEnabled || !AppConfig.reviewOverlayAutoBind) return
+        val bookUrl = book.bookUrl
+        if (!reviewAutoBindProposedUrls.add(bookUrl)) return
+        reviewAutoBindJob?.cancel()
+        reviewAutoBindJob = lifecycleScope.launch(IO) {
+            val proposal = ReviewOverlayAutoBind.propose(book) ?: return@launch
+            if (ReadBook.book?.bookUrl != bookUrl) return@launch
+            withContext(Main) {
+                if (isFinishing || isDestroyed) return@withContext
+                if (ReviewOverlayBindings.get(bookUrl) != null) return@withContext
+                val label = proposal.source.bookSourceName.ifBlank { proposal.source.bookSourceUrl }
+                binding.root.indefiniteSnackbar(
+                    getString(R.string.review_origin_auto_bind_ask, label),
+                    getString(R.string.dialog_confirm),
+                ) {
+                    val contentBook = ReadBook.book ?: return@indefiniteSnackbar
+                    if (contentBook.bookUrl != bookUrl) return@indefiniteSnackbar
+                    Coroutine.async(lifecycleScope, IO) {
+                        ReviewOverlayBindings.bindAuto(
+                            contentBook = contentBook,
+                            providerSourceUrl = proposal.source.bookSourceUrl,
+                            providerBookUrl = proposal.providerBookUrl,
+                            providerName = proposal.providerName,
+                            providerAuthor = proposal.providerAuthor,
+                        )
+                    }.onSuccess(Main) {
+                        toastOnUi(R.string.review_origin_bind_ok)
+                        loadReviewSummaryIfNeeded()
+                    }.onError {
+                        AppLog.put("段评源自动绑定失败\n${it.localizedMessage}", it)
+                    }
+                }
             }
         }
     }

@@ -116,6 +116,7 @@
     <string name="review_origin_bind_miss">No matching book on that source</string>
     <string name="review_origin_clear">Clear review source</string>
     <string name="review_origin_searching">Searching review source…</string>
+    <string name="review_origin_auto_bind_ask">Found review source %1$s for this book. Bind?</string>
 
     <string name="about_description">
         \u3000\u3000 This is an open source reading software newly developed by Kotlin, welcome to join us.
