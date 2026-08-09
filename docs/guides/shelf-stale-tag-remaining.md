@@ -87,7 +87,7 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | `http://www.31xs.com` | **fixed**（无搜索） | 搜索 meta refresh 回首页；正文 `qsbs.bb` base64；发现/打开校验成功 |
 | `http://www.b520.cc` | **skip** | 再挖：首页通但 search+书架5本全 404；TOC `href="/"`≈92%（样例 2268→180 真链）；孪生 `biquge5200.cc`/`b5200.org` 手机仍 23.224 超时；hunt empty；已禁用 |
 | `https://m.ttshu8.com` | **fixed**（无搜索） | POST `searchkey`→500；打开/目录/正文 OK，`checkSearch=false` 校验成功 |
-| `https://m.lrxs.org` | **skip** | Web accesible→Google；hunt empty；已禁用 |
+| `https://m.lrxs.org` | **skip** | 再挖：仍 `Web accesible`→Google；书架6+搜索 404；孪生 `lrxsw.org` CF **522**；hunt empty；已禁用 |
 | `http://apitt.kanshushenapp.com/` | **skip** | api_search 404；gegedangbook 超时；hunt empty；已禁用 |
 | `https://www.121ds.cc/` | **skip** | 23.224 超时；.com 影视非孪生；hunt empty；已禁用 |
 | `https://www.27k.net` | **skip** | PC/手机 60s timeout；hunt empty；已禁用 |
