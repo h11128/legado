@@ -56,7 +56,7 @@ Re-run: `python scripts/rfc004-autobind-device-session.py`
 阅读设置 also exposes:
 
 - **跨源段评** (`reviewOverlayEnabled`, default on)
-- **显示段评图标** (`reviewOverlayAllowParagraphIcons`, default on; still needs fixture/ContentSplitVerified authority)
+- **显示段评图标** (`reviewOverlayAllowParagraphIcons`, default on; needs ContentSplitVerified **and** content origin host match — fixture always; 起点 only when shelf origin is `*.qidian.com`)
 
 ## Fail expectations
 

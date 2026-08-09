@@ -161,4 +161,18 @@ class ReviewOverlayAutoBindTest {
         assertEquals("https://fast", ordered.first().bookSourceUrl)
         assertTrue(ordered.size == 2)
     }
+
+    @Test
+    fun partitionSilentAndConfirmSplitsFanqie() {
+        val qidian = proposal("https://m.qidian.com#rfc004-review")
+        val fanqie = proposal("https://fanqienovel.com#rfc004-review")
+        val qq = proposal("https://book.qq.com#rfc004-review")
+        val (silent, confirm) = ReviewOverlayAutoBind.partitionSilentAndConfirm(
+            listOf(qidian, fanqie, qq),
+        )
+        assertEquals(2, silent.size)
+        assertEquals(1, confirm.size)
+        assertTrue(ReviewOverlayAutoBind.requiresBindConfirm(fanqie.source.bookSourceUrl))
+        assertTrue(!ReviewOverlayAutoBind.requiresBindConfirm(qidian.source.bookSourceUrl))
+    }
 }

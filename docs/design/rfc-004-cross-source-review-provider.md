@@ -525,8 +525,8 @@ DAO: `listByContentBookUrl`, `getByContentAndProvider`, `setEnabled`, `setParagr
 
 ### 12.6 UX / prefs
 
-- Book info「段评源」: multi-select (enable, reorder, set paragraph primary, remove).
-- Auto-bind (P3): never silently fill N providers; confirm “发现 K 个，是否添加？”.
+- Book info「段评源」: multi-select (enable, reorder via 上移/下移, set paragraph primary, remove).
+- Auto-bind (P3+): default **on**; unique same-book hits bind **silently** up to `mergeMax`. High-risk hosts (番茄社区镜像 / 七猫) require snackbar confirm. Toast lists bound source names.
 
 | Pref | Default | Meaning |
 |------|---------|---------|

@@ -61,7 +61,9 @@ python scripts/push-rfc004-review-sources.py
 ### Overlay UI
 
 API + `getReviewSummary`/`Detail` wiring verified via device ajax/`debug_source` for the providers above.  
-**In-reader chapter-bucket overlay bind + logcat was not re-run for every new URL** (fixture overlay evidence remains in the guide). Next: bind 段评源 on a matching shelf title and confirm `ReviewOverlay … bucket=` logcat.
+真机全套截图验收：`python scripts/rfc004-run-acceptance.py`（见 `docs/guides/rfc-004-autobind-acceptance.md`）。
+
+**段角标门禁（2026-08-09+）：** `ContentSplitVerified` 仅夹具 + 起点；且书架正文 `origin` 须为起点域名族（`*.qidian.com`）才开硬映射。盗版正文绑起点 → 只章评，不开段角标（避免 coverage 塌 / 错段）。
 
 ## Overlay test (章评)
 
@@ -70,7 +72,7 @@ API + `getReviewSummary`/`Detail` wiring verified via device ajax/`debug_source`
 3. Book info → **段评源** → pick the provider → confirm.
 4. Open a chapter whose title exists on the **provider TOC** when the provider is chapter-scoped (起点/晋江); 番茄/QQ 书评是全书桶，任意对上的章都可出章评气泡。
 5. Expect chapter-bucket bubble; tap → real comments.
-6. Paragraph icons: still gated by `ContentSplitVerified` (fixture URL only unless authority extended). 起点段号虽可与自身 `getContent` 对齐（见上探针），跨正文书源仍需 coverage 证据。
+6. Paragraph icons: gated by `ContentSplitVerified` **and** content origin host family (fixture always; 起点 only when shelf origin is qidian). Cross-origin pirate body stays chapter-bucket only.
 
 ## Notes
 

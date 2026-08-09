@@ -1015,6 +1015,8 @@ class BookInfoActivity :
                 listOf(
                     getString(R.string.review_origin_set_primary),
                     getString(R.string.review_origin_toggle_enable),
+                    getString(R.string.review_origin_move_up),
+                    getString(R.string.review_origin_move_down),
                     getString(R.string.review_origin_remove_one),
                 ),
             ) { _, _, action ->
@@ -1028,7 +1030,17 @@ class BookInfoActivity :
                         row.providerSourceUrl,
                         !row.enabled,
                     )
-                    2 -> ReviewOverlayBindings.remove(book.bookUrl, row.providerSourceUrl)
+                    2 -> ReviewOverlayBindings.moveSortOrder(
+                        book.bookUrl,
+                        row.providerSourceUrl,
+                        -1,
+                    )
+                    3 -> ReviewOverlayBindings.moveSortOrder(
+                        book.bookUrl,
+                        row.providerSourceUrl,
+                        1,
+                    )
+                    4 -> ReviewOverlayBindings.remove(book.bookUrl, row.providerSourceUrl)
                 }
                 upReviewOrigin(book)
             }

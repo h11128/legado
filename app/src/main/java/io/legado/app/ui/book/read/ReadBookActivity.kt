@@ -326,6 +326,8 @@ class ReadBookActivity : BaseReadBookActivity(),
     /** RFC-004 P3: at most one auto-bind propose per content bookUrl per Activity instance. */
     private val reviewAutoBindProposedUrls = HashSet<String>()
     private var reviewAutoBindJob: Job? = null
+    /** True while a high-risk bind snackbar is showing (blocks re-scan). */
+    private var reviewAutoBindConfirmBookUrl: String? = null
     private val reviewSummaryCache = object :
         LinkedHashMap<String, ReviewRuleParser.SummaryResult>(8, 0.75f, true) {
         override fun removeEldestEntry(
@@ -1997,6 +1999,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (!AppConfig.reviewOverlayEnabled || !AppConfig.reviewOverlayAutoBind) return
         val bookUrl = book.bookUrl
         if (bookUrl in reviewAutoBindProposedUrls) return
+        if (reviewAutoBindConfirmBookUrl == bookUrl) return
         if (reviewAutoBindJob?.isActive == true) return
         reviewAutoBindJob = lifecycleScope.launch(IO) {
             val existing = ReviewOverlayBindings.list(bookUrl)
@@ -2039,23 +2042,112 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
             if (ReadBook.book?.bookUrl != bookUrl) return@launch
             val contentBook = ReadBook.book ?: return@launch
-            val added = runCatching {
-                ReviewOverlayBindings.bindAutoAll(contentBook, capped, mergeMax)
-            }.onFailure {
-                AppLog.put("段评源自动绑定失败\n${it.localizedMessage}", it)
-            }.getOrDefault(0)
-            if (added <= 0) return@launch
-            val remaining = mergeMax - ReviewOverlayBindings.list(bookUrl).size
-            if (remaining <= 0) {
-                reviewAutoBindProposedUrls.add(bookUrl)
+            val (silent, risky) = ReviewOverlayAutoBind.partitionSilentAndConfirm(capped)
+            val silentToBind = ReviewOverlayBindings.selectNewAutoProposals(
+                proposals = silent,
+                existingProviderUrls = ReviewOverlayBindings.list(bookUrl)
+                    .map { it.providerSourceUrl }
+                    .toSet(),
+                existingCount = ReviewOverlayBindings.list(bookUrl).size,
+                mergeMax = mergeMax,
+            )
+            val added = if (silentToBind.isNotEmpty()) {
+                runCatching {
+                    ReviewOverlayBindings.bindAutoAll(contentBook, silentToBind, mergeMax)
+                }.onFailure {
+                    AppLog.put("段评源自动绑定失败\n${it.localizedMessage}", it)
+                }.getOrDefault(0)
+            } else {
+                0
             }
+            val remaining = mergeMax - ReviewOverlayBindings.list(bookUrl).size
             if (ReadBook.book?.bookUrl != bookUrl) return@launch
             withContext(Main) {
                 if (isFinishing || isDestroyed) return@withContext
-                toastOnUi(getString(R.string.review_origin_auto_bound, added))
-                loadReviewSummaryIfNeeded()
+                if (added > 0) {
+                    val names = silentToBind.take(added).map {
+                        it.source.bookSourceName.ifBlank { it.source.bookSourceUrl }.take(16)
+                    }.joinToString("、")
+                    toastOnUi(
+                        if (names.isNotBlank()) {
+                            getString(R.string.review_origin_auto_bound_names, names)
+                        } else {
+                            getString(R.string.review_origin_auto_bound, added)
+                        },
+                    )
+                    loadReviewSummaryIfNeeded()
+                }
+                when {
+                    remaining <= 0 -> reviewAutoBindProposedUrls.add(bookUrl)
+                    risky.isNotEmpty() -> askBindRiskyReviewProviders(
+                        bookUrl,
+                        risky.take(remaining).toMutableList(),
+                    )
+                    else -> reviewAutoBindProposedUrls.add(bookUrl)
+                }
             }
         }
+    }
+
+    private fun askBindRiskyReviewProviders(
+        bookUrl: String,
+        queue: MutableList<ReviewOverlayAutoBind.Proposal>,
+    ) {
+        if (queue.isEmpty()) {
+            reviewAutoBindConfirmBookUrl = null
+            reviewAutoBindProposedUrls.add(bookUrl)
+            return
+        }
+        if (isFinishing || isDestroyed) return
+        reviewAutoBindConfirmBookUrl = bookUrl
+        val first = queue.removeAt(0)
+        val label = first.source.bookSourceName.ifBlank { first.source.bookSourceUrl }.take(20)
+        val bar = binding.root.indefiniteSnackbar(
+            getString(R.string.review_origin_auto_bind_risk_ask, label),
+        )
+        bar.setAction(R.string.review_origin_auto_bind_risk_yes) {
+            lifecycleScope.launch(IO) {
+                if (ReadBook.book?.bookUrl != bookUrl) return@launch
+                val book = ReadBook.book ?: return@launch
+                val mergeMax = AppConfig.reviewOverlayMergeMax
+                val added = runCatching {
+                    ReviewOverlayBindings.bindAutoAll(book, listOf(first), mergeMax)
+                }.getOrDefault(0)
+                val still = mergeMax - ReviewOverlayBindings.list(bookUrl).size
+                withContext(Main) {
+                    if (isFinishing || isDestroyed) return@withContext
+                    if (added > 0) {
+                        toastOnUi(getString(R.string.review_origin_auto_bound_names, label))
+                        loadReviewSummaryIfNeeded()
+                    }
+                    if (still <= 0 || queue.isEmpty()) {
+                        reviewAutoBindConfirmBookUrl = null
+                        reviewAutoBindProposedUrls.add(bookUrl)
+                    } else {
+                        askBindRiskyReviewProviders(bookUrl, queue)
+                    }
+                }
+            }
+        }
+        bar.addCallback(object : com.google.android.material.snackbar.Snackbar.Callback() {
+            override fun onDismissed(
+                transientBottomBar: com.google.android.material.snackbar.Snackbar?,
+                event: Int,
+            ) {
+                // Action → handled above. CONSECUTIVE → another snackbar replaced us; ignore.
+                if (event == DISMISS_EVENT_ACTION || event == DISMISS_EVENT_CONSECUTIVE) {
+                    return
+                }
+                // Swipe / timeout / manual dismiss: skip this source, continue queue.
+                if (reviewAutoBindConfirmBookUrl != bookUrl) return
+                if (queue.isEmpty()) {
+                    reviewAutoBindConfirmBookUrl = null
+                    reviewAutoBindProposedUrls.add(bookUrl)
+                } else {
+                    askBindRiskyReviewProviders(bookUrl, queue)
+                }
+            }
+        })
     }
 
     private fun loadOverlayReviewSummaryIfNeeded(
@@ -2067,7 +2159,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         val key = buildOverlayReviewSummaryKey(book, bindings, chapterIndex)
         val primary = ReviewOverlayMerge.paragraphPrimary(bindings)
         val authorityOpen = primary != null &&
-                ReviewParagraphAuthority.isParagraphMapOpen(primary.providerSourceUrl) &&
+                ReviewParagraphAuthority.allowsParagraphMapForContent(
+                    primary.providerSourceUrl,
+                    book.origin,
+                ) &&
                 AppConfig.reviewOverlayAllowParagraphIcons
         val textChapter = ReadBook.curTextChapter
         val layoutReadyForMap = textChapter != null &&

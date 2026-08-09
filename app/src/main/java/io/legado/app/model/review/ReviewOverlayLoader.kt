@@ -114,7 +114,10 @@ internal object ReviewOverlayLoader {
                         if (isPrimary &&
                             localParas != null &&
                             localParas.isNotEmpty() &&
-                            ReviewParagraphAuthority.isParagraphMapOpen(binding.providerSourceUrl) &&
+                            ReviewParagraphAuthority.allowsParagraphMapForContent(
+                                binding.providerSourceUrl,
+                                contentBook.origin,
+                            ) &&
                             AppConfig.reviewOverlayAllowParagraphIcons
                         ) {
                             loadWithParagraphMap(
@@ -221,7 +224,10 @@ internal object ReviewOverlayLoader {
     ): Result {
         val authority = ReviewParagraphAuthority.authorityFor(binding.providerSourceUrl)
         if (!AppConfig.reviewOverlayAllowParagraphIcons ||
-            !ReviewParagraphAuthority.isParagraphMapOpen(authority) ||
+            !ReviewParagraphAuthority.allowsParagraphMapForContent(
+                binding.providerSourceUrl,
+                contentBook.origin,
+            ) ||
             localParas.isEmpty()
         ) {
             return loadChapterBucket(

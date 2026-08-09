@@ -27,6 +27,28 @@ object ReviewOverlayAutoBind {
     )
 
     /**
+     * Sources that often return fanfic / wrong-book unique titles under keyword search.
+     * Silent auto-bind is skipped; UI should ask before binding.
+     */
+    fun requiresBindConfirm(providerSourceUrl: String): Boolean {
+        val u = providerSourceUrl.lowercase()
+        return "fanqienovel.com" in u ||
+            "101.35.133.34" in u || // community mirror used by fanqie provider
+            "wtzw.com" in u // 七猫 — blocked supply, never silent
+    }
+
+    fun partitionSilentAndConfirm(
+        proposals: List<Proposal>,
+    ): Pair<List<Proposal>, List<Proposal>> {
+        val silent = ArrayList<Proposal>()
+        val confirm = ArrayList<Proposal>()
+        for (p in proposals) {
+            if (requiresBindConfirm(p.source.bookSourceUrl)) confirm.add(p) else silent.add(p)
+        }
+        return silent to confirm
+    }
+
+    /**
      * Probe capable sources for unique same-book hits (up to [maxResults]).
      * Does not persist; caller should [ReviewOverlayBindings.bindAutoAll].
      */

@@ -172,6 +172,37 @@ object ReviewOverlayBindings {
         }
     }
 
+    /** Swap [sortOrder] with the neighbor above/below (stable list order). */
+    fun moveSortOrder(contentBookUrl: String, providerSourceUrl: String, delta: Int): Boolean {
+        if (delta == 0) return false
+        val rows = list(contentBookUrl).toMutableList()
+        val i = rows.indexOfFirst { it.providerSourceUrl == providerSourceUrl }
+        if (i < 0) return false
+        val j = i + delta
+        if (j !in rows.indices) return false
+        val a = rows[i]
+        val b = rows[j]
+        val tmp = a.sortOrder
+        a.sortOrder = b.sortOrder
+        b.sortOrder = tmp
+        // If equal orders, assign contiguous ranks.
+        if (a.sortOrder == b.sortOrder) {
+            rows[i] = a
+            rows[j] = b
+            rows.forEachIndexed { idx, row ->
+                row.sortOrder = idx
+                row.updatedAt = System.currentTimeMillis()
+                appDb.bookReviewBindingDao.update(row)
+            }
+            return true
+        }
+        a.updatedAt = System.currentTimeMillis()
+        b.updatedAt = System.currentTimeMillis()
+        appDb.bookReviewBindingDao.update(a)
+        appDb.bookReviewBindingDao.update(b)
+        return true
+    }
+
     private fun bind(
         contentBook: Book,
         providerSourceUrl: String,

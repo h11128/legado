@@ -149,6 +149,36 @@ class ReviewParagraphMapTest {
                 ReviewParagraphAuthority.QIDIAN_REVIEW_PROVIDER_URL,
             ),
         )
+        assertTrue(
+            ReviewParagraphAuthority.allowsParagraphMapForContent(
+                ReviewParagraphAuthority.FIXTURE_PROVIDER_URL,
+                contentOrigin = "https://pirate.example/book/1",
+            ),
+        )
+        assertTrue(
+            ReviewParagraphAuthority.allowsParagraphMapForContent(
+                ReviewParagraphAuthority.QIDIAN_REVIEW_PROVIDER_URL,
+                contentOrigin = "https://m.qidian.com/book/1010868264/",
+            ),
+        )
+        assertTrue(
+            ReviewParagraphAuthority.allowsParagraphMapForContent(
+                ReviewParagraphAuthority.QIDIAN_REVIEW_PROVIDER_URL,
+                contentOrigin = "https://book.qidian.com",
+            ),
+        )
+        assertFalse(
+            ReviewParagraphAuthority.allowsParagraphMapForContent(
+                ReviewParagraphAuthority.QIDIAN_REVIEW_PROVIDER_URL,
+                contentOrigin = "https://www.bqg99.com/book/1",
+            ),
+        )
+        assertFalse(
+            ReviewParagraphAuthority.allowsParagraphMapForContent(
+                ReviewParagraphAuthority.QIDIAN_REVIEW_PROVIDER_URL,
+                contentOrigin = null,
+            ),
+        )
         // RuleEmittedPreview must not open content-split hard-map path.
         assertFalse(
             ReviewParagraphAuthority.isParagraphMapOpen(

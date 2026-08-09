@@ -157,15 +157,16 @@ Related:
 
 | 优先级 | 项 | 说明 |
 |---|---|---|
-| P0 | 合集抽屉内 per-provider load-more | §12.4.3；现靠行进单源详情翻页 |
-| P0 | 合集列表分源可见性 | 大章评下 QQ 书吧易被起点热评淹没；可分块/交错 |
-| P1 | BookInfo 拖拽 `sortOrder` | §12.6 |
+| done | 合集分源区块 + 抽屉内 load-more + 未去重副标题 | `ReviewMergeDetailDialog` 2026-08-09 |
+| done | 自动绑源名 toast；番茄等同人源需确认 | `ReviewOverlayAutoBind.requiresBindConfirm` |
+| done | 段角标同源门禁 | `allowsParagraphMapForContent`（起点须 content origin∈qidian） |
+| done | BookInfo 上移/下移 sortOrder | 管理已绑定 |
 | P1 | 番茄真书命中 / 换更稳供给 | 抑同人 |
 | P1 | 七猫验签 | 仍 blocked |
 | P2 | P5c 弱文案去重 | 默认关；万级评论要谨慎 |
 | P2 | 晋江 / 微信读书 真源合集自动化 | 复制 real session 模板 |
 | P2 | Web `ReviewDialog.vue` overlay | RFC §10 |
-| — | PE `#682` 关单与否 | 视是否把 P0 load-more 算进本任务 |
+| — | PE `#682` 关单与否 | 视产品收口 |
 
 ---
 
