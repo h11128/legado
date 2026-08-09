@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| Status | **Accepted; P5 Multi-provider in progress (Rev 1.2)** — single-bind P1–P4 shipped; multi merge per §12 |
+| Status | **Accepted; P5a/b device-verified (Rev 1.3)** — multi merge shipped; see postmortem 2026-08-09 |
 | Date | 2026-08-09 |
 | Repo | `legado` (Android app + optional Web read) |
 | Related code | `ReviewRule` / `ReviewRuleParser` / `JsSourceReview` / `ReadBookActivity.loadReviewSummaryIfNeeded` / `ReviewDetailDialog`; align: `BookAuthorIdentity`, `SearchBookMerge`, `ChangeChapterVerify.alignResult` / `digramJaccard`; ask: RFC-001/002 change-source |
@@ -424,7 +424,9 @@ Settings: 段评可来自与正文不同的评论源；无评论源时功能保�
 
 ---
 
-## 10. Follow-ups (out of P5)
+## 10. Follow-ups (out of P5a/b shipped)
+
+Postmortem (thread close-out): [2026-08-09-rfc004-p5-multi-provider-merge.md](../postmortem/2026-08-09-rfc004-p5-multi-provider-merge.md).
 
 1. Manual chapter link when align fails.
 2. Backup ZIP export of bindings.
@@ -432,6 +434,9 @@ Settings: 段评可来自与正文不同的评论源；无评论源时功能保�
 4. Optional `paraPreview` / `contentHash` in JS/`ruleReview` to strengthen authority.
 5. Web `ReviewDialog.vue` overlay query params.
 6. P5c weak cross-source comment dedupe.
+7. **In-merge-dialog per-provider load-more** (§12.4.3) — P5a uses row → `ReviewDetailDialog` paging.
+8. BookInfo drag-reorder `sortOrder` (§12.6).
+9. Fanqie same-book search hygiene; Qimao signing.
 
 ---
 
