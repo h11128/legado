@@ -101,6 +101,6 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | `https://m.92yanqing.com` | **skip** | 搜索超时；hunt empty；已禁用 |
 | `https://www.00ksw.com` | **skip** | PC/手机 TCP hang（DNS→23.224 uucdn）；hunt empty；假镜像停车/威胁页；手机 DB `enabled=0`；书架 5 靠自动换源 |
 | `https://www.ffxs8.top` | **fixed migrate** | NXDOMAIN；孪生 `https://www.ffxs8.com` debug 打开 OK + MCP `checkSearch=false`→`校验成功`（ledger）；手机 DB 书架 5 remap（`.top` 剩 0，`.com` 含原路径）；`.top` `enabled=0` |
-| `https://www.dubu123.com` | **fixed migrate** | NXDOMAIN 仍在；孪生 `https://www.dbxsn.com`（首页 404 但 `/book/p*`+搜索活；301→`dbxsz`）；MCP debug+`keyword=斗破` **校验成功**；书架 4 remap；`.com` 已禁用 |
+| `https://www.dubu123.com` | **fixed migrate** | NXDOMAIN 仍在；孪生 `https://www.dbxsn.com`（首页 404 但 `/book/p*`+搜索活；301→`dbxsz`）；MCP debug+`keyword=斗破` **校验成功**；书架 4 remap（证据 `temp/full_fix/cache/dubu_migrate_proof.json`）；`.com` 已禁用 |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
