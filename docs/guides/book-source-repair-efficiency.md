@@ -10,7 +10,7 @@ Goal: finish each URL with **minimum wall time** without risking DB wipe or fake
 | PC HTML | timeout **≤12s** per URL | 25–60s urlopen on obvious NXDOMAIN |
 | Patch | MCP `save_source` / `legado-db-mutate` | Hand SQL then forget upsert |
 | Disable / remap | `python scripts/legado-db-mutate.py …` | Pull → MCP → push old file |
-| Device check | `start_check_sources` → **`LegadoMcp.wait_check_done`** | `sleep(3)×N` / `for i in range(40)` |
+| Device check | `start_check_sources` → **`LegadoMcp.wait_check_done`**；无搜索时 **`checkDiscovery=true`**（双关会假成功） | `sleep(3)×N` / `for i in range(40)`；`checkSearch=false`+`checkDiscovery=false` |
 | Debug | `debug_source(..., timeout_sec=35)` default | Default 55–90s on dead hosts |
 | Close-out | ledger + retro seal | Ending turn mid-URL |
 
@@ -35,6 +35,7 @@ Prefer `legado-db-mutate.py` so local upsert + `require_source_urls` keep you on
 | Hook `legado_adb_push_unsafe_false_ask` | ASK when `merge_live_sources=False` without `require_source_urls` |
 | Discipline §2b + §efficiency | alwaysApply |
 | Trap `adb_db_push_stale_snapshot_wipes_source` | skill |
+| Trap `check_search_discovery_both_off_vacuous` | `legado_mcp` forces discovery when both off |
 
 ## Proof
 

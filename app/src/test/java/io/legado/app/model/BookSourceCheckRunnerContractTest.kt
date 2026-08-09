@@ -37,6 +37,13 @@ class BookSourceCheckRunnerContractTest {
     }
 
     @Test
+    fun `vacuous check with search and discovery both off fails`() {
+        val runner = projectFile("app/src/main/java/io/legado/app/model/BookSourceCheckRunner.kt")
+        assertTrue(runner.contains("校验项为空：未启用搜索/发现/域名"))
+        assertTrue(runner.contains("!settings.checkSearch && !settings.checkDiscovery && !settings.checkDomain"))
+    }
+
+    @Test
     fun `checkSource accepts job-local settings`() {
         val checkSource = projectFile("app/src/main/java/io/legado/app/model/CheckSource.kt")
         assertTrue(checkSource.contains("data class Settings"))

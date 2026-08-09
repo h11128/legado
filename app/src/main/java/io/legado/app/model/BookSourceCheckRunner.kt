@@ -104,6 +104,11 @@ object BookSourceCheckRunner {
         // CheckSourceService / McpSourceCheckJob via Debug.startChecking(sessionId, source).
         source.removeInvalidGroups()
         if (settings.wSourceComment) source.removeErrorComment()
+        // MCP can pass checkSearch=false+checkDiscovery=false; that used to succeed
+        // in ~1ms with no book fetch (trap check_search_discovery_both_off_vacuous).
+        if (!settings.checkSearch && !settings.checkDiscovery && !settings.checkDomain) {
+            throw NoStackTraceException("校验项为空：未启用搜索/发现/域名")
+        }
         ensureDomain(source, settings)
         var searchDeepOk = false
         if (settings.checkSearch) {
@@ -111,8 +116,12 @@ object BookSourceCheckRunner {
         }
         val skipDiscovery =
             checkMode.skipDiscoveryIfSearchOk && searchDeepOk && settings.checkSearch
-        if (settings.checkDiscovery && !source.exploreUrl.isNullOrBlank() && !skipDiscovery) {
-            runDiscovery(source, emptyTocMessage, settings)
+        if (settings.checkDiscovery && !skipDiscovery) {
+            if (source.exploreUrl.isNullOrBlank()) {
+                source.addGroup("发现规则为空")
+            } else {
+                runDiscovery(source, emptyTocMessage, settings)
+            }
         } else if (skipDiscovery) {
             source.removeGroup("发现规则为空")
             source.removeGroup("发现失效")

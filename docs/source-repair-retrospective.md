@@ -1,6 +1,14 @@
 # Source repair retrospective
 
 
+## 2026-08-09 — wodescw deep diagnose
+
+| URL | 结果 | 要点 |
+|-----|------|------|
+| `www.wodescw.com` | **fixed**（无搜索） | `/search/` 空壳；sososhu 无命中；打开路径 debug 详情/目录/正文 OK；真实验证须 `checkDiscovery=true` |
+
+**新陷阱**：`checkSearch=false`+`checkDiscovery=false` 时 `BookSourceCheckRunner` 不拉书仍报「校验成功」（~1ms）。已修：(1) runner 抛「校验项为空」；(2) `legado_mcp` 强制开发现；SKILL `check_search_discovery_both_off_vacuous`。历史若干「无搜索 fixed」若只跑了双关，证据不足——以 `debug_source(bookUrl)` 或发现校验为准。
+
 ## 2026-08-09 batch6 — zbcxw / so.27k / 80xs
 
 | URL | 结果 | 要点 |
@@ -160,7 +168,7 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 
 - Bug: searchUrl 误用 `searchtype={{key}}`；真字段 `369koolearn` POST 仍空壳无 `#sitembox`。
 - Open: `/1123134/` 目录 1417 + `#content` 正文 OK（手机 debug）。
-- Verify: `checkSearch=false` `checkDiscovery=false` → 校验成功（发现 alone 会「发现目录失效」勿当整源死）。
+- Verify: 当时写了 `checkSearch=false` `checkDiscovery=false` →「校验成功」——**现已认定为空跑假成功**（trap `check_search_discovery_both_off_vacuous`）。有效证据应是 `debug_source(bookUrl)` 打开路径，或 `checkDiscovery=true` 且 duration 非毫秒级。
 - Twin: `m.75zwz.com` 已迁通；本源保留打开路径。
 - Trap: `search_empty_shell_open_ok`；反思：本站 close-out 当场写 skill+retro（用户要求每站提升）。
 

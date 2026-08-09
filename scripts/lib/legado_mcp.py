@@ -291,6 +291,15 @@ class LegadoMcp:
         thread_count: int = 1,
         claim: bool = True,
     ) -> Any:
+        # BookSourceCheckRunner: if search+discovery+domain are all off,
+        # doCheckSource does no book fetch and still returns 校验成功 (~1ms).
+        if not check_search and not check_discovery:
+            check_discovery = True
+            print(
+                "[legado_mcp] checkSearch=false+checkDiscovery=false is vacuous; "
+                "forcing checkDiscovery=true (trap check_search_discovery_both_off_vacuous)",
+                flush=True,
+            )
         if claim and urls:
             claim_deep_active(urls[0], "legado_mcp start_check_sources")
         return self.call(
