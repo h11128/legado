@@ -55,3 +55,18 @@ Same bind as P1. Content book chapter text should be **similar** to fixture para
 - Align fail (weird title) → no bubble, no crash
 - Unbound → no overlay icons
 - Coverage &lt; 0.5 on P2 → chapter-bucket only (no wrong paragraph icons)
+
+## Agent run record (2026-08-09)
+
+| Item | Evidence |
+|------|----------|
+| APK | `assembleAppDebug` + `adb install -r` `com.legado.app.debug` |
+| Fixture | MCP `save_source` → `legado-fixture://review-overlay` enabled |
+| Binding | `book_review_bindings` → content《综漫：我同时穿越了99个世界》+ fixture provider |
+| Overlay log | `ReviewOverlay bind=legado-fixture://review-overlay align=0.7 authority=ContentSplitVerified coverage=0/4 (<0.5) → chapter-bucket only` |
+| Chapter bucket | `… coverage=0/4 bucket=2` (P1 path OK; digram coverage fail expected on dissimilar body text) |
+| P2 icons | Not asserted on this book (coverage gate correctly blocked wrong para icons) |
+| Prefs P4 | Switches in `pref_config_read.xml` (阅读设置) |
+| Unit | `:app:testDebugUnitTest --tests 'io.legado.app.model.review.*'` BUILD SUCCESSFUL |
+
+Commits: P2 `1968aa58a` · P3 `3d17ee2da` · P4 `dca536b88` (PE `#682`).
