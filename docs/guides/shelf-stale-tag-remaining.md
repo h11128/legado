@@ -95,7 +95,7 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | `http://www.wuxianxs.cc` | **skip** | 首页 403；hunt empty；已禁用 |
 | `https://www.69shu.xyz` | **skip** | CF 520；孪生 69shuba 已启用；已禁用 |
 | `http://154.37.154.143` | **skip** | IP 超时；xhsxsw Host 停车壳；已禁用 |
-| `http://www.qingzichan.net` | **skip** | 连不上；hunt empty；已禁用 |
+| `http://www.qingzichan.net` | **skip** | 再挖：http 超时；https 已成 **6080影视** 壳（301→6080xsjys）；`/ggd/` ID 在 ax81 错书；hunt empty；http+https 已禁用 |
 | `https://m.boshishuwu.com` | **skip** | PROTOCOL_ERROR；301→.net 同死；已禁用 |
 | `https://hongxiud.com` | **skip** | 广告/色情劫持壳；已禁用 |
 | `https://m.92yanqing.com` | **skip** | 搜索超时；hunt empty；已禁用 |
