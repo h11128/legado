@@ -22,29 +22,29 @@
 
 汇总（抽查当时）：**0/10 正文完整可读**；仅 2/10 能拉目录。
 
-## trxs.me 专项（已处理，非规则可修）
+## trxs.me 专项（已处理）
 
-- **根因**：`www.trxs.me` DNS **NXDOMAIN**，不是选择器坏了。活站：`https://trxs.cc`。
-- **书源**：启用并核对 `https://trxs.cc`（同人小说trxs.cc）；`http://www.trxs.me` **已禁用**。
-- **书架**：21 本中 **8** 本按书名搜到并 remap 到 `trxs.cc`；**13** 本站点无对应/ID 撞车 → **不硬改链**，靠自动换源。
+- **根因**：`www.trxs.me` DNS **NXDOMAIN**。活站：`https://trxs.cc`。
+- **书源**：启用并核对 `https://trxs.cc`；`http://www.trxs.me` **已禁用**。
+- **书架**：21 本中 **8** remap；**13** 靠自动换源。
 - 报告：`temp/shelf_restore/queue/trxs_source_fix_report.json`
 
-## 修复队列状态
+## Deep diagnose 关门（2026-08-09 第二轮）
 
-| URL | 状态 | 备注 |
-|-----|------|------|
-| `http://www.trxs.me` | done_migrate | → `https://trxs.cc`；死源已 disable |
-| `https://www.69shu.com` | skip:l2_bot_shell_cf | CF/挂梯；保持启用 |
-| `https://www.uukanshu.com` | skip:l1_unreachable | hunt 空；保持启用 |
-| `https://m.lwxs.com` | done_migrate | → `https://m.ilwxs.com`；旧源 disable；书架 31 已 remap；设备校验成功（关搜索）；**搜索 POST 仍 500** |
-| `https://www.xxbiqudu.com/` | skip:l2_tls_hunt_empty | TLS InternalError；hunt 空；保持启用 |
-| `https://www.aixdzs.com` | skip:cert_expired_hunt_empty | 证书过期；hunt 空；保持启用 |
-| `http://www.lrxsw.org` | skip:l2_timeout_hunt_empty | 10060；hunt 空；保持启用 |
-| `https://www.81zw.com` | skip:l2_bot_shell_cf | CF；`81zw2.com` 同；保持启用 |
-| `https://www.69shuba.pro` | skip:l2_tls_hunt_empty | TLS corrupt；hunt 空；保持启用 |
-| `http://api.aixdzs.com/` | skip:l1_unreachable_hunt_empty | TCP timeout；hunt 空；保持启用 |
+| URL | 状态 | 深挖证据 | 备注 |
+|-----|------|----------|------|
+| `http://www.trxs.me` | done_migrate | NXDOMAIN | → `https://trxs.cc` |
+| `https://m.lwxs.com` | done_migrate | L2 host redirect | → `https://m.ilwxs.com`；校验成功（关搜索）；搜索 POST 500 |
+| `https://www.aixdzs.com` | done_migrate | 证书过期；`m.aixdzs.com`→`ixdzs8.com` | 用已有 `https://ixdzs8.com`（校验成功）；旧源 disable |
+| `http://api.aixdzs.com/` | done_migrate | L1 超时 | 同上，覆盖到 ixdzs8 |
+| `https://www.69shu.com` | done_migrate | 真机打开 `69shuba.com/book/…` toc=771+正文 | → `https://www.69shuba.com`；**搜索/发现仍 CF 403** |
+| `https://www.69shuba.pro` | skip:tls_corrupt | TLS 报文损坏 | 已 disable；用 69shuba.com |
+| `https://www.81zw.com` | skip:cf_403 | 真机 HTTP `403` + `cf-mitigated: challenge` | 保持启用备注；需挂梯 |
+| `http://www.lrxsw.org` | skip:cf_522 | 真机 GET → **522** origin down | 源站挂 |
+| `https://www.xxbiqudu.com/` | skip:tls | ping 通；HTTPS TLS InternalError / 手机 ERR_TIMED_OUT | hunt 空 |
+| `https://www.uukanshu.com` | skip:dns_loopback | 手机 DNS→**127.0.0.1**；`.cc` 亦 CF | 已 disable `.com`；试过 `.cc` 仍挑战页 |
 
-**本表 10 源已全部关门**（2026-08-09）：可修 2（trxs / 乐文迁移）；其余 8 skip。书架打不开靠自动换源。
+**本表 10 源 deep diagnose 已关门**：迁通 **5**（trxs / 乐文 / 爱下×2 / 69 书吧）；硬 skip **5**（CF/522/TLS/DNS 毒化）。
 
 状态值：`pending` / `fixed` / `skip:*` / `fail:*` / `done_migrate`
 
