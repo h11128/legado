@@ -855,7 +855,23 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
-    fun metricLineIncludesProbeChapterAndRespondTime() {
+    fun metricLinePutsTotalInBracketsBeforeProbeTitle() {
+        val line = ChangeBookSourceQuality.metricLine(
+            measuredChars = 11595,
+            respondTimeMs = 1500,
+            tocChapterCount = 189,
+            chapterOrdinal = 53,
+            chapterTitle = "乱仑系列（未删节）",
+        )
+        assertTrue(line.startsWith("[189] 乱仑系列（未删节）\n"))
+        assertTrue(line.contains("字数：11595"))
+        assertTrue(line.contains("1.5s"))
+        assertFalse(line.contains("[53]"))
+        assertFalse(line.contains("共"))
+    }
+
+    @Test
+    fun metricLineFallsBackToOrdinalBracketsWithoutToc() {
         val line = ChangeBookSourceQuality.metricLine(
             measuredChars = 11595,
             respondTimeMs = 1500,
@@ -863,20 +879,58 @@ class ChangeBookSourceQualityTest {
             chapterTitle = "乱仑系列（未删节）",
         )
         assertTrue(line.startsWith("[53] 乱仑系列（未删节）\n"))
-        assertTrue(line.contains("字数：11595"))
-        assertTrue(line.contains("1.5s"))
-        assertFalse(line.contains("共"))
     }
 
     @Test
-    fun catalogLinePutsTotalBeforeLatest() {
-        assertEquals(
-            "共 189 章 · 最新：第187章 白虎",
-            ChangeBookSourceQuality.catalogLine("共 189 章", "最新：第187章 白虎"),
-        )
+    fun catalogLineIsLatestOnly() {
         assertEquals(
             "最新：第187章 白虎",
-            ChangeBookSourceQuality.catalogLine(null, "最新：第187章 白虎"),
+            ChangeBookSourceQuality.catalogLine("最新：第187章 白虎"),
+        )
+        assertEquals("无最新章节", ChangeBookSourceQuality.catalogLine("  "))
+    }
+
+    @Test
+    fun withTotalChapterBracketPrefixesBody() {
+        assertEquals("[189]", ChangeBookSourceQuality.totalChapterBracket(189))
+        assertEquals(
+            "[189]\n字数：11595 · 1.5s",
+            ChangeBookSourceQuality.withTotalChapterBracket(189, "字数：11595 · 1.5s"),
+        )
+        assertEquals(
+            "[189] 乱仑系列\n字数：1",
+            ChangeBookSourceQuality.withTotalChapterBracket(189, "[189] 乱仑系列\n字数：1"),
+        )
+        // Prefix must not treat `[18]` as already covering `[189]`.
+        assertEquals(
+            "[18]\n[189] 乱仑系列",
+            ChangeBookSourceQuality.withTotalChapterBracket(18, "[189] 乱仑系列"),
+        )
+    }
+
+    @Test
+    fun composeProbeEvidenceKeepsPendingTextAndPrefixesTotal() {
+        assertEquals(
+            "[189]\n校验中…",
+            ChangeBookSourceQuality.composeProbeEvidence(
+                tocChapterCount = 189,
+                chapterWordCount = 0,
+                respondTimeMs = -1,
+                chapterWordCountText = "校验中…",
+            ),
+        )
+    }
+
+    @Test
+    fun composeProbeEvidenceKeepsCachedHeadWithoutSessionToc() {
+        assertEquals(
+            "[53] 乱仑系列\n字数：11595 · 1.5s",
+            ChangeBookSourceQuality.composeProbeEvidence(
+                tocChapterCount = 0,
+                chapterWordCount = 11595,
+                respondTimeMs = 1500,
+                chapterWordCountText = "[53] 乱仑系列\n字数：11595 · 1.5s",
+            ),
         )
     }
 

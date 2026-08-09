@@ -372,13 +372,20 @@ object ChangeBookSourceQuality {
         }
     }
 
+    /** Total chapters for the probe row, e.g. `[189]`. Null when unknown. */
+    fun totalChapterBracket(tocChapterCount: Int): String? =
+        if (tocChapterCount > 0) "[$tocChapterCount]" else null
+
     /**
-     * Probe evidence: `[ordinal] title` on first line; `字数：N · time` on second.
-     * Does not include catalog total chapters (that belongs on the Catalog row).
+     * Probe evidence row(s):
+     * - Prefer `[total] truncatedTitle` when TOC size is known (brackets = 总章数).
+     * - Else fall back to `[ordinal] title` (legacy probe identity).
+     * - Then `字数：N · time` on the next line.
      */
     fun metricLine(
         measuredChars: Int,
         respondTimeMs: Int,
+        tocChapterCount: Int = 0,
         chapterOrdinal: Int = 0,
         chapterTitle: String? = null,
         maxTitleLen: Int = 20,
@@ -389,8 +396,27 @@ object ChangeBookSourceQuality {
             add(words)
             if (time != null) add(time)
         }.joinToString(" · ")
-        val probeHead = buildProbeChapterHead(chapterOrdinal, chapterTitle, maxTitleLen)
-        return if (probeHead != null) "$probeHead\n$metrics" else metrics
+        val head = buildMetricHead(
+            tocChapterCount = tocChapterCount,
+            chapterOrdinal = chapterOrdinal,
+            chapterTitle = chapterTitle,
+            maxTitleLen = maxTitleLen,
+        )
+        return if (head != null) "$head\n$metrics" else metrics
+    }
+
+    fun buildMetricHead(
+        tocChapterCount: Int = 0,
+        chapterOrdinal: Int = 0,
+        chapterTitle: String? = null,
+        maxTitleLen: Int = 20,
+    ): String? {
+        val title = truncateProbeTitle(chapterTitle, maxTitleLen)
+        val total = totalChapterBracket(tocChapterCount)
+        if (total != null) {
+            return if (title.isNotEmpty()) "$total $title" else total
+        }
+        return buildProbeChapterHead(chapterOrdinal, chapterTitle, maxTitleLen)
     }
 
     fun buildProbeChapterHead(
@@ -399,24 +425,70 @@ object ChangeBookSourceQuality {
         maxTitleLen: Int = 20,
     ): String? {
         if (chapterOrdinal <= 0) return null
+        val title = truncateProbeTitle(chapterTitle, maxTitleLen)
+        return if (title.isEmpty()) "[$chapterOrdinal]" else "[$chapterOrdinal] $title"
+    }
+
+    private fun truncateProbeTitle(chapterTitle: String?, maxTitleLen: Int): String {
         val raw = chapterTitle?.trim().orEmpty()
-        val title = when {
+        return when {
             raw.isEmpty() -> ""
             raw.length <= maxTitleLen -> raw
             else -> raw.substring(0, maxTitleLen) + "…"
         }
-        return if (title.isEmpty()) "[$chapterOrdinal]" else "[$chapterOrdinal] $title"
     }
 
     /**
-     * Catalog row: `共 N 章 · 最新：{tip}` when total known; otherwise just the latest segment.
-     * [totalLabel] localized total, e.g. `共 189 章`.
-     * [latestSegment] already includes the 最新 label, e.g. `最新：第187章 …`.
+     * Catalog row: latest tip only (e.g. `最新：第187章 …`).
+     * Total chapters live in the probe row as `[N]`.
      */
-    fun catalogLine(totalLabel: String?, latestSegment: String): String {
-        val latest = latestSegment.trim().ifEmpty { "无最新章节" }
-        val total = totalLabel?.trim().orEmpty()
-        return if (total.isNotEmpty()) "$total · $latest" else latest
+    fun catalogLine(latestSegment: String): String =
+        latestSegment.trim().ifEmpty { "无最新章节" }
+
+    /** Prefix existing probe/fail text with `[N]` when TOC is known and not already present. */
+    fun withTotalChapterBracket(tocChapterCount: Int, body: String): String {
+        val bracket = totalChapterBracket(tocChapterCount) ?: return body
+        val trimmed = body.trim()
+        if (trimmed.isEmpty()) return bracket
+        // Exact / token prefix only — avoid `[18]` matching body that starts with `[189]`.
+        if (trimmed == bracket ||
+            trimmed.startsWith("$bracket ") ||
+            trimmed.startsWith("$bracket\n")
+        ) {
+            return trimmed
+        }
+        return "$bracket\n$trimmed"
+    }
+
+    /**
+     * Adapter-facing probe row. Prefer persisted [chapterWordCountText] (pending / cache heads);
+     * only rebuild from session fields when text is empty.
+     */
+    fun composeProbeEvidence(
+        tocChapterCount: Int,
+        chapterWordCount: Int,
+        respondTimeMs: Int,
+        chapterWordCountText: String?,
+        probeChapterOrdinal: Int = 0,
+        probeChapterTitle: String? = null,
+    ): String? {
+        val body = chapterWordCountText
+        if (!body.isNullOrBlank()) {
+            return withTotalChapterBracket(tocChapterCount, body)
+        }
+        val hasSessionMeta = tocChapterCount > 0 ||
+            probeChapterOrdinal > 0 ||
+            !probeChapterTitle.isNullOrBlank()
+        if (chapterWordCount >= 0 && hasSessionMeta) {
+            return metricLine(
+                measuredChars = chapterWordCount,
+                respondTimeMs = respondTimeMs,
+                tocChapterCount = tocChapterCount,
+                chapterOrdinal = probeChapterOrdinal,
+                chapterTitle = probeChapterTitle,
+            )
+        }
+        return totalChapterBracket(tocChapterCount)
     }
 
     /**

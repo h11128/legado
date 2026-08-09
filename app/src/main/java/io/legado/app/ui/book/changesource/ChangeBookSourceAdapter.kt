@@ -128,29 +128,35 @@ class ChangeBookSourceAdapter(
     }
 
     private fun bindCatalogLine(binding: ItemChangeSourceBinding, item: SearchBook) {
-        val latestSegment = context.getString(
-            R.string.lasted_show,
-            item.getDisplayLastChapterTitle(),
+        binding.tvLast.text = ChangeBookSourceQuality.catalogLine(
+            context.getString(R.string.lasted_show, item.getDisplayLastChapterTitle()),
         )
-        val totalLabel = if (item.tocChapterCount > 0) {
-            context.getString(R.string.all_chapter_num, item.tocChapterCount)
-        } else {
-            null
-        }
-        binding.tvLast.text = ChangeBookSourceQuality.catalogLine(totalLabel, latestSegment)
     }
 
     private fun bindMetricAndTags(binding: ItemChangeSourceBinding, item: SearchBook) {
-        val showMetrics = AppConfig.changeSourceLoadWordCount &&
-            !item.chapterWordCountText.isNullOrBlank()
-        if (showMetrics) {
-            binding.tvCurrentChapterWordCount.text = item.chapterWordCountText
+        val text = ChangeBookSourceQuality.composeProbeEvidence(
+            tocChapterCount = item.tocChapterCount,
+            chapterWordCount = item.chapterWordCount,
+            respondTimeMs = item.respondTime,
+            chapterWordCountText = item.chapterWordCountText,
+            probeChapterOrdinal = item.probeChapterOrdinal,
+            probeChapterTitle = item.probeChapterTitle,
+        )
+        // TOC total `[N]` stays visible even when load-word-count is off.
+        val showProbe = !text.isNullOrBlank() &&
+            (AppConfig.changeSourceLoadWordCount || item.tocChapterCount > 0)
+        if (showProbe) {
+            binding.tvCurrentChapterWordCount.text = if (AppConfig.changeSourceLoadWordCount) {
+                text
+            } else {
+                ChangeBookSourceQuality.totalChapterBracket(item.tocChapterCount) ?: text
+            }
             binding.tvCurrentChapterWordCount.visible()
         } else {
             binding.tvCurrentChapterWordCount.gone()
         }
         val tags = item.qualityTags.joinToString(" · ")
-        if (showMetrics && tags.isNotEmpty()) {
+        if (AppConfig.changeSourceLoadWordCount && showProbe && tags.isNotEmpty()) {
             binding.tvQualityTags.text = tags
             binding.tvQualityTags.visible()
         } else {

@@ -122,7 +122,7 @@ Session retrospective (full change-source quality thread): [2026-08-09-change-so
 
 | Date | Result | Evidence |
 |---|---|---|
-| 2026-08-09a | change-source list Catalog+Probe rows | Catalog=`共 N 章 · 最新章`; Probe=`[序] 标题 · 字数 · 响应`; tags separate. |
+| 2026-08-09b | change-source list latest + `[N]` total | Catalog=`最新：tip` only; Probe=`[tocTotal] title` then `字数 · 响应` (`[]` = 总章数). |
 | 2026-08-08l | PASS early-stop plateau rootfix | Ok+Weak 计入好源；`reason=plateau` at qualityOk=17/20 completed=603 → finish early；analyzer all PASS. Log `temp/legado_change_source_session_2026-08-08_213537.txt`. PO18 **24** ≪ QQ Weak **61**. |
 | 2026-08-08k | TOC identity strong demote | `tocTitleAffinity` + `tocIdentity` → smartScore `tocMatch` −20/+5; no 佚名 author hard-filter (RFC-003). Device same-book retest (`d9a607990`): PO18 Ok **23** ≪ QQ Weak **59**；肉文屋/海棠等亦 ~25–27。Log: `temp/legado_change_source_session_2026-08-08_205705.txt`. Session analyzer FAIL=`has_finish`（源池过大未 early-stop），不影响分数结论。 |
 | 2026-08-08j | smartScore wrong-book demote | Hard `latestMatch=false` always tags + −22 score + length cap 4 (fixes PO18 long Ok ranking first). Pending sort key 55. Sample after: `temp/legado_change_source_score_after_*.txt`. |

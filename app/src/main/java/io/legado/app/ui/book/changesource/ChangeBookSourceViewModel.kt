@@ -1172,11 +1172,16 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     ChangeBookSourceQuality.metricLine(
                         measuredChars = measuredChars,
                         respondTimeMs = respondTime,
+                        tocChapterCount = chapters.size,
                         chapterOrdinal = probeOrdinal,
                         chapterTitle = title,
                     )
                 else -> {
-                    val head = ChangeBookSourceQuality.buildProbeChapterHead(probeOrdinal, title)
+                    val head = ChangeBookSourceQuality.buildMetricHead(
+                        tocChapterCount = chapters.size,
+                        chapterOrdinal = probeOrdinal,
+                        chapterTitle = title,
+                    )
                     val fail = getApplication<Application>()
                         .getString(R.string.change_source_chapter_content_fail)
                     if (head != null) "$head\n$fail" else fail
@@ -1522,6 +1527,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             searchBook.chapterWordCountText = ChangeBookSourceQuality.metricLine(
                 measuredChars = searchBook.chapterWordCount,
                 respondTimeMs = searchBook.respondTime,
+                tocChapterCount = searchBook.tocChapterCount,
                 chapterOrdinal = searchBook.probeChapterOrdinal,
                 chapterTitle = searchBook.probeChapterTitle,
             )

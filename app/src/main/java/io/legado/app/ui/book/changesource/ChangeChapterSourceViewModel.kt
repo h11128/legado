@@ -106,11 +106,16 @@ class ChangeChapterSourceViewModel(application: Application) :
             measuredChars >= 0 -> ChangeBookSourceQuality.metricLine(
                 measuredChars = measuredChars,
                 respondTimeMs = respondTimeMs,
+                tocChapterCount = book.tocChapterCount,
                 chapterOrdinal = ordinal,
                 chapterTitle = chapterTitle,
             )
             else -> {
-                val head = ChangeBookSourceQuality.buildProbeChapterHead(ordinal, chapterTitle)
+                val head = ChangeBookSourceQuality.buildMetricHead(
+                    tocChapterCount = book.tocChapterCount,
+                    chapterOrdinal = ordinal,
+                    chapterTitle = chapterTitle,
+                )
                 val fail = getApplication<Application>()
                     .getString(R.string.change_source_chapter_content_fail)
                 if (head != null) "$head\n$fail" else fail
@@ -436,6 +441,7 @@ class ChangeChapterSourceViewModel(application: Application) :
             markTransientTocFail(searchBook)
             return
         }
+        searchBook.tocChapterCount = chapters.size
 
         val aligned = ChangeChapterVerify.alignResult(chapterIndex, chapterTitle, chapters)
         if (aligned == null) {
@@ -583,6 +589,7 @@ class ChangeChapterSourceViewModel(application: Application) :
         searchBook.chapterWordCountText = ChangeBookSourceQuality.metricLine(
             measuredChars = searchBook.chapterWordCount,
             respondTimeMs = searchBook.respondTime,
+            tocChapterCount = searchBook.tocChapterCount,
             chapterOrdinal = searchBook.probeChapterOrdinal,
             chapterTitle = searchBook.probeChapterTitle,
         )
@@ -614,6 +621,7 @@ class ChangeChapterSourceViewModel(application: Application) :
             markContentFailUnlessStopped(searchBook, chapterKey, contentStop)
             return
         }
+        searchBook.tocChapterCount = chapters.size
         if (contentStop.get()) return
         val aligned = ChangeChapterVerify.alignResult(chapterIndex, chapterTitle, chapters) ?: return
         val chapter = chapters[aligned.index]
