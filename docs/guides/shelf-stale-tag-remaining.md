@@ -137,5 +137,8 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://m.75zwz.com` | **fixed** | 仅「发现失效」陈旧标签；`checkDiscovery=false`+keyword=斗破 **校验成功**（搜索/目录/正文 OK）。Trap：`search_empty_shell_open_ok` |
 | `http://m.shuqixs.cc` | **skip**（已禁用；www 早已 disabled） | gate `l2_bot_shell`（Just a moment）；手机搜索 **403**；webView/jar 无效；hunt/OSINT 无后继。书架 2 靠换源。Trap：`CF 空搜索体` |
 | `https://m.shuhui8.cc` | **skip**（已禁用；含 .com） | gate migrate→`m.shuhui9.cc`；搜索 API 恒 `[]`；www TOC 有章但章节→`/user/verify.html` 加载壳、正文空。书架 3 靠换源。Trap：`chapter_verify_html_wall` |
+| `http://www.147xs.org/` | **skip**（http+https 已禁用） | http L2 **404**；https→`gwiver.bond` 安全检测跳转壳；phone search 404；hunt/OSINT 无后继。书架 2 靠换源。Trap：`域名广告劫持` |
+| `https://m.75zwz.com` | **fixed**（batch4 再清） | 「发现失效」标签复发；`checkDiscovery=false` 再验 **校验成功** |
+| `http://www.16kbook.co` | **fixed migrate** | `.co` unexpected EOF；→`http://www.16kbook.net`（`/search.php?q=` + `article@html` + `.book_list2`）；设备 **校验成功**；书架「游戏面板」remap→`/1/1137/`；「长生…」站内无同名靠换源；`.co` disabled。Trap：`主机跳转` |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
