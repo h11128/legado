@@ -125,5 +125,8 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `http://www.huanxiangji.com` | **fixed migrate** | → `https://www.huanxiangji.net`；桌面 UA **403 blocked**，改 Android Mobile UA；TOC `.section-list`；搜索 POST 仍 403；`checkSearch=false`+发现 **校验成功**。书架 2 origin remap（站内无同名精确书靠换源）。Trap：`desktop_ua_blocked_mobile_ok` / `主机跳转` |
 | `https://www.shenyekanshu.com` | **skip**（已禁用） | `Loading...`+JWT `?js=` 壳；webView→`ovret.com` 广告；`ww547` 品牌壳非书站；hunt/OSINT 无后继。书架 2 靠换源。Trap：`js_loading_jwt_ad_hijack` |
 | `https://www.wfxs.tw` | **fixed** | 旧搜 `m…/s.html` 空壳；同步 `m.wfxs.tw` 的 `/s/?q=`+`.result-card`+booklist/正文规则；设备 **校验成功**；书架 3 保留 www。Trap：`search_empty_shell_open_ok` |
+| `http://www.ffxs8.com/` | **fixed** | 备注 Error 过期；POST 搜索→https 结果；目录253+正文 OK；设备 **校验成功**。Trap：`search_empty_shell_open_ok`（stale tag） |
+| `https://m.xxbiqudu.com/` | **skip**（m/www/# 已禁用） | L2 `this domain` 停车；hunt/OSINT 无后继；搜索空壳。书架多本靠换源。Trap：`域名停车/过期` |
+| `https://m.mozhua2.com` | **skip**（已禁用） | 首页/搜索 **401**；备注孪生 `2wxh/juqisw/dizhuwu/luhubook` 同 401；hunt empty。书架 2 靠换源。Trap：`http_403_home_hunt_empty` |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
