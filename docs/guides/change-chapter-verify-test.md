@@ -118,7 +118,7 @@ Known good probe book (when present): **《信仰诸天》朝不保夕** with or
 
 ## Agent run record
 
-Session retrospective (TOC demote + early-stop hang): [2026-08-09-change-source-toc-early-stop.md](../postmortem/2026-08-09-change-source-toc-early-stop.md)
+Session retrospective (full change-source quality thread): [2026-08-09-change-source-quality-thread.md](../postmortem/2026-08-09-change-source-quality-thread.md)
 
 | Date | Result | Evidence |
 |---|---|---|
