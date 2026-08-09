@@ -116,5 +116,6 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://m.paipaiwx.com` | **fixed**（无搜索） | search POST 字段 `searchkey`→`369koolearn` 仍恒返回热搜空壳（m/www 同）；debug 详情/目录292/正文 OK；`checkSearch=false`→校验成功；书架 3 保留。Trap：`search_post_hot_shell` |
 | `https://m.feibzw.com/` | **skip**（已禁用 m/www/`#` +试验 `fsuzw`） | TLS `record layer failure`；`feisuzw` 公告→`https://www.fsuzw.com`（同 `/book-{id}/` 详情/目录通）；正文 YHFixed **每章换 woff2** 字体加密，Legado 解不开；搜索 0。书架靠换源。Trap：`tls_packet_header_corrupt` / `content_font_encrypt_dynamic` |
 | `https://m.6yzw.com/` | **fixed migrate** | 跳转 `https://www.lzshu.cc`；新源「六月中文网」校验成功（search=`/search.php?q=`，TOC=`.book_list2`+`index_N`）；旧 `/N_ID/` **错书**不可直 remap；书架 2/3 按书名 remap（`84_84198`/`10_10911`）；`龙珠…` 无同名仍挂旧 origin。`m.6yzw` disabled。Trap：`主机跳转` |
+| `http://www.xiaoshuozu.cc` | **fixed** | `s.php` 404→`/search.php?q=`（lzshu 同模板）；https 源「小说族」校验成功；旧 `/shu/{id}/` 错书；仅「大唐开局震惊李世民」精确 remap→`/shu/92982/`；另 2 本无精确同名靠换源。http 旧源 disabled。 |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
