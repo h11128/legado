@@ -41,6 +41,19 @@ Trap: `shallow_unfixable_claim` · script_fix: `no_auto:agent_must_html_or_phone
 - Twin: `m.75zwz.com` 已迁通；本源保留打开路径。
 - Trap: `search_empty_shell_open_ok`；反思：本站 close-out 当场写 skill+retro（用户要求每站提升）。
 
+
+## 2026-08-09 www.121ds.cc deep dig
+
+- PC/手机：`23.224.254.235` 连接超时（HTTP 日志 ~43s）。
+- hunt empty；`www.121ds.com` 活着但是**影视站**（快看影视），非小说孪生；`.net` CF Redirecting。
+- 已禁用。Trap: `name_similar_video_not_novel_twin`。
+
+
+## 2026-08-09 www.27k.net deep dig
+
+- PC timeout；手机 POST `/search/` Cronet 60s（HTTP #644）。
+- `hunt --probe` empty；已禁用。Trap: `host_phone_timeout_no_mirror`。
+
 ## 2026-08-09 书架「失效」标签源抽查 + deep diagnose 关门
 
 - 抽查 10 个大源：表与队列见 `docs/guides/shelf-stale-tag-source-queue.md`。

@@ -89,5 +89,7 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | `https://m.ttshu8.com` | **fixed**（无搜索） | POST `searchkey`→500；打开/目录/正文 OK，`checkSearch=false` 校验成功 |
 | `https://m.lrxs.org` | **skip** | Web accesible→Google；hunt empty；已禁用 |
 | `http://apitt.kanshushenapp.com/` | **skip** | api_search 404；gegedangbook 超时；hunt empty；已禁用 |
+| `https://www.121ds.cc/` | **skip** | 23.224 超时；.com 影视非孪生；hunt empty；已禁用 |
+| `https://www.27k.net` | **skip** | PC/手机 60s timeout；hunt empty；已禁用 |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。
