@@ -33,6 +33,35 @@
 Trap: `shallow_unfixable_claim` · script_fix: `no_auto:agent_must_html_or_phone_debug`
 
 
+
+## 2026-08-09 harness: 如何确保每站 deep dig 都反思提升
+
+**用户问：** 如何确保以后都按纪律？
+
+### 根因（不是「忘了」这么简单）
+
+1. 深挖常走 `scripts/lib/legado_mcp.py`，**不**经过 `source-cli diagnose`/`push` → **不 claim** `deep_active`。
+2. stop hook 只在 `legadoSkill` 文档里写了，工作区常是 `legado` → **找不到** `deep_active.json`，followup 不触发。
+3. IDE MCP hook 以前只认 `save_source`，不认 `debug_source`/`start_check_sources`。
+4. 散文 discipline / skill 挡不住跳过 close-out。
+
+### 结构性修复（已落地）
+
+| 层 | 改动 |
+|----|------|
+| Python | `LegadoMcp.debug/save/check` → `source-cli closeout claim` |
+| Hook | `legado`+`legadoSkill` `.cursor/hooks.json`：stop + afterMCP |
+| Hook script | `check-deep-active-stop.py` 搜 sibling `legadoSkill`；`mcp-deep-dig-claim.py` |
+| HookRule | `legado_progress_next_unsealed_remind` ASK |
+| Skill trap | `manual_mcp_bypass_closeout` |
+| Discipline | §5c |
+
+### 仍靠 agent 但被门禁兜底的部分
+
+claim 之后必须：`ledger` → `retro`（trap/skill_fix/script_fix）→ 新陷阱改 SKILL → retrospective 短记 → commit。未 seal 则 stop 催、`progress next` DENY。
+
+Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
+
 ## 2026-08-09 www.75zwz.com deep dig
 
 - Bug: searchUrl 误用 `searchtype={{key}}`；真字段 `369koolearn` POST 仍空壳无 `#sitembox`。

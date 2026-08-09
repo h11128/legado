@@ -38,6 +38,13 @@ Create and repair share the same close-out / improve gate — do not wait for th
    or phone `debug_source` + `get_http_logs`. Search-dead ≠ open-path-dead. After a deep-dig
    batch: write the **session lesson** in `docs/source-repair-retrospective.md` (not only
    per-URL `retro append`).
+5c. **Structural close-out for manual deep dig (2026-08-09):** prose alone failed.
+   - `scripts/lib/legado_mcp.py` **claims** `deep_active` on `debug_source` / `save_source` /
+     `start_check_sources` (same gate as `diagnose` / `source push`).
+   - IDE MCP: `.cursor/hooks/mcp-deep-dig-claim.py` on `afterMCPExecution`.
+   - Turn end: `.cursor/hooks/check-deep-active-stop.py` on `stop` (finds sibling
+     `legadoSkill/temp/full_fix/deep_active.json` even when cwd is `legado`).
+   - Unsealed → stop followup + `progress next` DENY until `retro append` seals.
 6. **Wave is triage, not fix**: `repair_wave` may only apply *meaningful* smells; rate-only ≠ fixed.
 7. **Never rewrite search rules** on rate-limit HTML — rely on EWMA cooldown cache / clear-cookies.
 8. **Never create** ad-hoc inspect scripts — use `source-cli diagnose` / `probe`.

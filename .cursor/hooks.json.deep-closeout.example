@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterAgentResponse": [
+      {
+        "command": "audit-hooks hook"
+      }
+    ],
+    "afterAgentThought": [
+      {
+        "command": "audit-hooks hook"
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "audit-hooks hook"
+      }
+    ],
+    "afterMCPExecution": [
+      {
+        "command": "audit-hooks hook"
+      },
+      {
+        "command": "python .cursor/hooks/mcp-deep-dig-claim.py",
+        "timeout": 35
+      }
+    ],
+    "afterShellExecution": [
+      {
+        "command": "audit-hooks hook"
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "audit-hooks hook"
+      },
+      {
+        "type": "prompt",
+        "matcher": "cargo run",
+        "prompt": "The agent is about to run `cargo run` in a project. Before allowing this:\n1. Check if the project has a docs/run-guide.md — if so, verify the agent chose the correct run mode.\n2. If the command targets ideas-sorter (cwd contains ideas-sorter or the command runs in that directory), this is a LONG-RUNNING pipeline (~18 min full, ~6 min no-LLM, <2s report-only). Verify:\n   - Was --report-only considered? (if only report_html.rs changed)\n   - Was --no-llm the default? (config has enabled=false)\n   - Is --llm explicitly needed? (dimension/prompt/weight changes)\n3. If the run seems unnecessarily expensive, respond with {\"permission\": \"ask\", \"user_message\": \"This cargo run may take 18+ min. Consider --report-only or --no-llm if only reports changed.\", \"agent_message\": \"Hook flagged this as potentially expensive. Check ideas-sorter/docs/run-guide.md for the correct run mode.\"}\n4. Otherwise respond {\"permission\": \"allow\"}",
+        "timeout": 10
+      },
+      {
+        "command": ".cursor/hooks/deny-agent-ml-sidecar-shell.ps1",
+        "matcher": "grpc_server|start-ml\\.bat",
+        "timeout": 5
+      },
+      {
+        "command": ".cursor/hooks/check-resource-audit.sh",
+        "matcher": "adb\\s+install|gradlew\\s+(install|assemble)|dev\\.(bat|sh)|android-deploy",
+        "timeout": 5
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "audit-hooks hook"
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "command": "audit-hooks hook"
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "audit-hooks hook"
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": "audit-hooks hook"
+      }
+    ],
+    "stop": [
+      {
+        "command": "audit-hooks hook"
+      },
+      {
+        "command": "python .cursor/hooks/check-deep-active-stop.py",
+        "timeout": 15
+      }
+    ]
+  }
+}

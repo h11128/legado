@@ -78,6 +78,9 @@ Push with `python scripts/push-rfc004-review-sources.py` (or `save_source` `form
 
 Device smoke (2026-08-09): `assembleAppDebug` + install → logcat `DB version upgrading from 101 to 102` OK; unit `ReviewOverlayMergeTest` / resolver tests green.
 
+P5 merge smoke (2026-08-09): `python scripts/rfc004-overlay-device-session.py --merge` → dual bind (fixture + 起点段评源) → logcat `ReviewOverlay merge providers=1 bucket=2` (peer align skip expected; merge path exercised).
+
+
 Chapter-bucket is expected to work once bound; paragraph icons still need `ContentSplitVerified` (fixture URL only today) and at most one `paragraph_primary`.
 
 In-dialog per-provider load-more on the merge list itself is deferred (§12.4.3 follow-up).

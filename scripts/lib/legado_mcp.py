@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import time
 import urllib.request
 from pathlib import Path
@@ -18,6 +19,58 @@ from typing import Any, Callable
 
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def _skill_root() -> Path | None:
+    """legadoSkill root (source-cli closeout / deep_active live here)."""
+    env = (os.environ.get("LEGADO_SKILL_ROOT") or "").strip()
+    if env:
+        p = Path(env)
+        if (p / "config" / "mcp_defaults.json").is_file():
+            return p
+    sibling = repo_root().parent / "legadoSkill"
+    if (sibling / "config" / "mcp_defaults.json").is_file():
+        return sibling
+    fixed = Path("E:/Projects/legadoSkill")
+    if (fixed / "config" / "mcp_defaults.json").is_file():
+        return fixed
+    return None
+
+
+def claim_deep_active(url: str, note: str = "legado_mcp") -> tuple[bool, str]:
+    """Arm deep_active so stop/progress cannot skip ledger+retro (discipline §22)."""
+    url = (url or "").strip()
+    if not url.startswith(("http://", "https://")):
+        return False, "claim skipped: not an http(s) bookSourceUrl"
+    skill = _skill_root()
+    cwd = str(skill) if skill else str(repo_root())
+    env = {**os.environ}
+    if skill:
+        env["LEGADO_SKILL_ROOT"] = str(skill)
+    try:
+        r = subprocess.run(
+            [
+                "source-cli",
+                "closeout",
+                "claim",
+                "--url",
+                url,
+                "--note",
+                note[:80],
+            ],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+            env=env,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, str(e)
+    if r.returncode == 0:
+        return True, (r.stdout or "").strip()[:200]
+    return False, ((r.stderr or r.stdout or "")[:300])
 
 
 def resolve_mcp_url(explicit: str | None = None) -> tuple[str, str]:
@@ -188,6 +241,7 @@ class LegadoMcp:
         *,
         preserve_enabled: bool | None = None,
         preserve_group: bool | None = None,
+        claim: bool = True,
     ) -> str:
         args: dict[str, Any] = {
             "source": source if isinstance(source, str) else json.dumps(source, ensure_ascii=False),
@@ -197,13 +251,51 @@ class LegadoMcp:
             args["preserveEnabled"] = preserve_enabled
         if preserve_group is not None:
             args["preserveGroup"] = preserve_group
-        return self.text("save_source", args)
+        out = self.text("save_source", args)
+        if claim:
+            book_url = ""
+            if isinstance(source, dict):
+                book_url = str(source.get("bookSourceUrl") or "")
+            elif isinstance(source, str):
+                try:
+                    book_url = str(json.loads(source).get("bookSourceUrl") or "")
+                except json.JSONDecodeError:
+                    book_url = ""
+            if book_url:
+                ok, msg = claim_deep_active(book_url, "legado_mcp save_source")
+                if not ok:
+                    out = f"{out}\n[deep_active claim failed: {msg}]"
+        return out
 
     def debug_source(self, url: str, key: str, timeout_sec: int = 55) -> str:
+        claim_deep_active(url, "legado_mcp debug_source")
         return self.text(
             "debug_source",
             {"url": url, "key": key, "timeoutSec": timeout_sec},
             timeout=timeout_sec + 30,
+        )
+
+    def start_check_sources(
+        self,
+        urls: list[str],
+        *,
+        check_search: bool = True,
+        check_discovery: bool = False,
+        timeout_ms: int = 180000,
+        thread_count: int = 1,
+        claim: bool = True,
+    ) -> Any:
+        if claim and urls:
+            claim_deep_active(urls[0], "legado_mcp start_check_sources")
+        return self.call(
+            "start_check_sources",
+            {
+                "urls": urls,
+                "checkSearch": check_search,
+                "checkDiscovery": check_discovery,
+                "timeoutMs": timeout_ms,
+                "threadCount": thread_count,
+            },
         )
 
     def reset_channel(self) -> str:
