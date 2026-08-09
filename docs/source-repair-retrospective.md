@@ -243,6 +243,12 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - Verify: novel key → 0 books; hello check 校验成功
 - App: isAcceptableChangeSourceHit (usable latest, author when local set, non-book intro)
 
+### 2026-08-09 PO文屋 https://www.powenwu1.com (toc related-list)
+- Scan: 启用源里同模板 POST search.php 共 73 host；**双 list-charts 黄链污染仅 jile1 + powenwu1**
+- jile1: 已 `.0` + 校验成功（见上条）
+- powenwu1: `chapterList` → `class.list-charts.0@li@a`（已 save）；PC HTML 块=[48,6]→取首块 48
+- Verify: 手机 Cronet **ERR_TIMED_OUT**（源分组含「网站失效」）→ **未**宣称校验成功；ledger `fail:phone_timeout`
+
 ### 2026-08-09 PO18文学 https://www.jile1.com (toc related-list)
 - Trap: `multi_list_charts_toc` — 双 `ul.list-group.list-charts`；第二块是相关推荐黄链（非「最新几章」）
 - Fix: `ruleToc.chapterList` → `class.list-charts.0@li@a`（只取第一块正文目录）
