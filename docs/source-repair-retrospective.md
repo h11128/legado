@@ -39,6 +39,17 @@
 | 动作 | `http://00txs.com` + `/` **enabled=0**；书架 4 本靠自动换源 |
 | Trap | `host_phone_timeout_no_mirror`（known） |
 
+## 2026-08-09 yjcat.com → ibiquxs.org（CF 跳转孪生）
+
+| 项 | 结果 |
+|----|------|
+| Gate | `l2_bot_shell`（403 CF；`final_url=http://www.ibiquxs.org/`） |
+| 证据 | PC：`yjcat` 首页/书路径 302 到 ibiquxs；书页 TOC 可读；搜索 `modules/article/search.php` OK |
+| 设备 | 新源 `http://www.ibiquxs.org` **校验成功**（~1–3s）；debug 搜索 100 / 目录 1457 / 有正文 |
+| 书架 | 4 本 origin remap（bookUrl 本已在 ibiquxs） |
+| 动作 | `yjcat` + `yjcat#` disable |
+| Trap | `主机跳转`（CF 壳勿当终局 skip；跟 final_url / 已有书路径） |
+
 ## 2026-08-09 浅层「修不了」被打脸 — 必须记的总教训
 
 **用户反馈：** 先前说修不了，再一站一站 deep diagnose 又能修；缺反思记录。
