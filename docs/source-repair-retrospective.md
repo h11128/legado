@@ -120,8 +120,9 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 
 ## 2026-08-09 m.boshishuwu.com deep dig
 
-- `.com` 301→`m.boshishuwu.net`；手机对 .com/.net 的 http+https 均 `PROTOCOL_ERROR`（StreamReset）。
-- PC RemoteDisconnected；hunt empty。已禁用各变体。
+- **首轮**：`.com` 301→`m.boshishuwu.net`；手机 http/https 均 `PROTOCOL_ERROR`（StreamReset）。
+- **再挖**：手机打开 `.net/boshi/0_536/` 仍 `StreamResetException` + Cronet `ERR_HTTP2_PROTOCOL_ERROR`；PC curl/Python TLS `RemoteDisconnected` / schannel close；`hunt --probe` empty。
+- 无可用镜像。已禁用 `https://m.boshishuwu.com`、`https://m.boshishuwu.net`、`http://m.boshishuwu.net`；书架 6 靠自动换源。
 - Trap: `stream_protocol_error_reset`。
 
 

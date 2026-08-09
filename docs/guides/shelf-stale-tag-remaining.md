@@ -96,7 +96,7 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | `https://www.69shu.xyz` | **skip** | CF 520；孪生 69shuba 已启用；已禁用 |
 | `http://154.37.154.143` | **skip** | IP 超时；xhsxsw Host 停车壳；已禁用 |
 | `http://www.qingzichan.net` | **skip** | 再挖：http 超时；https 已成 **6080影视** 壳（301→6080xsjys）；`/ggd/` ID 在 ax81 错书；hunt empty；http+https 已禁用 |
-| `https://m.boshishuwu.com` | **skip** | PROTOCOL_ERROR；301→.net 同死；已禁用 |
+| `https://m.boshishuwu.com` | **skip** | 再挖：仍 `StreamReset PROTOCOL_ERROR` / Cronet `ERR_HTTP2`（.com→.net 同）；PC `RemoteDisconnected`；hunt empty；.com+.net 已禁用 |
 | `https://hongxiud.com` | **skip** | 广告/色情劫持壳；已禁用 |
 | `https://m.92yanqing.com` | **skip** | 搜索超时；hunt empty；已禁用 |
 | `https://www.00ksw.com` | **skip** | PC/手机 TCP hang（DNS→23.224 uucdn）；hunt empty；假镜像停车/威胁页；手机 DB `enabled=0`；书架 5 靠自动换源 |
