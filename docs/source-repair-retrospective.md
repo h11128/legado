@@ -1,6 +1,14 @@
 # Source repair retrospective
 
 
+## 2026-08-09 batch5 — shuquge / sodu / iyueba
+
+| URL | 结果 | 要点 |
+|-----|------|------|
+| `shuquge.co` | skip | nginx 444；品牌孪生超时 |
+| `sodu.info` | skip | 403；soduzw 超时 |
+| `iyueba.net` | **fixed** | 搜索验证码；修 TOC/正文，打开路径 OK |
+
 ## 2026-08-09 batch4 — 147xs / 16kbook / 31xs
 
 | URL | 结果 | 要点 |

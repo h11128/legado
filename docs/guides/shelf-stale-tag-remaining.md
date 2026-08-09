@@ -141,5 +141,8 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://m.75zwz.com` | **fixed**（batch4 再清） | 「发现失效」标签复发；`checkDiscovery=false` 再验 **校验成功** |
 | `http://www.16kbook.co` | **fixed migrate** | `.co` unexpected EOF；→`http://www.16kbook.net`（`/search.php?q=` + `article@html` + `.book_list2`）；设备 **校验成功**；书架「游戏面板」remap→`/1/1137/`；「长生…」站内无同名靠换源；`.co` disabled。Trap：`主机跳转` |
 | `http://www.31xs.net` | **skip**（net/#/com 已禁用） | `.net` **403**；书架书在 `.com` 但同路径 **错书**；搜索 404/`search.html`→首页；hunt/OSINT 无后继。书架 8 靠换源。Trap：`fake_detail` |
+| `http://www.shuquge.co` | **skip**（已禁用） | L2/手机 **444**；hunt empty；`ishuquge.la`/wap 亦超时；书架 2 靠换源（1 本已在 ishuquge）。Trap：`known:l2_http_dead` |
+| `http://www.sodu.info` | **skip**（已禁用） | 首页+搜索 **403**；hunt empty；`soduzw` 超时。书架 2 靠换源。Trap：`http_403_home_hunt_empty` |
+| `https://iyueba.net` | **fixed**（无搜索） | `/z/` 搜索返回**验证码**；详情/目录 `zjml`+`#content_1`、正文 `#booktxt` 修好；打开路径 **校验成功**。Trap：`search_empty_shell_open_ok` |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
