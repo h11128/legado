@@ -1,7 +1,7 @@
 # RFC-004 device verify (P1–P3 overlay)
 
 **Agent 全套截图验收（无缝自动绑，真实源）：** 见 [rfc-004-autobind-acceptance.md](./rfc-004-autobind-acceptance.md)  
-一键：`python scripts/rfc004-run-acceptance.py`
+一键：`python scripts/rfc004-run-acceptance.py`（共享库 `scripts/lib/rfc004_device.py`；旧 session 脚本多为薄包装）
 
 ## Fixture
 

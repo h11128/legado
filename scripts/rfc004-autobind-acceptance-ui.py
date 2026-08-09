@@ -1,190 +1,62 @@
 #!/usr/bin/env python3
 """RFC-004 seamless auto-bind — FULL screenshot acceptance (real providers only).
 
-Gates (all must pass with PNG under out-dir):
-  G1 fixtures disabled / only real #rfc004-review enabled
-  G2 silent auto-bind ≥2 real bindMode=auto, no fixture rows
-  G3 positive ReviewOverlay bucket/merge log (no fixture URL)
-  G4 read page screenshot (title + review chip)
-  G5 comment dialog screenshot with real comments (no 夹具)
-  G6 multi-provider merge UI or multi-bind evidence + dialog shot
-  G7 paragraph authority attempt logged (ContentSplitVerified for 起点)
-  G8 book info「段评源」shows bound count/name screenshot
-  G9 negative: autoBind=false → clear → open read → still 0 bindings + screenshot
+Prefer the one-shot entry:
+  python scripts/rfc004-run-acceptance.py
 
-Usage:
-  python scripts/rfc004-autobind-acceptance-ui.py
+Gates G1–G9 (see docs/guides/rfc-004-autobind-acceptance.md).
+Supports --from / --only, structured ACCEPTANCE.json (also on failure).
 """
 from __future__ import annotations
 
-import json
+import argparse
 import re
 import sqlite3
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+from scripts.lib import rfc004_device as d  # noqa: E402
 from scripts.lib.legado_adb import open_read_book  # noqa: E402
 
-PKG = "com.legado.app.debug"
 OUT = ROOT / "temp" / "rfc004_ui" / "acceptance"
-PREFS = f"shared_prefs/{PKG}_preferences.xml"
-BOOK_SUB = "诡秘之主"
-FIXTURE_PREFIX = "legado-fixture://"
+BOOK_SUB = d.BOOK_SUB_DEFAULT
 
 
-def adb(*args: str) -> bytes:
-    return subprocess.check_output(["adb", *args])
+class GateFail(Exception):
+    def __init__(self, gate: str, msg: str):
+        super().__init__(f"FAIL {gate}: {msg}")
+        self.gate = gate
+        self.msg = msg
 
 
-def pull_db(dest: Path) -> Path:
-    dest.mkdir(parents=True, exist_ok=True)
-    subprocess.check_call(["adb", "shell", "am", "force-stop", PKG])
-    time.sleep(1)
-    for name in ("legado.db", "legado.db-wal", "legado.db-shm"):
-        (dest / name).write_bytes(
-            adb("exec-out", "run-as", PKG, "cat", f"databases/{name}")
-        )
-    db = dest / "legado.db"
-    con = sqlite3.connect(str(db))
-    con.execute("PRAGMA wal_checkpoint(FULL)")
-    con.commit()
-    con.close()
-    return db
-
-
-def push_db(db: Path, tag: str = "acc") -> None:
-    remote = f"/data/local/tmp/legado_rfc004_{tag}.db"
-    subprocess.check_call(["adb", "push", str(db), remote])
-    subprocess.check_call(
-        [
-            "adb",
-            "shell",
-            f"run-as {PKG} sh -c 'cp {remote} databases/legado.db "
-            f"&& rm -f databases/legado.db-wal databases/legado.db-shm'",
-        ]
-    )
-
-
-def ensure_pref_bool(xml: str, key: str, value: bool) -> str:
-    bool_s = "true" if value else "false"
-    if f'name="{key}"' in xml:
-        return re.sub(
-            rf'<boolean name="{re.escape(key)}" value="[^"]*"\s*/>',
-            f'<boolean name="{key}" value="{bool_s}" />',
-            xml,
-            count=1,
-        )
-    return xml.replace(
-        "</map>",
-        f'    <boolean name="{key}" value="{bool_s}" />\n</map>',
-        1,
-    )
-
-
-def push_prefs(**flags: bool) -> None:
-    raw = adb("exec-out", "run-as", PKG, "cat", PREFS).decode("utf-8", "replace")
-    xml = raw
-    defaults = {
-        "reviewOverlayEnabled": True,
-        "reviewOverlayAutoBind": True,
-        "reviewOverlayMergeEnabled": True,
-        "reviewOverlayAllowParagraphIcons": True,
-    }
-    defaults.update(flags)
-    for k, v in defaults.items():
-        xml = ensure_pref_bool(xml, k, v)
-    p = OUT / "preferences.xml"
-    p.write_text(xml, encoding="utf-8")
-    subprocess.check_call(["adb", "push", str(p), "/data/local/tmp/legado_rfc004_prefs.xml"])
-    subprocess.check_call(
-        [
-            "adb",
-            "shell",
-            f"run-as {PKG} sh -c 'cp /data/local/tmp/legado_rfc004_prefs.xml {PREFS}'",
-        ]
-    )
-
-
-def dump_ui(name: str) -> str:
-    subprocess.check_call(["adb", "shell", "uiautomator", "dump", "/sdcard/_acc_ui.xml"])
-    dest = OUT / name
-    subprocess.check_call(["adb", "pull", "/sdcard/_acc_ui.xml", str(dest)])
-    return dest.read_text(encoding="utf-8", errors="replace")
-
-
-def shot(name: str) -> Path:
-    p = OUT / name
-    p.write_bytes(adb("exec-out", "screencap", "-p"))
-    print("shot", p.name)
-    return p
-
-
-def texts(xml: str) -> list[str]:
-    return [m.group(1) for m in re.finditer(r'text="([^"]+)"', xml)]
-
-
-def find_badge_tap(png: Path) -> tuple[int, int]:
-    from PIL import Image
-
-    im = Image.open(png).convert("RGB")
-    pix = im.load()
-    w, h = im.size
-    row_dark = [0] * h
-    for y in range(70, min(280, h)):
-        c = sum(
-            1
-            for x in range(120, min(1000, w))
-            if pix[x, y][0] < 80 and pix[x, y][1] < 80 and pix[x, y][2] < 80
-        )
-        row_dark[y] = c
-    title_rows = [y for y in range(70, min(280, h)) if row_dark[y] > 60]
-    if not title_rows:
-        return 960, 170
-    y0, y1 = min(title_rows), max(title_rows)
-    xs = [
-        x
-        for y in range(y0, y1 + 1)
-        for x in range(120, min(1000, w))
-        if pix[x, y][0] < 80 and pix[x, y][1] < 80 and pix[x, y][2] < 80
-    ]
-    title_end = max(xs) if xs else 900
-    return max(200, title_end - 12), (y0 + y1) // 2
-
-
-def prepare_positive(db: Path) -> str:
+def prepare_positive(db: Path, book_sub: str) -> str:
     con = sqlite3.connect(str(db))
     cur = con.cursor()
     cur.execute(
         "UPDATE book_sources SET enabled=0 WHERE bookSourceUrl LIKE ?",
-        (FIXTURE_PREFIX + "%",),
+        (d.FIXTURE_PREFIX + "%",),
     )
     cur.execute(
-        "UPDATE book_sources SET enabled=1 WHERE bookSourceUrl LIKE '%#rfc004-review' "
+        "UPDATE book_sources SET enabled=1 WHERE bookSourceUrl LIKE ? "
         "AND bookSourceUrl NOT LIKE ?",
-        (FIXTURE_PREFIX + "%",),
+        (f"%{d.REVIEW_SUFFIX}", d.FIXTURE_PREFIX + "%"),
     )
     real = cur.execute(
         "SELECT bookSourceUrl, bookSourceName FROM book_sources WHERE enabled=1 "
-        "AND bookSourceUrl LIKE '%#rfc004-review' AND bookSourceUrl NOT LIKE ?",
-        (FIXTURE_PREFIX + "%",),
+        "AND bookSourceUrl LIKE ? AND bookSourceUrl NOT LIKE ?",
+        (f"%{d.REVIEW_SUFFIX}", d.FIXTURE_PREFIX + "%"),
     ).fetchall()
     print("G1 real sources", len(real), [n for _, n in real])
     if len(real) < 1:
-        raise SystemExit("FAIL G1: no real review sources")
-    row = cur.execute(
-        "SELECT bookUrl, name, author, origin FROM books WHERE name LIKE ? LIMIT 1",
-        (f"%{BOOK_SUB}%",),
-    ).fetchone()
-    if not row:
-        raise SystemExit("FAIL: book missing")
-    book_url, name, author, origin = row
+        raise GateFail("G1", "no real review sources (use --push-sources)")
+    book_url, name, author, origin = d.find_book_url(db, book_sub)
     print("book", name, author, origin)
-    if FIXTURE_PREFIX in (origin or ""):
-        raise SystemExit("FAIL: fixture origin")
+    if d.FIXTURE_PREFIX in (origin or ""):
+        raise GateFail("G1", "fixture origin")
     cur.execute("DELETE FROM book_review_bindings WHERE contentBookUrl=?", (book_url,))
     for t, i in cur.execute(
         "SELECT title, `index` FROM chapters WHERE bookUrl=? ORDER BY `index` LIMIT 40",
@@ -204,236 +76,455 @@ def prepare_positive(db: Path) -> str:
 
 
 def wait_overlay(timeout_s: int = 100) -> tuple[str, str]:
-    deadline = time.time() + timeout_s
-    out_log = ""
-    while time.time() < deadline:
-        time.sleep(3)
-        out_log = adb("logcat", "-d").decode("utf-8", "replace")
-        hits = [ln for ln in out_log.splitlines() if "ReviewOverlay" in ln]
-        print(f"t+ hits={len(hits)}")
+    best = ""
+    log = ""
+
+    def tick() -> bool:
+        nonlocal best, log
+        log = d.logcat_applog()
+        hits = d.overlay_lines(log)
+        print(f"t+ overlay_hits={len(hits)}")
         for ln in hits[-5:]:
             print(" ", ln[ln.find("ReviewOverlay") :])
-        if any(FIXTURE_PREFIX in ln and "bind=" in ln for ln in hits):
-            raise SystemExit("FAIL G3: fixture in overlay log")
+        if any(d.FIXTURE_PREFIX in ln and "bind=" in ln for ln in hits):
+            raise GateFail("G3", "fixture in overlay log")
         for ln in reversed(hits):
             if "merge providers=" in ln or (
                 "bucket=" in ln and "bucket=0" not in ln and "auto-bind" not in ln
             ):
-                (OUT / "session_positive.log").write_text(out_log, encoding="utf-8")
-                return ln, out_log
-    (OUT / "session_positive.log").write_text(out_log, encoding="utf-8")
-    raise SystemExit("FAIL G3: no positive bucket/merge")
+                best = ln
+                return True
+        return False
+
+    if not d.wait_until(tick, timeout_s=timeout_s, interval_s=1.5, label="overlay"):
+        (OUT / "session_positive.log").write_text(log or d.logcat_applog(), encoding="utf-8")
+        raise GateFail("G3", "no positive bucket/merge")
+    (OUT / "session_positive.log").write_text(log, encoding="utf-8")
+    return best, log
+
+
+def wait_authority(timeout_s: float = 12.0) -> str:
+    """Poll after bucket/merge for ContentSplitVerified (may log slightly later)."""
+    found = ""
+
+    def tick() -> bool:
+        nonlocal found
+        log = d.logcat_applog()
+        for ln in reversed(log.splitlines()):
+            if "authority=ContentSplitVerified" in ln and "ReviewOverlay" in ln:
+                found = ln
+                return True
+        return False
+
+    if not d.wait_until(tick, timeout_s=timeout_s, interval_s=1.0, label="authority"):
+        raise GateFail("G7", "expected ContentSplitVerified for 起点")
+    return found
 
 
 def open_book_info_from_read(book_url: str) -> None:
-    """BookInfoActivity is not exported — open via read menu title."""
-    open_read_book(book_url, PKG)
-    time.sleep(3)
-    # Center tap shows read menu
-    adb("shell", "input", "tap", "540", "1100")
-    time.sleep(1.0)
-    xml = dump_ui("G8_menu.xml")
-    # Prefer clicking visible book title / 书籍信息
+    open_read_book(book_url, d.PKG)
+    time.sleep(1.5)
+    d.tap_frac(0.5, 0.45)
+    time.sleep(0.8)
+    xml = d.dump_ui(OUT / "G8_menu.xml")
     targets = []
-    for m in re.finditer(
-        r'text="([^"]*)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', xml
-    ):
-        text, x1, y1, x2, y2 = m.group(1), *map(int, m.groups()[1:])
+    _, h = d.screen_size()
+    top = int(h * 0.4)
+    for text, x1, y1, x2, y2 in d.ui_nodes(xml):
         if text in ("书籍信息",) or text == BOOK_SUB or "诡秘" in text:
-            if y2 < 900:  # top menu chrome
+            if y2 < top:
                 targets.append((text, (x1 + x2) // 2, (y1 + y2) // 2))
     if not targets:
-        # Fallback: top-center title area in menu
-        adb("shell", "input", "tap", "540", "220")
+        d.tap_frac(0.5, 0.09)
     else:
         t = targets[0]
         print("tap info", t)
-        adb("shell", "input", "tap", str(t[1]), str(t[2]))
-    time.sleep(2.5)
+        d.tap_xy(t[1], t[2])
+    time.sleep(1.5)
 
 
-def main() -> int:
-    OUT.mkdir(parents=True, exist_ok=True)
-    results: dict[str, str] = {}
-
-    push_prefs(reviewOverlayAutoBind=True)
-    db = pull_db(OUT / "pos")
-    book_url = prepare_positive(db)
-    results["G1"] = "fixtures off; real sources only"
-    push_db(db, "pos")
-    subprocess.check_call(["adb", "logcat", "-c"])
-    open_read_book(book_url, PKG)
-    best, log = wait_overlay()
-    results["G3"] = best[best.find("ReviewOverlay") :]
-    print("G3 OK", results["G3"])
-
-    if "authority=ContentSplitVerified" in log:
-        cov = [ln for ln in log.splitlines() if "coverage=" in ln and "ReviewOverlay" in ln]
-        paras = [ln for ln in log.splitlines() if "paras=" in ln and "ReviewOverlay" in ln]
-        results["G7"] = (paras or cov or ["ContentSplitVerified logged"])[-1]
-        results["G7"] = results["G7"][results["G7"].find("ReviewOverlay") :]
-    else:
-        raise SystemExit("FAIL G7: expected ContentSplitVerified for 起点 authority")
-
-    time.sleep(2)
-    png = shot("G4_read_title.png")
-    dump_ui("G4_read_title.xml")
-    results["G4"] = "G4_read_title.png"
-
-    x, y = find_badge_tap(png)
-    opened = False
-    merge_ui = False
-    for dx, dy in ((0, 0), (-12, 0), (12, 0), (0, -10), (0, 10), (-25, 5), (20, 8)):
-        adb("shell", "input", "tap", str(x + dx), str(y + dy))
-        time.sleep(1.3)
-        xml = dump_ui("G5_after_badge.xml")
-        ts = texts(xml)
-        if any("夹具" in t for t in ts):
-            raise SystemExit("FAIL G5: fixture UI text")
-        if any("本章评论" in t for t in ts):
-            merge_ui = True
-            opened = True
-            break
-        if any(re.search(r"共\s*\d+\s*条", t) for t in ts):
-            opened = True
-            break
-        if any(t in ("目录", "换源", "亮度") for t in ts):
-            adb("shell", "input", "keyevent", "4")
-            time.sleep(0.4)
-    if not opened:
-        shot("FAIL_no_dialog.png")
-        raise SystemExit("FAIL G5: no comment dialog")
-    shot("G5_comment_dialog.png")
-    results["G5"] = "G5_comment_dialog.png"
-    xml = dump_ui("G5_dialog.xml")
-    ts = texts(xml)
-    if "夹具" in "\n".join(ts):
-        raise SystemExit("FAIL G5: fixture in dialog")
-    content_rows = [
-        t
-        for t in ts
-        if t
-        and "本章评论" not in t
-        and not re.search(r"共\s*\d+\s*条", t)
-        and len(t) >= 2
-        and "夹具" not in t
-    ]
-    if len(content_rows) < 1:
-        raise SystemExit("FAIL G5: empty comments")
-    print("G5 comments sample", content_rows[:8])
-
-    if merge_ui:
-        # Capture merge UI BEFORE force-stop (same frame as G5 dialog).
-        shot("G6_merge_dialog.png")
-        results["G6"] = "G6_merge_dialog.png"
-        if not any("本章评论" in t for t in ts) and not any(
-            "起点" in t or "QQ" in t or "段评源" in t for t in ts
-        ):
-            raise SystemExit("FAIL G6: merge_ui set but no merge chrome in dialog texts")
-    else:
-        results["G6"] = "pending multi-bind check"
-
-    subprocess.check_call(["adb", "shell", "am", "force-stop", PKG])
-    time.sleep(1)
-    db2 = pull_db(OUT / "pos_after")
-    con = sqlite3.connect(str(db2))
+def bindings_for(db: Path, book_url: str) -> list[tuple]:
+    con = sqlite3.connect(str(db))
     rows = con.execute(
         "SELECT providerSourceUrl, bindMode, enabled FROM book_review_bindings "
         "WHERE contentBookUrl=? ORDER BY sortOrder",
         (book_url,),
     ).fetchall()
     con.close()
-    print("G2 bindings", rows)
-    if not rows or any(FIXTURE_PREFIX in r[0] for r in rows):
-        raise SystemExit("FAIL G2: bad bindings")
-    if not any(r[1] == "auto" for r in rows):
-        raise SystemExit("FAIL G2: not auto")
-    results["G2"] = f"{len(rows)} bindings: " + ", ".join(r[0] for r in rows)
-    if len(rows) < 2:
-        raise SystemExit(
-            f"FAIL G2/G6: need ≥2 real auto bindings for full acceptance, got {len(rows)}"
+    return rows
+
+
+class Runner:
+    def __init__(self, want: set[str], book_sub: str, mode: str):
+        self.want = want
+        self.book_sub = book_sub
+        self.mode = mode
+        self.gates: dict = {}
+        self.shots: list[str] = []
+        self.book_url: str | None = None
+
+    def need(self, *gs: str) -> bool:
+        return any(g in self.want for g in gs)
+
+    def record_shot(self, name: str) -> Path:
+        p = d.shot(OUT / name)
+        self.shots.append(name)
+        return p
+
+    def mark(self, gate: str, ok: bool, evidence: str, shot: str | None = None) -> None:
+        self.gates[gate] = {"ok": ok, "evidence": evidence, "shot": shot}
+
+    def write(self, passed: bool, fail: str | None = None) -> None:
+        d.write_acceptance(
+            OUT,
+            passed=passed,
+            book_url=self.book_url,
+            gates=self.gates,
+            shots=self.shots,
+            fail=fail,
+            mode=self.mode,
         )
 
-    if results["G6"] == "pending multi-bind check":
-        push_db(db2, "merge")
-        subprocess.check_call(["adb", "logcat", "-c"])
-        open_read_book(book_url, PKG)
-        time.sleep(8)
-        log2 = adb("logcat", "-d").decode("utf-8", "replace")
-        merge_hits = [ln for ln in log2.splitlines() if "merge providers=" in ln]
-        shot("G6_read_multibind.png")
-        if merge_hits:
-            results["G6"] = merge_hits[-1][merge_hits[-1].find("ReviewOverlay") :]
-            print("G6 merge log", results["G6"])
-        else:
-            raise SystemExit(
-                "FAIL G6: ≥2 bindings but no merge providers= log / merge dialog title"
+    def run(self) -> int:
+        d.clear_out_dir(OUT)
+        try:
+            return self._run()
+        except GateFail as e:
+            self.mark(e.gate, False, e.msg)
+            self.write(False, fail=str(e))
+            print(str(e), file=sys.stderr)
+            return 1
+        except SystemExit as e:
+            if e.code in (0, None):
+                raise
+            msg = e.args[0] if e.args else f"exit {e.code}"
+            self.write(False, fail=str(msg))
+            return int(e.code) if isinstance(e.code, int) else 1
+        except Exception as e:
+            self.write(False, fail=repr(e))
+            print(repr(e), file=sys.stderr)
+            return 1
+
+    def _run(self) -> int:
+        # Prefs + DB prepare. Skip only for late resume (G8/G9 only).
+        late_only = bool(self.want) and self.want <= {"G8", "G9"}
+        must_prepare = not late_only
+        if self.need("G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"):
+            d.push_review_prefs(OUT, reviewOverlayAutoBind=True)
+
+        if must_prepare or self.book_url is None:
+            db = d.pull_db_wal(OUT / "pos", stop_app=True)
+            if must_prepare:
+                self.book_url = prepare_positive(db, self.book_sub)
+                self.mark(
+                    "G1",
+                    True,
+                    "fixtures off; real #rfc004-review only",
+                )
+                d.push_db_raw(db, "pos")
+            else:
+                self.book_url, *_ = d.find_book_url(db, self.book_sub)
+                print("reuse book (late resume)", self.book_url)
+
+        assert self.book_url
+
+        # Positive overlay path
+        if self.need("G3", "G4", "G5", "G6", "G7"):
+            d.logcat_clear()
+            open_read_book(self.book_url, d.PKG)
+            best, log = wait_overlay()
+            if "G3" in self.want:
+                self.mark("G3", True, best[best.find("ReviewOverlay") :])
+                print("G3 OK", self.gates["G3"]["evidence"])
+
+            if "G7" in self.want:
+                auth_ln = wait_authority()
+                log = d.logcat_applog()
+                (OUT / "session_positive.log").write_text(log, encoding="utf-8")
+                cov = [
+                    ln
+                    for ln in log.splitlines()
+                    if "coverage=" in ln and "ReviewOverlay" in ln
+                ]
+                paras = [
+                    ln
+                    for ln in log.splitlines()
+                    if "paras=" in ln and "ReviewOverlay" in ln
+                ]
+                evidence = (paras or cov or [auth_ln])[-1]
+                self.mark(
+                    "G7",
+                    True,
+                    evidence[evidence.find("ReviewOverlay") :],
+                )
+
+            if self.need("G4", "G5", "G6"):
+                time.sleep(1.0)
+                png = self.record_shot("G4_read_title.png")
+                xml4 = d.dump_ui(OUT / "G4_read_title.xml")
+                if "G4" in self.want:
+                    ts4 = d.ui_texts(xml4)
+                    if not any(
+                        self.book_sub in t or "诡秘" in t or "章" in t for t in ts4
+                    ):
+                        # soft UI check — at least some read chrome / chapter-ish text
+                        if not ts4:
+                            raise GateFail("G4", "empty UI dump on read page")
+                    self.mark("G4", True, "G4_read_title.png", "G4_read_title.png")
+
+                # G5/G6 need dialog; G4-only stops after shot
+                if not self.need("G5", "G6"):
+                    pass
+                else:
+                    x, y = d.find_badge_tap(png, xml4)
+                    opened = False
+                    merge_ui = False
+                    for dx, dy in (
+                        (0, 0),
+                        (-12, 0),
+                        (12, 0),
+                        (0, -10),
+                        (0, 10),
+                        (-25, 5),
+                        (20, 8),
+                    ):
+                        d.tap_xy(x + dx, y + dy)
+                        time.sleep(0.9)
+                        xml = d.dump_ui(OUT / "G5_after_badge.xml")
+                        ts = d.ui_texts(xml)
+                        if any("夹具" in t for t in ts):
+                            raise GateFail("G5", "fixture UI text")
+                        if any("本章评论" in t for t in ts):
+                            merge_ui = True
+                            opened = True
+                            break
+                        if any(re.search(r"共\s*\d+\s*条", t) for t in ts):
+                            opened = True
+                            break
+                        if any(t in ("目录", "换源", "亮度") for t in ts):
+                            d.keyevent(4)
+                            time.sleep(0.3)
+                    if not opened:
+                        self.record_shot("FAIL_no_dialog.png")
+                        raise GateFail("G5", "no comment dialog")
+                    self.record_shot("G5_comment_dialog.png")
+                    xml = d.dump_ui(OUT / "G5_dialog.xml")
+                    ts = d.ui_texts(xml)
+                    if "夹具" in "\n".join(ts):
+                        raise GateFail("G5", "fixture in dialog")
+                    content_rows = [
+                        t
+                        for t in ts
+                        if t
+                        and "本章评论" not in t
+                        and not re.search(r"共\s*\d+\s*条", t)
+                        and len(t) >= 2
+                        and "夹具" not in t
+                    ]
+                    if len(content_rows) < 1:
+                        raise GateFail("G5", "empty comments")
+                    if "G5" in self.want:
+                        self.mark(
+                            "G5",
+                            True,
+                            "G5_comment_dialog.png; " + "; ".join(content_rows[:4]),
+                            "G5_comment_dialog.png",
+                        )
+                    print("G5 comments sample", content_rows[:8])
+
+                    if "G6" in self.want:
+                        if merge_ui:
+                            self.record_shot("G6_merge_dialog.png")
+                            if not any("本章评论" in t for t in ts) and not any(
+                                "起点" in t or "QQ" in t or "段评源" in t for t in ts
+                            ):
+                                raise GateFail(
+                                    "G6", "merge_ui set but no merge chrome in dialog"
+                                )
+                            self.mark(
+                                "G6",
+                                True,
+                                "G6_merge_dialog.png",
+                                "G6_merge_dialog.png",
+                            )
+                        else:
+                            self.gates["G6"] = {
+                                "ok": False,
+                                "evidence": "pending multi-bind check",
+                                "shot": None,
+                            }
+
+        # G2 bindings (after positive UI so auto-bind finished)
+        if self.need("G2", "G6"):
+            db2 = d.pull_db_wal(OUT / "pos_after", stop_app=True)
+            rows = bindings_for(db2, self.book_url)
+            print("G2 bindings", rows)
+            if "G2" in self.want:
+                if not rows or any(d.FIXTURE_PREFIX in r[0] for r in rows):
+                    raise GateFail("G2", "bad bindings")
+                if not any(r[1] == "auto" for r in rows):
+                    raise GateFail("G2", "not auto")
+                if len(rows) < 2 and self.mode == "full":
+                    raise GateFail(
+                        "G2",
+                        f"need ≥2 real auto bindings for full acceptance, got {len(rows)}",
+                    )
+                self.mark(
+                    "G2",
+                    True,
+                    f"{len(rows)} bindings: " + ", ".join(r[0] for r in rows),
+                )
+
+            if "G6" in self.want and self.gates.get("G6", {}).get("evidence") == (
+                "pending multi-bind check"
+            ):
+                if len(rows) < 2:
+                    raise GateFail("G6", "need ≥2 bindings for merge evidence")
+                d.push_db_raw(db2, "merge")
+                d.logcat_clear()
+                open_read_book(self.book_url, d.PKG)
+
+                def merge_ready() -> bool:
+                    return any("merge providers=" in ln for ln in d.overlay_lines())
+
+                d.wait_until(merge_ready, timeout_s=25, interval_s=1.2, label="merge")
+                log2 = d.logcat_applog()
+                merge_hits = [ln for ln in log2.splitlines() if "merge providers=" in ln]
+                self.record_shot("G6_read_multibind.png")
+                if not merge_hits:
+                    raise GateFail(
+                        "G6", "≥2 bindings but no merge providers= log"
+                    )
+                evidence = merge_hits[-1][merge_hits[-1].find("ReviewOverlay") :]
+                self.mark("G6", True, evidence, "G6_read_multibind.png")
+                print("G6 merge log", evidence)
+
+        if "G8" in self.want:
+            # Ensure bindings present
+            db_info = d.pull_db_wal(OUT / "info_pre", stop_app=True)
+            rows = bindings_for(db_info, self.book_url)
+            if not rows:
+                raise GateFail("G8", "no bindings to show on book info")
+            d.push_db_raw(db_info, "info")
+            open_book_info_from_read(self.book_url)
+            self.record_shot("G8_book_info.png")
+            xml = d.dump_ui(OUT / "G8_book_info.xml")
+            ts = d.ui_texts(xml)
+            review_bits = [t for t in ts if "段评" in t or "已绑定" in t]
+            print("G8 review texts", review_bits)
+            if not review_bits:
+                d.swipe_frac(0.5, 0.75, 0.5, 0.25)
+                time.sleep(0.6)
+                self.record_shot("G8_book_info_scrolled.png")
+                xml = d.dump_ui(OUT / "G8_book_info2.xml")
+                ts = d.ui_texts(xml)
+                review_bits = [t for t in ts if "段评" in t or "已绑定" in t]
+                print("G8 after scroll", review_bits)
+            if not review_bits:
+                raise GateFail("G8", "no 段评源 UI text")
+            self.mark(
+                "G8",
+                True,
+                "; ".join(review_bits[:5]),
+                "G8_book_info.png",
             )
 
-    # G8 book info via read menu (activity not exported to shell)
-    push_db(db2, "info")
-    open_book_info_from_read(book_url)
-    shot("G8_book_info.png")
-    xml = dump_ui("G8_book_info.xml")
-    ts = texts(xml)
-    review_bits = [t for t in ts if "段评" in t or "已绑定" in t]
-    print("G8 review texts", review_bits)
-    if not review_bits:
-        adb("shell", "input", "swipe", "540", "1800", "540", "600", "300")
-        time.sleep(0.8)
-        shot("G8_book_info_scrolled.png")
-        xml = dump_ui("G8_book_info2.xml")
-        ts = texts(xml)
-        review_bits = [t for t in ts if "段评" in t or "已绑定" in t]
-        print("G8 after scroll", review_bits)
-    if not review_bits:
-        raise SystemExit("FAIL G8: no 段评源 UI text")
-    results["G8"] = "G8_book_info.png " + "; ".join(review_bits[:5])
+        if "G9" in self.want:
+            d.push_review_prefs(OUT, reviewOverlayAutoBind=False)
+            dbn = d.pull_db_wal(OUT / "neg", stop_app=True)
+            con = sqlite3.connect(str(dbn))
+            con.execute(
+                "DELETE FROM book_review_bindings WHERE contentBookUrl=?",
+                (self.book_url,),
+            )
+            con.commit()
+            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            con.close()
+            d.push_db_raw(dbn, "neg")
+            d.logcat_clear()
+            open_read_book(self.book_url, d.PKG)
 
-    # G9 negative
-    push_prefs(reviewOverlayAutoBind=False)
-    dbn = pull_db(OUT / "neg")
-    con = sqlite3.connect(str(dbn))
-    con.execute("DELETE FROM book_review_bindings WHERE contentBookUrl=?", (book_url,))
-    con.commit()
-    con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    con.close()
-    push_db(dbn, "neg")
-    subprocess.check_call(["adb", "logcat", "-c"])
-    open_read_book(book_url, PKG)
-    time.sleep(12)
-    shot("G9_neg_read.png")
-    dump_ui("G9_neg_read.xml")
-    logn = adb("logcat", "-d").decode("utf-8", "replace")
-    (OUT / "session_negative.log").write_text(logn, encoding="utf-8")
-    if "auto-bind scan" in logn or "auto-bind proposals=" in logn:
-        raise SystemExit("FAIL G9: auto-bind still scanned while pref off")
-    subprocess.check_call(["adb", "shell", "am", "force-stop", PKG])
-    time.sleep(1)
-    dba = pull_db(OUT / "neg_after")
-    con = sqlite3.connect(str(dba))
-    n = con.execute(
-        "SELECT count(*) FROM book_review_bindings WHERE contentBookUrl=?", (book_url,)
-    ).fetchone()[0]
-    con.close()
-    if n != 0:
-        raise SystemExit(f"FAIL G9: unexpected bindings count={n}")
-    results["G9"] = "G9_neg_read.png no auto-bind"
+            # Poll briefly: must NOT see auto-bind scan; then screenshot while app up
+            scanned = False
 
-    push_prefs(reviewOverlayAutoBind=True)
+            def neg_tick() -> bool:
+                nonlocal scanned
+                logn = d.logcat_applog()
+                if "auto-bind scan" in logn or "auto-bind proposals=" in logn:
+                    scanned = True
+                    return True
+                # stay open long enough that a scan would have logged if enabled
+                return False
 
-    report = {
-        "PASS": True,
-        "bookUrl": book_url,
-        "gates": results,
-        "shots": sorted(p.name for p in OUT.glob("*.png")),
-    }
-    (OUT / "ACCEPTANCE.json").write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+            d.wait_until(neg_tick, timeout_s=8, interval_s=1.0, label="neg-scan")
+            self.record_shot("G9_neg_read.png")
+            d.dump_ui(OUT / "G9_neg_read.xml")
+            logn = d.logcat_applog()
+            (OUT / "session_negative.log").write_text(logn, encoding="utf-8")
+            if scanned or "auto-bind scan" in logn or "auto-bind proposals=" in logn:
+                raise GateFail("G9", "auto-bind still scanned while pref off")
+            dba = d.pull_db_wal(OUT / "neg_after", stop_app=True)
+            n = bindings_for(dba, self.book_url)
+            if n:
+                raise GateFail("G9", f"unexpected bindings count={len(n)}")
+            self.mark("G9", True, "G9_neg_read.png no auto-bind", "G9_neg_read.png")
+            d.push_review_prefs(OUT, reviewOverlayAutoBind=True)
+
+        missing = [
+            g for g in self.want if g not in self.gates or not self.gates[g].get("ok")
+        ]
+        if missing:
+            raise GateFail(missing[0], f"incomplete gates {missing}")
+
+        self.write(True)
+        print("PASS: acceptance →", OUT)
+        return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--serial", default=None)
+    ap.add_argument("--book-substr", default=BOOK_SUB)
+    ap.add_argument("--from", dest="from_gate", default=None, help="Resume from gate (G8)")
+    ap.add_argument("--only", default=None, help="Comma gates, e.g. G8,G9")
+    ap.add_argument(
+        "--mode",
+        choices=("full", "smoke"),
+        default="full",
+        help="full=G1–G9 screenshots; smoke=log+bind focus (G1–G3)",
     )
-    print(json.dumps(report, ensure_ascii=False, indent=2))
-    print("PASS: full screenshot acceptance →", OUT)
-    return 0
+    args = ap.parse_args()
+    try:
+        d.require_device(serial=args.serial)
+    except SystemExit as e:
+        OUT.mkdir(parents=True, exist_ok=True)
+        d.write_acceptance(
+            OUT,
+            passed=False,
+            book_url=None,
+            gates={},
+            shots=[],
+            fail=str(e.args[0] if e.args else e),
+            mode=args.mode,
+        )
+        return 2
+
+    if args.mode == "smoke" and not args.only and not args.from_gate:
+        want = {"G1", "G2", "G3"}
+    else:
+        want = d.parse_gates(from_gate=args.from_gate, only=args.only)
+        if args.mode == "smoke":
+            want &= {"G1", "G2", "G3"}
+            if not want:
+                raise SystemExit(
+                    "FAIL: --mode smoke with --from/--only produced empty gates; "
+                    "smoke only supports G1–G3"
+                )
+
+    if not want:
+        raise SystemExit("FAIL: empty gate set")
+
+    return Runner(want, args.book_substr, args.mode).run()
 
 
 if __name__ == "__main__":
