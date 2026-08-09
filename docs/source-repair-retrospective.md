@@ -151,9 +151,11 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 
 ## 2026-08-09 www.dubu123.com deep dig
 
-- NXDOMAIN（手机 `UnknownHostException`）；hunt empty。
-- `dubuxs.cc`=XDNS 威胁页；`dbxs123.com`=影视壳（勿迁）；`dbxsn` 404/403。手机 DB `enabled=0`；书架 4 靠自动换源。
-- Trap: `dns_nxdomain_hunt_empty`（勿再用 timeout 类 trap 描述 NXDOMAIN）。Ledger @ 2026-08-09T04:10:21。
+- **首轮（浅）**：NXDOMAIN；`dubuxs.cc` 威胁页；误把 `dbxsn.com` 首页 404 当整站死 → skip。
+- **再挖（2026-08-09 下午）**：`https://www.dbxsn.com` 首页仍 404，但书架同路径 `/book/p18753/` 等 200（og:novel+目录），`/plus/search.php` 有结果；手机 301→`www.dbxsz.com`。
+- 设备：`debug_source` 详情/目录/正文 OK；搜索「斗破」4 本；`start_check_sources` → **校验成功**（`https://www.dbxsn.com`）。
+- 动作：启用 `dbxsn`、书架 4 remap、`dubu123` 保持禁用。
+- Trap: `home_404_paths_alive`（SKILL+`no_auto:probe_book_and_search_paths`）。
 
 ## 2026-08-09 书架「失效」标签源抽查 + deep diagnose 关门
 
