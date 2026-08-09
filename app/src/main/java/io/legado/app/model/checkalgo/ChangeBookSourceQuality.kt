@@ -336,9 +336,9 @@ object ChangeBookSourceQuality {
 
     /**
      * Default-sort key for [smartScore]: ready scores as-is; pending / not-yet-scored
-     * floats above content-bad (~5–35) and below typical Ok (~78+).
+     * floats above wrong-book / content-bad (~40) and below clean Ok (~65+).
      */
-    const val SMART_SCORE_PENDING_SORT = 60
+    const val SMART_SCORE_PENDING_SORT = 55
 
     fun sortSmartScoreKey(smartScore: Int, verdict: QualityVerdict?): Int = when {
         smartScore >= 0 -> smartScore
@@ -356,14 +356,15 @@ object ChangeBookSourceQuality {
     /**
      * 0..100 smart score for 换源 list. Pending / unknown → -1 (UI shows —).
      *
-     * Within a verdict tier, length (continuous) + respondTime must spread scores —
-     * device sample 2026-08-08: 12/15 Ok collapsed to 82 under the old step bonuses.
+     * Within a verdict tier, length (continuous) + respondTime spread scores.
+     * [latestMatch] is independent of soft-meta badge visibility: hard tip mismatch
+     * must demote wrong-book long bodies (device: PO18 11595-char Ok ranked first).
      */
     fun smartScore(
         measuredChars: Int,
         verdict: QualityVerdict?,
         contentRefSim: Double? = null,
-        latestMismatch: Boolean = false,
+        latestMatch: Boolean? = null,
         tocMismatch: Boolean = false,
         respondTimeMs: Int = -1,
         userScore: Int = 0,
@@ -380,7 +381,13 @@ object ChangeBookSourceQuality {
             QualityVerdict.FetchError -> 5
             QualityVerdict.Pending -> return -1
         }
-        score += lengthSmartBonus(measuredChars, expectedChars)
+        val tipMatch = latestMatch
+        var lengthBonus = lengthSmartBonus(measuredChars, expectedChars)
+        if (tipMatch == false) {
+            // Wrong-book long shells must not win on raw length alone.
+            lengthBonus = lengthBonus.coerceAtMost(WRONG_BOOK_LENGTH_CAP)
+        }
+        score += lengthBonus
         val sim = contentRefSim
         if (sim != null) {
             score += when {
@@ -390,8 +397,11 @@ object ChangeBookSourceQuality {
                 else -> 0
             }
         }
-        // Soft meta is secondary; keep light so tip noise does not flatten Ok rows.
-        if (latestMismatch) score -= 3
+        score += when (tipMatch) {
+            true -> 5
+            false -> -WRONG_BOOK_LATEST_PENALTY
+            null -> 0
+        }
         if (tocMismatch) score -= 3
         score += respondSmartBonus(respondTimeMs)
         score += when {
@@ -438,6 +448,10 @@ object ChangeBookSourceQuality {
 
     private const val LENGTH_SCORE_DIVISOR = 350
     private const val LENGTH_SCORE_CAP = 20
+    /** Max length bonus when latest tip hard-mismatches local (wrong book). */
+    const val WRONG_BOOK_LENGTH_CAP = 4
+    /** Hard latest mismatch penalty — must outweigh length/speed on wrong Ok rows. */
+    const val WRONG_BOOK_LATEST_PENALTY = 22
 
     /**
      * TOC sizes are consistent enough to be the same book progression.

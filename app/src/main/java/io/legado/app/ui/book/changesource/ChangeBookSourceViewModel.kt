@@ -1268,7 +1268,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         val referenceTrusted = wordCountEvalContext?.referenceTrusted != false
         val tags = searchBook.qualityTags.toMutableList()
         var tocMismatch = false
-        var latestMismatch = false
+        val latestMatch = ChangeBookSourceQuality.latestMatchesLocal(
+            local?.latestChapterTitle,
+            searchBook.latestChapterTitle,
+        )
         if (tocSize != null &&
             local != null &&
             !ChangeBookSourceQuality.tocConsistent(local.totalChapterNum, tocSize)
@@ -1286,39 +1289,31 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 if (label !in tags) tags.add(label)
             }
         }
-        when (ChangeBookSourceQuality.latestMatchesLocal(
-            local?.latestChapterTitle,
-            searchBook.latestChapterTitle,
-        )) {
-            false -> {
-                if (ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
-                        searchBook.chapterWordCount,
-                        contentRefSimByOrigin[hitKey],
-                        referenceTrusted = referenceTrusted,
-                        verdict = searchBook.qualityVerdict,
-                    )
-                ) {
-                    mergeTier(hitKey, ChangeBookSourceQuality.TIER_LATEST_BAD)
-                    latestMismatch = true
-                    val label = getApplication<Application>()
-                        .getString(R.string.change_source_latest_mismatch)
-                    if (label !in tags) tags.add(label)
-                }
-            }
-            else -> Unit
+        // Hard tip mismatch always surfaces as a tag + score penalty, even when soft-meta
+        // badge gates would hide "tip lag" on quality-OK + trusted local ref.
+        if (latestMatch == false) {
+            mergeTier(hitKey, ChangeBookSourceQuality.TIER_LATEST_BAD)
+            val label = getApplication<Application>()
+                .getString(R.string.change_source_latest_mismatch)
+            if (label !in tags) tags.add(label)
         }
         searchBook.qualityTags = tags
-        refreshSmartScore(searchBook, latestMismatch = latestMismatch, tocMismatch = tocMismatch)
+        refreshSmartScore(
+            searchBook,
+            latestMatch = latestMatch,
+            tocMismatch = tocMismatch,
+        )
     }
 
     protected fun refreshSmartScore(
         searchBook: SearchBook,
-        latestMismatch: Boolean? = null,
+        latestMatch: Boolean? = null,
         tocMismatch: Boolean? = null,
     ) {
-        val latest = latestMismatch ?: searchBook.qualityTags.any {
-            it.contains("最新章") || it.contains("latest", ignoreCase = true)
-        }
+        val tipMatch = latestMatch ?: ChangeBookSourceQuality.latestMatchesLocal(
+            oldBook?.latestChapterTitle,
+            searchBook.latestChapterTitle,
+        )
         val toc = tocMismatch ?: searchBook.qualityTags.any {
             it.contains("目录") || it.contains("TOC", ignoreCase = true)
         }
@@ -1326,7 +1321,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             measuredChars = searchBook.chapterWordCount,
             verdict = searchBook.qualityVerdict,
             contentRefSim = contentRefSimByOrigin[searchBook.bookUrl],
-            latestMismatch = latest,
+            latestMatch = tipMatch,
             tocMismatch = toc,
             respondTimeMs = searchBook.respondTime,
             userScore = getBookScore(searchBook),
@@ -1397,7 +1392,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 if (label !in book.qualityTags) {
                     book.qualityTags = book.qualityTags + label
                 }
-                refreshSmartScore(book, latestMismatch = true)
+                refreshSmartScore(book, latestMatch = false)
             }
         }
         if (force || titles.size >= ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES ||

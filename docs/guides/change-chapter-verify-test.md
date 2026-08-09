@@ -120,6 +120,7 @@ Known good probe book (when present): **《信仰诸天》朝不保夕** with or
 
 | Date | Result | Evidence |
 |---|---|---|
+| 2026-08-08j | smartScore wrong-book demote | Hard `latestMatch=false` always tags + −22 score + length cap 4 (fixes PO18 long Ok ranking first). Pending sort key 55. Sample after: `temp/legado_change_source_score_after_*.txt`. |
 | 2026-08-08i | smartScore same-tier spread | Device sample `temp/legado_change_source_score_sample_2026-08-08_194403.txt`: Ok 12/15 collapsed at 82. Formula → continuous length (`chars/350`) + finer respond + soft −3. Analyzer: `scripts/change-source-score-analyze.py`. |
 | 2026-08-08h | score UX: metric/tags/smartScore | Word count always shown when measured (incl. too_short); quality tags separate; 0–100 smartScore sort. Unit `ChangeBookSourceQualityTest`. Device: `temp/_cs_score_ux/list.xml` shows `字数：N · Xs` + score + soft tags; log `words=53 verdict=TooShort score=40 visible=true` with `dropContentBad=false` (`temp/legado_change_source_session_2026-08-08_192159.txt` writeback; UI session 19:27). |
 | 2026-08-08g | soft-meta badge tighten | Never filter on TOC/latest; no badges on content-bad; TOC never on quality-OK; untrusted → latest only. Unit `ChangeBookSourceQualityTest`; device `temp/legado_change_source_session_2026-08-08_190233.txt` (`too_short` + `stitch_soft_noref`) |

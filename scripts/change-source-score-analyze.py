@@ -72,7 +72,45 @@ def length_smart_bonus(words: int) -> int:
     return min(20, words // 350)
 
 
-def rescore_row(row: dict, *, assume_latest_soft: bool = True) -> int:
+def tip_match(latest: str, local: str = "第187章 白虎不死神药跟随") -> bool | None:
+    """Rough mirror of latestMatchesLocal for this sample book (num gap ≥80 ⇒ false)."""
+    if not latest or not local:
+        return None
+    import re
+
+    def chapter_num(t: str) -> int | None:
+        m = re.search(r"第([0-9]+)[章节]", t)
+        if m:
+            return int(m.group(1))
+        # crude chinese numerals used in sample tips — treat 六十二 etc as small ints
+        cn = {
+            "四十": 40,
+            "四十七": 47,
+            "四十八": 48,
+            "五十八": 58,
+            "六十二": 62,
+            "六十八": 68,
+            "一百八十七": 187,
+        }
+        m = re.search(r"第([一二三四五六七八九十百千零〇]+)[章节]", t)
+        if not m:
+            return None
+        return cn.get(m.group(1))
+
+    ln, cn_ = chapter_num(local), chapter_num(latest)
+    if ln is not None and cn_ is not None and abs(ln - cn_) >= 80:
+        return False
+    if "白虎不死神药" in latest:
+        return True
+    if ln is not None and cn_ is None and len(latest) >= 4:
+        # e.g. 乱仑系列 — no chapter num, digram fail
+        return False
+    if ln is not None and cn_ is not None:
+        return False  # different chapter bodies in this sample
+    return False
+
+
+def rescore_row(row: dict, *, local_latest: str = "第187章 白虎不死神药跟随") -> int:
     """Mirror ChangeBookSourceQuality.smartScore (no refSim / userScore)."""
     base = {
         "Ok": 62,
@@ -82,12 +120,15 @@ def rescore_row(row: dict, *, assume_latest_soft: bool = True) -> int:
         "Hijack": 10,
         "FetchError": 5,
     }.get(row["verdict"], 0)
-    score = base + length_smart_bonus(row["words"]) + respond_smart_bonus(row["respondMs"])
-    if assume_latest_soft and row["verdict"] in {"Ok", "Weak"}:
-        # Sample book almost always soft-mismatches tip; TooShort already low.
-        latest = row.get("latest") or ""
-        if "187" not in latest and "第一百八十七" not in latest:
-            score -= 3
+    match = tip_match(row.get("latest") or "", local_latest)
+    length = length_smart_bonus(row["words"])
+    if match is False:
+        length = min(length, 4)
+    score = base + length + respond_smart_bonus(row["respondMs"])
+    if match is True:
+        score += 5
+    elif match is False:
+        score -= 22
     return max(0, min(100, score))
 
 

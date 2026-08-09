@@ -691,25 +691,25 @@ class ChangeBookSourceQualityTest {
         val longFast = ChangeBookSourceQuality.smartScore(
             measuredChars = 11_595,
             verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
-            latestMismatch = true,
+            latestMatch = null,
             respondTimeMs = 631,
         )
         val midFast = ChangeBookSourceQuality.smartScore(
             measuredChars = 2493,
             verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
-            latestMismatch = true,
+            latestMatch = null,
             respondTimeMs = 223,
         )
         val midSlow = ChangeBookSourceQuality.smartScore(
             measuredChars = 2317,
             verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
-            latestMismatch = true,
+            latestMatch = null,
             respondTimeMs = 4005,
         )
         val shortOk = ChangeBookSourceQuality.smartScore(
             measuredChars = 1680,
             verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
-            latestMismatch = true,
+            latestMatch = null,
             respondTimeMs = 545,
         )
         assertTrue("longFast=$longFast midFast=$midFast", longFast > midFast)
@@ -717,6 +717,44 @@ class ChangeBookSourceQualityTest {
         assertTrue("shortOk=$shortOk midSlow=$midSlow", shortOk > midSlow)
         val span = longFast - midSlow
         assertTrue("Ok span should be meaningful, span=$span", span >= 15)
+    }
+
+    @Test
+    fun smartScoreDemotesWrongBookDespiteLongBody() {
+        val wrongLong = ChangeBookSourceQuality.smartScore(
+            measuredChars = 11_595,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            latestMatch = false,
+            respondTimeMs = 631,
+        )
+        val sameBookMid = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2493,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            latestMatch = true,
+            respondTimeMs = 400,
+        )
+        assertTrue(
+            "wrongLong=$wrongLong should rank below sameBookMid=$sameBookMid",
+            wrongLong < sameBookMid,
+        )
+        assertTrue("wrongLong=$wrongLong should stay mid/low", wrongLong <= 55)
+    }
+
+    @Test
+    fun smartScoreRewardsMatchingLatestTip() {
+        val matched = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2493,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            latestMatch = true,
+            respondTimeMs = 400,
+        )
+        val unknown = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2493,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            latestMatch = null,
+            respondTimeMs = 400,
+        )
+        assertTrue(matched > unknown)
     }
 
     @Test
