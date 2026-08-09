@@ -126,6 +126,12 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - Trap: `stream_protocol_error_reset`。
 
 
+## 2026-08-09 hunt OSINT + Wayback rate-limit harness
+
+- 问题：deep dig 迁域只靠 `hunt --probe` / 零散 curl；Wayback 连发易 429；Google/crt.sh/付费档案未进纪律。
+- 落地：`scripts/lib/wayback_cdx.py`（默认 12s 间隔 + 429 退避 + 共享锁）；`scripts/domain-successor-hunt.py`；指南 `docs/guides/domain-successor-osint.md`。
+- Skill trap `hunt_osint_skipped`；discipline §5c/§12b；`legadoSkill/docs/domain-hunt-trial-2026-07-26.md` 同步。
+
 ## 2026-08-09 www.qinqinxsw.cc deep dig
 
 - Gate L2 `UnknownIssuer`（LE YE1）；curl 仍能拉到 ~4.7KB HTML，title「Redirecting…」，正文含 `ad-overlay` / prebid（非小说页）。

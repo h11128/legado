@@ -38,7 +38,13 @@ Create and repair share the same close-out / improve gate — do not wait for th
    or phone `debug_source` + `get_http_logs`. Search-dead ≠ open-path-dead. After a deep-dig
    batch: write the **session lesson** in `docs/source-repair-retrospective.md` (not only
    per-URL `retro append`).
-5c. **Structural close-out for manual deep dig (2026-08-09):** prose alone failed.
+5c. **Hunt OSINT is mandatory before「无后继」** (trap `hunt_osint_skipped`).
+   After `source-cli hunt --probe`, also run
+   `python scripts/domain-successor-hunt.py --url …` (+ shelf `--title`s): crt.sh,
+   **rate-limited** Wayback CDX (`scripts/lib/wayback_cdx.py` only — never burst
+   archive.org), Google queries in browser (书名+站名), and paid DNS archive **if**
+   `SECURITYTRAILS_API_KEY` is set. Parked/广告壳仍可能换品牌域 — 不要只凭 probe empty 收工。
+5d. **Structural close-out for manual deep dig (2026-08-09):** prose alone failed.
    - `scripts/lib/legado_mcp.py` **claims** `deep_active` on `debug_source` / `save_source` /
      `start_check_sources` (same gate as `diagnose` / `source push`).
    - IDE MCP: `.cursor/hooks/mcp-deep-dig-claim.py` on `afterMCPExecution`.
@@ -59,8 +65,10 @@ Create and repair share the same close-out / improve gate — do not wait for th
 12. **After domain migrate**: fetch new search form HTML before verify.
 12b. **Hunt before disable on dead/timeout** — if gate is `l1_unreachable` / `l2_http_dead`
     / L0 hunt cluster: run `source-cli hunt --probe` (oneshot does this). Migrate only when
-    a seed candidate passes L2. Do **not** hard-disable first. Exceptions: L0
-    `dead_site_shutdown_confirmed`, parked/ad-hijack/nginx deadish (disable/skip, no hunt).
+    a seed candidate passes L2. Do **not** hard-disable first. Exceptions for **seed hunt**:
+    L0 `dead_site_shutdown_confirmed`, parked/ad-hijack/nginx deadish (skip seed hunt).
+    **OSINT successor pass still required** before「无后继」结案（§5c /
+    `scripts/domain-successor-hunt.py`）— 停车页也可能是换域后的残留。
 13. **If debug OK but check fails** (下载链接为空 / ~100ms): run `source-cli diagnose --debug-file …` first
  (bookUrl → infoHtml trap).
 14. **After every source attempt (repair OR create: fixed/created / skip / fail), mandatory close-out**
