@@ -122,25 +122,58 @@ def wait_authority(timeout_s: float = 12.0) -> str:
 
 
 def open_book_info_from_read(book_url: str) -> None:
+    """BookInfoActivity is not exported — open via read menu title."""
     open_read_book(book_url, d.PKG)
-    time.sleep(1.5)
-    d.tap_frac(0.5, 0.45)
-    time.sleep(0.8)
-    xml = d.dump_ui(OUT / "G8_menu.xml")
-    targets = []
-    _, h = d.screen_size()
-    top = int(h * 0.4)
-    for text, x1, y1, x2, y2 in d.ui_nodes(xml):
-        if text in ("书籍信息",) or text == BOOK_SUB or "诡秘" in text:
-            if y2 < top:
-                targets.append((text, (x1 + x2) // 2, (y1 + y2) // 2))
-    if not targets:
-        d.tap_frac(0.5, 0.09)
+
+    def menu_open() -> bool:
+        xml = d.dump_ui(OUT / "G8_menu_poll.xml")
+        ts = d.ui_texts(xml)
+        return any(t in ("目录", "设置", "界面", "朗读") for t in ts)
+
+    # Wait for read chrome, then toggle menu (retry taps).
+    d.wait_until(
+        lambda: "诡秘" in "\n".join(d.ui_texts(d.dump_ui(OUT / "G8_read_poll.xml"))),
+        timeout_s=12,
+        interval_s=1.0,
+        label="read-ready",
+    )
+    for _ in range(4):
+        d.tap_frac(0.5, 0.48)
+        if d.wait_until(menu_open, timeout_s=2.5, interval_s=0.5, label="read-menu"):
+            break
     else:
+        raise GateFail("G8", "read menu did not open")
+
+    xml = d.dump_ui(OUT / "G8_menu.xml")
+    _, h = d.screen_size()
+    top = int(h * 0.35)
+    targets = []
+    for text, x1, y1, x2, y2 in d.ui_nodes(xml):
+        if not text:
+            continue
+        if text in ("书籍信息",) or text == BOOK_SUB or "诡秘" in text:
+            if y2 < top and y1 > 40:
+                targets.append((text, (x1 + x2) // 2, (y1 + y2) // 2, y1))
+    # Prefer the uppermost title chip (menu header), not footer.
+    if targets:
+        targets.sort(key=lambda t: t[3])
         t = targets[0]
         print("tap info", t)
         d.tap_xy(t[1], t[2])
-    time.sleep(1.5)
+    else:
+        d.tap_frac(0.35, 0.08)
+    if not d.wait_until(
+        lambda: any(
+            "段评" in t or "已绑定" in t or "换源" in t or "作者" in t
+            for t in d.ui_texts(d.dump_ui(OUT / "G8_info_poll.xml"))
+        ),
+        timeout_s=6,
+        interval_s=0.6,
+        label="book-info",
+    ):
+        # One more title tap attempt
+        d.tap_frac(0.35, 0.08)
+        time.sleep(1.5)
 
 
 def bindings_for(db: Path, book_url: str) -> list[tuple]:

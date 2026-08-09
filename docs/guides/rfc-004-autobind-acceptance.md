@@ -94,7 +94,8 @@ Native / Overlay 不完整也要 `maybeProposeReviewAutoBind`。
 
 ### 3.5 串行搜索会烧时间
 
-`proposeAll` 必须并行；脚本侧用 AppLog 过滤轮询，勿全量 `logcat -d`。
+`proposeAll` 必须并行；脚本侧轮询 logcat。  
+**注意：** DEBUG 下 `AppLog.put` 进 logcat 的 tag 是类名（`Log.e`），不是 `AppLog`。`rfc004_device.logcat_applog` 已按行过滤 `ReviewOverlay`，勿再改回 `-s AppLog:D`。
 
 ### 3.6 BookInfoActivity 未 exported
 

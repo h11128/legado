@@ -118,8 +118,18 @@ def logcat_clear() -> None:
 
 
 def logcat_applog() -> str:
-    """AppLog-tagged buffer only (ReviewOverlay lines go through AppLog)."""
-    return adb_str("logcat", "-d", "-s", "AppLog:D")
+    """Lines relevant to ReviewOverlay.
+
+    AppLog.put writes LogUtils (file) and, in DEBUG, android.util.Log.e(className, msg)
+    — not an ``AppLog`` logcat tag. Filter the dump in Python.
+    """
+    raw = adb_str("logcat", "-d")
+    keep = [
+        ln
+        for ln in raw.splitlines()
+        if "ReviewOverlay" in ln or "段评源" in ln or "AppLog" in ln
+    ]
+    return "\n".join(keep)
 
 
 def overlay_lines(log: str | None = None) -> list[str]:

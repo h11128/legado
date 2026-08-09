@@ -52,12 +52,18 @@ def run(cmd: list[str], *, check: bool = True, env: dict | None = None) -> int:
 def assemble_install() -> None:
     env = os.environ.copy()
     env.setdefault("GRADLE_USER_HOME", r"E:\.gradle")
-    print("+ gradlew :app:assembleAppDebug", flush=True)
-    p = subprocess.run(
-        [str(ROOT / "gradlew"), ":app:assembleAppDebug"],
-        cwd=str(ROOT),
-        env=env,
-    )
+    gradlew = ROOT / ("gradlew.bat" if os.name == "nt" else "gradlew")
+    if not gradlew.is_file():
+        gradlew = ROOT / "gradlew"
+    cmd = [str(gradlew), ":app:assembleAppDebug"]
+    # Git Bash / MSYS: prefer bash wrapper when .bat path confuses CreateProcess
+    if os.name == "nt" and not str(gradlew).lower().endswith(".bat"):
+        cmd = ["bash", str(ROOT / "gradlew"), ":app:assembleAppDebug"]
+    elif os.name == "nt":
+        # Explicit cmd.exe so CreateProcess gets a Win32 entrypoint
+        cmd = ["cmd", "/c", str(gradlew), ":app:assembleAppDebug"]
+    print("+", " ".join(cmd), flush=True)
+    p = subprocess.run(cmd, cwd=str(ROOT), env=env)
     if p.returncode != 0:
         raise SystemExit(p.returncode)
     if APK.is_file():
