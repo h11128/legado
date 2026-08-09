@@ -37,10 +37,17 @@ Same bind as P1. Content book chapter text should be **similar** to fixture para
 
 ## P3 — Auto-bind (opt-in)
 
-1. Pref `reviewOverlayAutoBind` = true (default is **false**; set via debug/`AppConfig` until Settings UI lands in P4).
+1. 阅读设置 → enable **自动发现段评源** (`reviewOverlayAutoBind`, default off).
 2. Unbound book, fixture enabled, open read.
 3. Expect confirm snackbar (never silent bind). Confirm → binding persists; dismiss → stays unbound.
 4. `capableCount==0` → no snackbar / no scan spam.
+
+## Prefs (P4)
+
+阅读设置 also exposes:
+
+- **跨源段评** (`reviewOverlayEnabled`, default on)
+- **显示段评图标** (`reviewOverlayAllowParagraphIcons`, default on; still needs fixture/ContentSplitVerified authority)
 
 ## Fail expectations
 

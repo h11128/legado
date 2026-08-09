@@ -163,6 +163,30 @@
 
     <io.legado.app.lib.prefs.SwitchPreference
         android:defaultValue="true"
+        android:key="reviewOverlayEnabled"
+        android:summary="@string/review_overlay_enabled_s"
+        android:title="@string/review_overlay_enabled"
+        app:iconSpaceReserved="false"
+        app:isBottomBackground="true" />
+
+    <io.legado.app.lib.prefs.SwitchPreference
+        android:defaultValue="false"
+        android:key="reviewOverlayAutoBind"
+        android:summary="@string/review_overlay_auto_bind_s"
+        android:title="@string/review_overlay_auto_bind"
+        app:iconSpaceReserved="false"
+        app:isBottomBackground="true" />
+
+    <io.legado.app.lib.prefs.SwitchPreference
+        android:defaultValue="true"
+        android:key="reviewOverlayAllowParagraphIcons"
+        android:summary="@string/review_overlay_paragraph_icons_s"
+        android:title="@string/review_overlay_paragraph_icons"
+        app:iconSpaceReserved="false"
+        app:isBottomBackground="true" />
+
+    <io.legado.app.lib.prefs.SwitchPreference
+        android:defaultValue="true"
         android:key="selectText"
         android:title="@string/selectText"
         app:iconSpaceReserved="false"

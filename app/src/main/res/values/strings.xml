@@ -117,6 +117,12 @@
     <string name="review_origin_clear">Clear review source</string>
     <string name="review_origin_searching">Searching review source…</string>
     <string name="review_origin_auto_bind_ask">Found review source %1$s for this book. Bind?</string>
+    <string name="review_overlay_enabled">Cross-source reviews</string>
+    <string name="review_overlay_enabled_s">Allow paragraph/chapter reviews from a bound review source different from the content source</string>
+    <string name="review_overlay_auto_bind">Auto-discover review source</string>
+    <string name="review_overlay_auto_bind_s">When unbound, search capable sources and ask before binding (default off)</string>
+    <string name="review_overlay_paragraph_icons">Paragraph review icons</string>
+    <string name="review_overlay_paragraph_icons_s">When the provider paragraph map is verified, show per-paragraph icons; otherwise chapter reviews only</string>
 
     <string name="about_description">
         \u3000\u3000 This is an open source reading software newly developed by Kotlin, welcome to join us.
