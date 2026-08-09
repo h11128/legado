@@ -149,6 +149,13 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - 书架 remap 在**手机 DB**（非 `backup_now/bookshelf.json`）：`.top` origin 剩 0；`https://www.ffxs8.com` 含原 `/dsyq/21029` 等；`.top` `enabled=0`。
 - Trap: `search_empty_shell_open_ok`（`.com` 打开路径）；`.top` 结果标签 **fixed migrate**。
 
+## 2026-08-09 http://www.b520.cc deep dig（再挖）
+
+- 首页 CF 通（DNS 已非 23.224）；`modules/article/search.php` 与书架 5 本路径全 **404**。
+- 仍在架书（如 `/2_2157/` 太古神王）：详情/og OK；TOC `dd a` 共 2268，真链仅约 180（~8%），其余 `href="/"`；稀疏真链正文可读。
+- 孪生 `biquge5200.cc` / `b5200.org` / `m.biquge5200.cc`：手机 GET → IOException ~35s（仍 23.224）；`hunt --probe` empty。
+- 已禁用；书架靠自动换源。Trap: `toc_href_slash_twin_unreachable`。
+
 ## 2026-08-09 www.dubu123.com deep dig
 
 - **首轮（浅）**：NXDOMAIN；`dubuxs.cc` 威胁页；误把 `dbxsn.com` 首页 404 当整站死 → skip。
