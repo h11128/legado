@@ -482,9 +482,9 @@ object DatabaseMigrations {
                     `providerName` TEXT NOT NULL,
                     `providerAuthor` TEXT NOT NULL,
                     `bindMode` TEXT NOT NULL,
-                    `enabled` INTEGER NOT NULL DEFAULT 1,
-                    `sortOrder` INTEGER NOT NULL DEFAULT 0,
-                    `role` TEXT NOT NULL DEFAULT 'chapter',
+                    `enabled` INTEGER NOT NULL,
+                    `sortOrder` INTEGER NOT NULL,
+                    `role` TEXT NOT NULL,
                     `updatedAt` INTEGER NOT NULL
                 )
                 """.trimIndent()

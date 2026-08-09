@@ -187,6 +187,14 @@
 
     <io.legado.app.lib.prefs.SwitchPreference
         android:defaultValue="true"
+        android:key="reviewOverlayMergeEnabled"
+        android:summary="@string/review_overlay_merge_enabled_s"
+        android:title="@string/review_overlay_merge_enabled"
+        app:iconSpaceReserved="false"
+        app:isBottomBackground="true" />
+
+    <io.legado.app.lib.prefs.SwitchPreference
+        android:defaultValue="true"
         android:key="selectText"
         android:title="@string/selectText"
         app:iconSpaceReserved="false"

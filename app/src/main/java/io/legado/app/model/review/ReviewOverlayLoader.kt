@@ -31,6 +31,11 @@ internal object ReviewOverlayLoader {
         val providerChapterIndex: Int?,
         val authority: ReviewParagraphAuthority.Kind = ReviewParagraphAuthority.Kind.Unsupported,
         val coverage: Double? = null,
+        /**
+         * Multi-provider merge payload. Caller must [ReviewOverlaySessionStore.putMerge]
+         * only after requestToken / cancel checks succeed — never store from a cancelled load.
+         */
+        val mergeSession: ReviewOverlaySessionStore.MergeActive? = null,
     ) {
         companion object {
             fun empty(): Result = Result(
@@ -103,7 +108,7 @@ internal object ReviewOverlayLoader {
         val perResults = coroutineScope {
             bindings.map { binding ->
                 async {
-                    runCatching {
+                    try {
                         val isPrimary =
                             binding.providerSourceUrl == primaryBinding?.providerSourceUrl
                         if (isPrimary &&
@@ -129,15 +134,21 @@ internal object ReviewOverlayLoader {
                                 clearOnFail = false,
                             )
                         }
-                    }.onFailure {
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
                         AppLog.put(
                             "ReviewOverlay merge skip=${binding.providerSourceUrl}\n" +
-                                    "${it.localizedMessage}",
-                            it,
+                                    "${e.localizedMessage}",
+                            e,
                         )
-                    }.getOrNull()
+                        null
+                    }
                 }
             }.awaitAll()
+        }
+        if (!coroutineContext.isActive) {
+            throw CancellationException("ReviewOverlay merge cancelled")
         }
 
         val providerSessions = ArrayList<ReviewOverlaySessionStore.Active>()
@@ -165,43 +176,26 @@ internal object ReviewOverlayLoader {
             ?: providerSessions.firstOrNull()
 
         if (providerSessions.isEmpty()) {
-            ReviewOverlaySessionStore.clearChapter()
             return Result.empty()
         }
 
-        ReviewOverlaySessionStore.putMerge(
-            ReviewOverlaySessionStore.MergeActive(
-                contentBookUrl = contentBook.bookUrl,
-                contentChapterIndex = contentChapter.index,
-                providers = providerSessions.toList(),
-                mergedBucketCount = sum,
-                paragraphPrimary = paragraphPrimary,
-            )
+        val mergeSession = ReviewOverlaySessionStore.MergeActive(
+            contentBookUrl = contentBook.bookUrl,
+            contentChapterIndex = contentChapter.index,
+            providers = providerSessions.toList(),
+            mergedBucketCount = sum,
+            paragraphPrimary = paragraphPrimary,
         )
 
-        val displayCounts = LinkedHashMap<Int, Int>()
-        val displayKeys = LinkedHashMap<Int, String>()
-        if (sum > 0) {
-            displayCounts[-1] = sum
-            displayKeys[-1] = "merge:${providerSessions.size}"
-        }
-        paraResult?.let { pr ->
-            for ((k, v) in pr.summary.counts) {
-                if (k == -1) continue
-                displayCounts[k] = v
-            }
-            for ((k, v) in pr.summary.keys) {
-                if (k == -1) continue
-                displayKeys[k] = v
-            }
-        }
+        // Count-only chapter chip: never invent a fake paraData key (RFC A13).
+        val displaySummary = mergeChapterDisplaySummary(sum, paraResult?.summary)
 
         AppLog.put(
             "ReviewOverlay merge providers=${providerSessions.size} " +
                     "bucket=$sum primary=${paragraphPrimary?.binding?.providerSourceUrl}"
         )
         return Result(
-            summary = ReviewRuleParser.SummaryResult(displayCounts, displayKeys),
+            summary = displaySummary,
             session = paragraphPrimary,
             alignQuality = paragraphPrimary?.alignQuality,
             providerChapterIndex = paragraphPrimary?.providerChapterIndex,
@@ -209,6 +203,7 @@ internal object ReviewOverlayLoader {
                 ReviewParagraphAuthority.authorityFor(it.binding.providerSourceUrl)
             } ?: ReviewParagraphAuthority.Kind.Unsupported,
             coverage = paraResult?.coverage,
+            mergeSession = mergeSession,
         )
     }
 
@@ -335,6 +330,7 @@ internal object ReviewOverlayLoader {
             providerChapter = aligned.providerChapter,
             alignQuality = aligned.alignQuality,
             chapterBucket = chapterBucket,
+            chapterBucketCount = remapped.counts[-1]?.takeIf { it > 0 } ?: 0,
             paraRefs = paraRefs,
         )
         if (storeSession) {
@@ -371,6 +367,31 @@ internal object ReviewOverlayLoader {
         )
     }
 
+    /**
+     * Merged chapter-chip display: sum count only — never a fake `merge:N` paraData key (A13).
+     */
+    fun mergeChapterDisplaySummary(
+        sum: Int,
+        paragraphPrimary: ReviewRuleParser.SummaryResult? = null,
+    ): ReviewRuleParser.SummaryResult {
+        val displayCounts = LinkedHashMap<Int, Int>()
+        val displayKeys = LinkedHashMap<Int, String>()
+        if (sum > 0) {
+            displayCounts[-1] = sum
+        }
+        paragraphPrimary?.let { pr ->
+            for ((k, v) in pr.counts) {
+                if (k == -1) continue
+                displayCounts[k] = v
+            }
+            for ((k, v) in pr.keys) {
+                if (k == -1) continue
+                displayKeys[k] = v
+            }
+        }
+        return ReviewRuleParser.SummaryResult(displayCounts, displayKeys)
+    }
+
     private fun finishBucketOnly(
         contentBook: Book,
         contentChapter: BookChapter,
@@ -401,6 +422,7 @@ internal object ReviewOverlayLoader {
             providerChapter = aligned.providerChapter,
             alignQuality = aligned.alignQuality,
             chapterBucket = chapterBucket,
+            chapterBucketCount = bucketSummary.counts[-1]?.takeIf { it > 0 } ?: 0,
             paraRefs = paraRefs,
         )
         if (storeSession) {

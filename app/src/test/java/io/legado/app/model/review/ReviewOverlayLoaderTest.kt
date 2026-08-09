@@ -61,4 +61,19 @@ class ReviewOverlayLoaderTest {
         )
         assertNull(ReviewOverlayLoader.chapterBucketOnly(raw).counts[-1])
     }
+
+    @Test
+    fun mergedChapterChipUsesCountWithoutFakeParaDataKey() {
+        val summary = ReviewOverlayLoader.mergeChapterDisplaySummary(
+            sum = 12,
+            paragraphPrimary = ReviewRuleParser.SummaryResult(
+                counts = mapOf(-1 to 5, 1 to 2),
+                keys = mapOf(-1 to "should-not-appear", 1 to "p1"),
+            ),
+        )
+        assertEquals(12, summary.counts[-1])
+        assertNull(summary.keys[-1])
+        assertEquals("p1", summary.keys[1])
+        assertEquals(2, summary.counts[1])
+    }
 }

@@ -132,6 +132,8 @@
     <string name="review_overlay_auto_bind_s">When unbound, search capable sources and ask before binding (default off)</string>
     <string name="review_overlay_paragraph_icons">Paragraph review icons</string>
     <string name="review_overlay_paragraph_icons_s">When the provider paragraph map is verified, show per-paragraph icons; otherwise chapter reviews only</string>
+    <string name="review_overlay_merge_enabled">Multi-source chapter reviews</string>
+    <string name="review_overlay_merge_enabled_s">Merge chapter-review counts from all bound providers (off = first provider only)</string>
 
     <string name="about_description">
         \u3000\u3000 This is an open source reading software newly developed by Kotlin, welcome to join us.

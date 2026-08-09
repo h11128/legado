@@ -130,6 +130,8 @@
     <string name="review_overlay_auto_bind_s">未绑定时搜索有段评能力的书源，确认后再绑定（默认关闭）</string>
     <string name="review_overlay_paragraph_icons">显示段评图标</string>
     <string name="review_overlay_paragraph_icons_s">段边界可验证时显示段落图标；否则仅章评</string>
+    <string name="review_overlay_merge_enabled">多源章评合集</string>
+    <string name="review_overlay_merge_enabled_s">合并所有已绑定段评源的章评数量（关闭则只用排序最前的一个）</string>
 
     <string name="about_description">
         \u3000\u3000这是一款使用 Kotlin 全新开发的开源的阅读软件，欢迎您的加入。

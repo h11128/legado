@@ -490,7 +490,9 @@ Table `book_review_bindings` (Room bump from 101):
 | Existing content/provider fields | Unchanged |
 | `bindMode` | Per-row `auto` / `manual` |
 
-Migration from single-row v101: keep rows; set `enabled=true`, `sortOrder=0`, `role=paragraph_primary` only if authority ≠ `Unsupported`, else `chapter`.
+Migration from single-row v101: keep rows; set `enabled=true`, `sortOrder=0`, `role=chapter`.
+Authority-based `paragraph_primary` is **not** assigned in SQL (authority is not available at migrate time).
+Runtime `ReviewOverlayMerge.paragraphPrimary()` falls back to the first enabled binding when no explicit primary is set; users can promote via 书信息「管理已绑定」.
 
 DAO: `listByContentBookUrl`, `getByContentAndProvider`, `setEnabled`, `setParagraphPrimary` (clear other primaries).
 
@@ -507,8 +509,9 @@ DAO: `listByContentBookUrl`, `getByContentAndProvider`, `setEnabled`, `setParagr
 
 1. Dialog title e.g. `本章评论（K 源）`.
 2. First paint: for each aligned provider with `-1`, fetch detail page 1; concatenate with source badges. One provider’s failure shows a failed block, not an empty dialog.
-3. Load-more: each provider keeps its own `nextPageUrl`; append pages independently.
-4. Click / expand uses **that item’s** provider source + `ProviderParaRef` — never another provider’s `paraData`.
+3. Load-more (P5 follow-up): in-dialog per-provider `nextPageUrl` append. **P5a ships A19 via row click → single-provider `ReviewDetailDialog` (full paging there)**; merged list itself is page-1 preview only.
+4. Click / expand uses **that item’s** provider source + `ProviderParaRef` — never another provider’s `paraData`. Merged chip count is sum-only; do **not** invent a fake `-1` `paraData` key (`merge:N`).
+5. `putMerge` / merge session write happens only after the read Activity accepts the load (`requestToken` match, not cancelled) — cancelled parallel loads must not leave a dirty `MergeActive`.
 
 ### 12.5 Fast path
 

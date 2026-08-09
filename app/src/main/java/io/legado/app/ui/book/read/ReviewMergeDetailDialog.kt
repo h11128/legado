@@ -30,10 +30,12 @@ import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.gone
 import io.legado.app.utils.setLayout
+import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import io.legado.app.utils.windowSize
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.async
@@ -44,7 +46,9 @@ import kotlin.coroutines.coroutineContext
 import kotlin.math.roundToInt
 
 /**
- * RFC-004 §12: merged chapter-bucket detail (page-1 per provider, source badges).
+ * RFC-004 §12: merged chapter-bucket detail (page-1 preview per provider, source badges).
+ * Row click opens [ReviewDetailDialog] for that provider (A19 + full paging there).
+ * In-dialog per-provider load-more remains a follow-up (§12.4.3).
  */
 class ReviewMergeDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_view) {
 
@@ -56,7 +60,9 @@ class ReviewMergeDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
     }
 
     private val binding by viewBinding(DialogRecyclerViewBinding::bind)
-    private val adapter by lazy { MergeAdapter(requireContext()) }
+    private val adapter by lazy {
+        MergeAdapter(requireContext()) { row -> openProviderDetail(row) }
+    }
     private var totalCount: Int = 0
     private var sourceCount: Int = 0
 
@@ -113,6 +119,34 @@ class ReviewMergeDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
         loadMergedPage1()
     }
 
+    private fun openProviderDetail(row: MergeRow) {
+        if (row.isError || row.paraData.isBlank()) return
+        val providerSource = appDb.bookSourceDao.getBookSource(row.providerSourceKey)
+        if (providerSource == null) {
+            toastOnUi(R.string.review_empty)
+            return
+        }
+        val ruleHash = if (providerSource.isJsSource()) {
+            providerSource.mainJs.hashCode()
+        } else {
+            providerSource.ruleReview?.hashCode() ?: run {
+                toastOnUi(R.string.review_rule_missing)
+                return
+            }
+        }
+        showDialogFragment(
+            ReviewDetailDialog(
+                paragraphNum = row.paragraphNum,
+                totalCount = row.providerBucketCount.coerceAtLeast(1),
+                chapterIndex = row.chapterIndex,
+                paragraphData = row.paraData,
+                bookUrl = row.bookUrl,
+                sourceKey = row.providerSourceKey,
+                ruleHash = ruleHash,
+            )
+        )
+    }
+
     private fun loadMergedPage1() {
         val merge = ReviewOverlaySessionStore.getMerge()
         val providers = merge?.providersWithBucket().orEmpty()
@@ -143,6 +177,12 @@ class ReviewMergeDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
                             name = block.sourceLabel,
                             content = getString(R.string.review_merge_provider_fail),
                             isError = true,
+                            providerSourceKey = block.providerSourceKey,
+                            bookUrl = block.bookUrl,
+                            chapterIndex = block.chapterIndex,
+                            paragraphNum = -1,
+                            paraData = "",
+                            providerBucketCount = 0,
                         )
                     )
                     continue
@@ -154,6 +194,12 @@ class ReviewMergeDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
                             name = item.name.orEmpty().ifBlank { block.sourceLabel },
                             content = item.content.orEmpty(),
                             isError = false,
+                            providerSourceKey = block.providerSourceKey,
+                            bookUrl = block.bookUrl,
+                            chapterIndex = block.chapterIndex,
+                            paragraphNum = block.paragraphNum,
+                            paraData = block.paraData,
+                            providerBucketCount = block.providerBucketCount,
                         )
                     )
                 }
@@ -176,9 +222,20 @@ class ReviewMergeDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
     ): ProviderBlock? {
         val ref: ProviderParaRef = session.chapterBucket ?: return null
         val source = appDb.bookSourceDao.getBookSource(session.providerSourceKey)
-            ?: return ProviderBlock(sessionLabel(session), emptyList(), error = true)
+            ?: return ProviderBlock(
+                sourceLabel = sessionLabel(session),
+                items = emptyList(),
+                error = true,
+                providerSourceKey = session.providerSourceKey,
+                bookUrl = session.providerBook.bookUrl,
+                chapterIndex = session.providerChapterIndex,
+                paragraphNum = ref.providerParaIndex,
+                paraData = ref.paraData,
+                providerBucketCount = 0,
+            )
         val label = source.bookSourceName.ifBlank { source.bookSourceUrl }.take(12)
-        return runCatching {
+        val bucketCount = session.chapterBucketCount.coerceAtLeast(0)
+        return try {
             val book = resolveBook(session.providerBook.bookUrl) ?: session.providerBook
             val chapter = resolveChapter(session.providerBook.bookUrl, session.providerChapterIndex)
                 ?: session.providerChapter
@@ -194,14 +251,35 @@ class ReviewMergeDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
             } else {
                 fetchNativeDetail(source, book, chapter, ref)
             }
-            ProviderBlock(label, items, error = false)
-        }.onFailure {
-            AppLog.put(
-                "ReviewOverlay merge skip=${session.providerSourceKey} detail\n${it.localizedMessage}",
-                it,
+            ProviderBlock(
+                sourceLabel = label,
+                items = items,
+                error = false,
+                providerSourceKey = session.providerSourceKey,
+                bookUrl = book.bookUrl,
+                chapterIndex = session.providerChapterIndex,
+                paragraphNum = ref.providerParaIndex,
+                paraData = ref.paraData,
+                providerBucketCount = bucketCount.coerceAtLeast(items.size).coerceAtLeast(1),
             )
-        }.getOrElse {
-            ProviderBlock(label, emptyList(), error = true)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLog.put(
+                "ReviewOverlay merge skip=${session.providerSourceKey} detail\n${e.localizedMessage}",
+                e,
+            )
+            ProviderBlock(
+                sourceLabel = label,
+                items = emptyList(),
+                error = true,
+                providerSourceKey = session.providerSourceKey,
+                bookUrl = session.providerBook.bookUrl,
+                chapterIndex = session.providerChapterIndex,
+                paragraphNum = ref.providerParaIndex,
+                paraData = ref.paraData,
+                providerBucketCount = bucketCount,
+            )
         }
     }
 
@@ -263,6 +341,12 @@ class ReviewMergeDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
         val sourceLabel: String,
         val items: List<ReviewRuleParser.DetailItem>,
         val error: Boolean,
+        val providerSourceKey: String,
+        val bookUrl: String,
+        val chapterIndex: Int,
+        val paragraphNum: Int,
+        val paraData: String,
+        val providerBucketCount: Int,
     )
 
     private data class MergeRow(
@@ -270,10 +354,18 @@ class ReviewMergeDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
         val name: String,
         val content: String,
         val isError: Boolean,
+        val providerSourceKey: String,
+        val bookUrl: String,
+        val chapterIndex: Int,
+        val paragraphNum: Int,
+        val paraData: String,
+        val providerBucketCount: Int,
     )
 
-    private class MergeAdapter(private val context: Context) :
-        RecyclerView.Adapter<MergeAdapter.VH>() {
+    private class MergeAdapter(
+        private val context: Context,
+        private val onRowClick: (MergeRow) -> Unit,
+    ) : RecyclerView.Adapter<MergeAdapter.VH>() {
 
         private val items = ArrayList<MergeRow>()
 
@@ -315,6 +407,12 @@ class ReviewMergeDetailDialog() : BaseDialogFragment(R.layout.dialog_recycler_vi
             } else {
                 holder.binding.llBadges.gone()
             }
+            holder.itemView.setOnClickListener {
+                if (!item.isError && item.paraData.isNotBlank()) {
+                    onRowClick(item)
+                }
+            }
+            holder.itemView.isClickable = !item.isError && item.paraData.isNotBlank()
         }
 
         override fun getItemCount(): Int = items.size

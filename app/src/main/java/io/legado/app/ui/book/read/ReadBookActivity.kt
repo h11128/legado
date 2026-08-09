@@ -2097,6 +2097,12 @@ class ReadBookActivity : BaseReadBookActivity(),
                 clearReviewSummaryProviders()
                 return@onSuccess
             }
+            when {
+                loaded.mergeSession != null ->
+                    ReviewOverlaySessionStore.putMerge(loaded.mergeSession)
+                loaded.session == null ->
+                    ReviewOverlaySessionStore.clearChapter()
+            }
             val tcNow = ReadBook.curTextChapter
             val layoutReadyNow = tcNow != null &&
                     tcNow.chapter.index == chapterIndex &&

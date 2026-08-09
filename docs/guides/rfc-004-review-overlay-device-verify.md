@@ -72,13 +72,15 @@ Push with `python scripts/push-rfc004-review-sources.py` (or `save_source` `form
 
 1. Build with Room **v102** (multi-row `book_review_bindings`: `enabled` / `sortOrder` / `role`).
 2. 简介 → **段评源** → **添加段评源**，先后绑定 ≥2 个有能力的源；**管理已绑定**可设段落主源 / 启停 / 移除。
-3. 打开章节：章评气泡 = 各源 `-1` count **之和**（未去重）；logcat `ReviewOverlay merge providers=…`。
-4. 点章评：`ReviewMergeDetailDialog`，条目带源名徽章。
-5. Pref `reviewOverlayMergeEnabled=false` → 只用 sortOrder 最小的一个源。
+3. 打开章节：章评气泡 = 各源 `-1` count **之和**（未去重）；logcat `ReviewOverlay merge providers=…`（无伪造 `merge:N` paraData）。
+4. 点章评：`ReviewMergeDetailDialog`，条目带源名徽章；**点某一条** → 该源 `ReviewDetailDialog`（A19，完整分页在详情里）。
+5. 阅读设置 → **多源章评合集** off（`reviewOverlayMergeEnabled=false`）→ 只用 sortOrder 最小的一个源。
 
 Device smoke (2026-08-09): `assembleAppDebug` + install → logcat `DB version upgrading from 101 to 102` OK; unit `ReviewOverlayMergeTest` / resolver tests green.
 
 Chapter-bucket is expected to work once bound; paragraph icons still need `ContentSplitVerified` (fixture URL only today) and at most one `paragraph_primary`.
+
+In-dialog per-provider load-more on the merge list itself is deferred (§12.4.3 follow-up).
 
 ## Agent run record (2026-08-09)
 

@@ -22,6 +22,8 @@ object ReviewOverlaySessionStore {
         val alignQuality: Double,
         /** Present only when provider summary has paraIndex=-1 with count>0. */
         val chapterBucket: ProviderParaRef?,
+        /** Provider `-1` count when [chapterBucket] is present (for detail toolbar). */
+        val chapterBucketCount: Int = 0,
         /** Local body review id → provider ref. Empty when P2 closed or coverage fail. */
         val paraRefs: Map<Int, ProviderParaRef> = emptyMap(),
     ) {
