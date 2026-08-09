@@ -1,13 +1,13 @@
 # Source repair retrospective
 
 
-## 2026-08-09 书架「失效」标签源抽查 + 逐个修复关门
+## 2026-08-09 书架「失效」标签源抽查 + deep diagnose 关门
 
-- 抽查 10 个大源（书架书最多）：当时 0/10 正文完整；仅 69shu / lwxs 能拉目录。表与队列见 `docs/guides/shelf-stale-tag-source-queue.md`。
-- **trxs.me**：DNS NXDOMAIN → `https://trxs.cc`；禁用 `.me`；书架 8 remap / 13 自动换源。
-- **乐文 m.lwxs.com**：L2 host redirect → `https://m.ilwxs.com`；旧源 disable；书架 31 已 remap；设备校验成功（`checkSearch=false`，发现→目录→正文）；**搜索 POST 站端 500**，未谎称搜索修好。
-- **其余 8**：gate/hunt 后 skip（CF/TLS/超时/证书过期/不可达），保持启用给挂梯用户，不删书架引用 URL。
-- 策略确认：暂不批量修空目录书架；靠自动换源兜底。
+- 抽查 10 个大源：表与队列见 `docs/guides/shelf-stale-tag-source-queue.md`。
+- **迁通 5**：trxs→trxs.cc；乐文→ilwxs；爱下 www+api→已有 ixdzs8（证书过期/API 死）；69shu→69shuba.com（真机 toc+正文 OK，搜索仍 CF）。
+- **深挖仍 skip 5**：81zw CF 403 challenge；lrxsw CF 522；xxbiqudu TLS；uukanshu DNS→127.0.0.1（.cc 亦 CF）；69shuba.pro TLS（改用 .com）。
+- 教训：gate「hunt 空」≠未深挖；真机 HTTP 日志（403/522/loopback）才能定性。UU 不是简单超时，是域名解析到本机。
+- 策略：书架靠自动换源；不删仍有 origin 引用的 URL。
 
 ## 2026-08-06 非小说壳 + QQ 搜索 + 换源 gate
 
