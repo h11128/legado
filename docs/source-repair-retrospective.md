@@ -156,6 +156,13 @@ Trap: `manual_mcp_bypass_closeout` · script_fix: `legado_mcp.py+hooks`
 - 孪生 `biquge5200.cc` / `b5200.org` / `m.biquge5200.cc`：手机 GET → IOException ~35s（仍 23.224）；`hunt --probe` empty。
 - 已禁用；书架靠自动换源。Trap: `toc_href_slash_twin_unreachable`。
 
+## 2026-08-09 https://m.lrxs.org deep dig（再挖）
+
+- 首页仍西语占位：`title=Web accesible`，`meta refresh`→Google；`/9_9146/` 等书架路径与 `/s.php` 均 404。
+- 同名孪生 `http://www.lrxsw.org`：PC/手机 **CF 522**（搜索/打开空）；非可迁目标。`xinqishuxs` 路径不兼容。
+- `hunt --probe` empty。已禁用；书架 6 靠自动换源。
+- Trap: `placeholder_web_accesible_google`（SKILL）。
+
 ## 2026-08-09 www.dubu123.com deep dig
 
 - **首轮（浅）**：NXDOMAIN；`dubuxs.cc` 威胁页；误把 `dbxsn.com` 首页 404 当整站死 → skip。
