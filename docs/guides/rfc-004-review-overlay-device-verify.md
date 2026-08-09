@@ -56,6 +56,17 @@ Same bind as P1. Content book chapter text should be **similar** to fixture para
 - Unbound → no overlay icons
 - Coverage &lt; 0.5 on P2 → chapter-bucket only (no wrong paragraph icons)
 
+## Real providers (not fixture)
+
+See `docs/design/sources/README.md`:
+
+- `起点本章说(段评源)` → `https://m.qidian.com#rfc004-review`
+- `微信读书划线(段评源)` → `https://weread.qq.com#rfc004-review`
+
+Push with `python scripts/push-rfc004-review-sources.py` (or `save_source` `format=js`). Device **API**/`debug_source` evidence is in `docs/design/sources/README.md` (2026-08-09). In-reader overlay bucket logcat for these two URLs is still TODO; fixture overlay evidence below still stands.
+
+Chapter-bucket is expected to work once bound; paragraph icons still need `ContentSplitVerified` (fixture URL only today).
+
 ## Agent run record (2026-08-09)
 
 | Item | Evidence |
