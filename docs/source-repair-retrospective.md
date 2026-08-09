@@ -1,6 +1,12 @@
 # Source repair retrospective
 
 
+## 2026-08-09 — ttkan.co deep diagnose
+
+| URL | 结果 | 要点 |
+|-----|------|------|
+| `cn.ttkan.co` | **fixed** | 搜索仍返回结果，但 `bookList=.novel_cell` 已空；改为 `.li_first_node`；目录 `full_chapters@div`；校验成功 2254ms |
+
 ## 2026-08-09 — wodescw deep diagnose
 
 | URL | 结果 | 要点 |

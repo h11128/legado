@@ -148,5 +148,6 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://so.27k.net/` | **skip**（so+www 已禁用） | HTTPS TLS EOF；HTTP/www 为 **parking** 壳；书/搜索 404；hunt/OSINT 无后继。书架 13 靠换源。Trap：`known:域名停车/过期` |
 | `https://www.80xs.la` | **fixed migrate** | →`http://wap.80ge.info`（PC `www.80ge` TOC 章链挂死域 `qiushu.info`）；wap 搜索/分页目录/`#nr1` 正文 OK；设备校验 **failed=0**；书架 2 remap；`.la` disabled。Trap：`known:主机跳转` |
 | `https://www.wodescw.com` | **fixed**（无搜索） | 原生 `POST /search/` 空壳 63B；sososhu meta 无命中；书架书详情/目录/正文 OK；`checkSearch=false`+`checkDiscovery=true`→**校验成功**（1477ms）。首轮双关曾假成功≈1ms → trap `check_search_discovery_both_off_vacuous`。 |
+| `https://cn.ttkan.co` | **fixed** | 搜索 DOM 改版：`bookList` `.novel_cell`→`.li_first_node`；`toc` `.full_chapters@div.1`→`@div`；debug 17书/正文 OK；MCP **校验成功**（2254ms）。 |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
