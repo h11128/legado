@@ -426,7 +426,7 @@ Settings: 段评可来自与正文不同的评论源；无评论源时功能保�
 
 ## 10. Follow-ups (out of P5a/b shipped)
 
-Postmortem (thread close-out): [2026-08-09-rfc004-p5-multi-provider-merge.md](../postmortem/2026-08-09-rfc004-p5-multi-provider-merge.md).
+Postmortem (full thread): [2026-08-09-rfc004-cross-source-review-thread.md](../postmortem/2026-08-09-rfc004-cross-source-review-thread.md).
 
 1. Manual chapter link when align fails.
 2. Backup ZIP export of bindings.
