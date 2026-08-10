@@ -11,6 +11,7 @@
 | `https://m.shufahouse.com` | **fixed** | dig 因 **证书过期** 误 hunt_empty→disable；PC `danger`/手机仍 200；搜索 120 + 目录 267 + 正文 OK；校验成功 **4240ms**；清「搜索失效」 |
 | `http://m.uuxsw8.cc` | **skip**（禁用） | `deadish:this domain` 停车；`.com` NXDOMAIN；hunt/OSINT empty |
 | `https://www.121ds.cc` | **skip**（禁用） | L1 TCP timeout；手机 debug 超时；hunt/OSINT empty；slash 孪生一并禁 |
+| `https://www.zw34.net` | **skip**（禁用） | L1 TCP timeout；hunt/OSINT empty |
 
 **新陷阱 `cert_expired_phone_ok`**：PC rustls 拒过期证 ≠ 站死。Harness：`source-gate/classify.rs` → `l2_cert_expired` + `Verify`。
 
