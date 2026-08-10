@@ -1,8 +1,17 @@
 # Source repair retrospective
 
+## 2026-08-10 — shelf deep30 remain (fuxs1→ttshu8)
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `http://www.fuxs1.com/🍑` | **fixed** | PC dig emoji 路径 404/CF≠手机；搜索/目录/正文 OK；清陈旧「正文空」备注；**校验成功 848ms** |
+| `http://www.kanunu8.com` | **fixed** | dig verify；手机开/目录/正文 OK；陈旧 timeout 标签；**校验成功 358ms** |
+| `http://www.kenshuwx.com` → `http://www.kenshuzw.la` | **fixed migrate** | 宿主跳转；`h1@text` 详情书名；**校验成功 565ms**；旧源禁用 |
+| `http://www.ttshu8.org` → `https://www.ttshu8.net` | **fixed migrate** | `.net` 搜索 POST 500；改写 explore/详情/`#list`/ `#content`；`tocUrl=.btopt a@href`；无搜索+发现 **校验成功 736ms** |
+
 ## 2026-08-10 — shelf deep30 batch
 
-本批 30 条（队列 `shelf_deep30_queue.json` 余下 `fuxs1`/`kanunu8`/`kenshuwx`/`ttshu8` 另开）。  
+本批 30 条（队列余下 4 条见上节「remain」）。  
 Process: **one `source-cli dig` at a time** → phone evidence before disable → honest ledger/retro.  
 Lessons: **never auto-disable on dig gate alone**（8kbook L2 10060、biquge365/abc 开书 OK、UAA PC-CF 均曾误判）；UAA 最终仍 **skip**（搜索活、intro API 坏——勿把「勿误禁」当成必须修通）；陷阱复用 `search_empty_shell_open_ok`、`chapter_verify_html_wall`、`booksourcecomment_holds_js_helpers`、`alias_booksourceurl_false_dead`。
 
