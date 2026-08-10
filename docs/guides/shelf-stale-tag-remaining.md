@@ -156,5 +156,7 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `http://m.92popo.cc` | **skip**（已禁用） | dig 搜索可修（`.list@li`+https）；详情「章节目录」→`/N/` 仅「开始阅读/分卷」，无 `#chapterlist`；webView 正文仍空。书架多本已在 `popofree.com`。Trap：分卷站无标准 TOC。 |
 | `https://app.yqzw5.net` | **skip**（已禁用） | dig：首页仅 1052B「Click here to enter」停车壳；hunt empty；OSINT 指向 `yqzw5.com` 但 PC/手机均断连超时；debug 搜索挂起。书架 1《万界最强之光》靠换源。Trap：`known:域名停车/过期`。 |
 | `https://www.dbxsn.com` | **fixed migrate** | dig 主机跳转→`https://www.dbxsz.com`（首页 404，`/book/p*` 活）；搜索 `/plus/search.php?q=`；**校验成功**（709ms）；书架 4 本 origin+bookUrl remap；`.com` 旧源 disabled。Trap：`known:主机跳转` / `home_404_paths_alive`。 |
+| `https://b.faloo.com#温暖满怀` | **fixed** | dig `layer=ok`；设备 **校验成功**（2394ms）；清掉陈旧 DNS Error 备注。Trap：stale tag。 |
+| `https://hongxiua.com` | **skip**（已禁用） | dig：首页 `Loading...` JS 壳；gate 曾诱导向 `ww1.hongxiua.com`（GDPR/广告停车）；hunt empty；`hongxiuzhao.net` 403。书架多数已在 `hongxiu.com`。Trap：`known:js_loading_jwt_ad_hijack`。 |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。

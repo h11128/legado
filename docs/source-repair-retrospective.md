@@ -1,6 +1,13 @@
 # Source repair retrospective
 
 
+## 2026-08-09 — faloo + hongxiua dig
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `https://b.faloo.com#温暖满怀` | **fixed** | dig ok；校验成功 2394ms；清陈旧 DNS 备注 |
+| `https://hongxiua.com` | **skip**（禁用） | Loading JS 壳；ww1 广告停车；无活后继 |
+
 ## 2026-08-09 — dbxsn.com → dbxsz.com
 
 | URL | 结果 | 证据 |
