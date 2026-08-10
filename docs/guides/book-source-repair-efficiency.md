@@ -9,7 +9,7 @@ Goal: finish each URL with **minimum wall time** without risking DB wipe or fake
 | Gate / hunt | `source-cli dig --url …`（或 gate→diagnose→oneshot） | Brand-alike probes with timeout≥15s in a long serial list；**MCP-first** 跳过 dig |
 | PC HTML | timeout **≤12s** per URL | 25–60s urlopen on obvious NXDOMAIN |
 | Patch | MCP `save_source` / `legado-db-mutate` | Hand SQL then forget upsert |
-| Disable / remap | `python scripts/legado-db-mutate.py …` | Pull → MCP → push old file |
+| Disable / remap | `python scripts/legado-db-mutate.py …`；有 `--map` 时**只**改列出的 bookUrl | Pull → MCP → push old file；带 `--map` 却整 origin 改写（trap `whole_origin_remap_without_map_filter`） |
 | Device check | `start_check_sources` → **`LegadoMcp.wait_check_done`**；无搜索时 **`checkDiscovery=true`**（双关会假成功） | `sleep(3)×N` / `for i in range(40)`；`checkSearch=false`+`checkDiscovery=false` |
 | Debug | `debug_source(..., timeout_sec=35)` default | Default 55–90s on dead hosts |
 | Close-out | ledger + retro seal | Ending turn mid-URL |

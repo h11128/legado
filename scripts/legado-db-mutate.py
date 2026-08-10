@@ -48,14 +48,20 @@ def main() -> int:
     p_up = sub.add_parser("upsert-json", help="INSERT/REPLACE source from JSON file")
     p_up.add_argument("--file", required=True, type=Path)
 
-    p_rm = sub.add_parser("remap", help="Remap books.origin (+ optional bookUrl map)")
+    p_rm = sub.add_parser(
+        "remap",
+        help="Remap books.origin; with --map only listed bookUrls move",
+    )
     p_rm.add_argument("--old-origin", required=True)
     p_rm.add_argument("--new-origin", required=True)
     p_rm.add_argument(
         "--map",
         action="append",
         default=[],
-        help="oldBookUrl=newBookUrl (repeatable)",
+        help=(
+            "oldBookUrl=newBookUrl (repeatable). When any --map is given, "
+            "ONLY those bookUrls are remapped (not the whole origin)."
+        ),
     )
     p_rm.add_argument(
         "--require-url",

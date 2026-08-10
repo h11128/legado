@@ -126,16 +126,42 @@ def remap_book_origin(
     new_origin: str,
     book_url_map: Mapping[str, str] | None = None,
 ) -> int:
-    """Remap books.origin (= bookSourceUrl). Optionally map each bookUrl."""
+    """Remap books.origin (= bookSourceUrl).
+
+    When ``book_url_map`` is provided and non-empty, **only** those bookUrls
+    are remapped (keys = current bookUrl, values = new bookUrl). This avoids
+    accidental whole-origin remaps when the intent was a per-book map.
+
+    When ``book_url_map`` is omitted/empty, every book under ``old_origin``
+    keeps its bookUrl and only ``origin`` changes.
+    """
+    if book_url_map:
+        n = 0
+        misses: list[str] = []
+        for book_url, new_book in book_url_map.items():
+            cur = con.execute(
+                "UPDATE books SET origin = ?, bookUrl = ? "
+                "WHERE bookUrl = ? AND origin = ?",
+                (new_origin, new_book, book_url, old_origin),
+            )
+            if cur.rowcount == 0:
+                misses.append(book_url)
+            else:
+                n += cur.rowcount
+        if misses:
+            raise RuntimeError(
+                "remap --map miss (wrong bookUrl or old-origin): "
+                + ", ".join(misses)
+            )
+        return n
     rows = con.execute(
         "SELECT bookUrl FROM books WHERE origin = ?", (old_origin,)
     ).fetchall()
     n = 0
     for (book_url,) in rows:
-        new_book = (book_url_map or {}).get(book_url, book_url)
         con.execute(
             "UPDATE books SET origin = ?, bookUrl = ? WHERE bookUrl = ? AND origin = ?",
-            (new_origin, new_book, book_url, old_origin),
+            (new_origin, book_url, book_url, old_origin),
         )
         n += 1
     return n
@@ -221,16 +247,44 @@ def _self_test() -> None:
             "INSERT INTO books VALUES (?,?,?,?)",
             ("n", "http://old/1", "http://old", ""),
         )
-        remap_book_origin(
+        con.execute(
+            "INSERT INTO books VALUES (?,?,?,?)",
+            ("keep", "http://old/2", "http://old", ""),
+        )
+        # --map present: only listed bookUrls move
+        n = remap_book_origin(
             con,
             old_origin="http://old",
             new_origin="http://example.test",
             book_url_map={"http://old/1": "http://example.test/1"},
         )
-        assert con.execute("SELECT origin, bookUrl FROM books").fetchone() == (
-            "http://example.test",
-            "http://example.test/1",
+        assert n == 1
+        assert con.execute(
+            "SELECT origin, bookUrl FROM books WHERE name='n'"
+        ).fetchone() == ("http://example.test", "http://example.test/1")
+        assert con.execute(
+            "SELECT origin, bookUrl FROM books WHERE name='keep'"
+        ).fetchone() == ("http://old", "http://old/2")
+        # no map: whole origin
+        n2 = remap_book_origin(
+            con,
+            old_origin="http://old",
+            new_origin="http://example.test",
         )
+        assert n2 == 1
+        assert con.execute(
+            "SELECT origin FROM books WHERE name='keep'"
+        ).fetchone()[0] == "http://example.test"
+        try:
+            remap_book_origin(
+                con,
+                old_origin="http://example.test",
+                new_origin="http://example.test",
+                book_url_map={"http://missing/9": "http://example.test/9"},
+            )
+            raise AssertionError("expected miss")
+        except RuntimeError as e:
+            assert "miss" in str(e)
         con.close()
     print("legado_db_mutate self-test OK")
 
