@@ -158,5 +158,7 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://www.dbxsn.com` | **fixed migrate** | dig 主机跳转→`https://www.dbxsz.com`（首页 404，`/book/p*` 活）；搜索 `/plus/search.php?q=`；**校验成功**（709ms）；书架 4 本 origin+bookUrl remap；`.com` 旧源 disabled。Trap：`known:主机跳转` / `home_404_paths_alive`。 |
 | `https://b.faloo.com#温暖满怀` | **fixed** | dig `layer=ok`；设备 **校验成功**（2394ms）；清掉陈旧 DNS Error 备注。Trap：stale tag。 |
 | `https://hongxiua.com` | **skip**（已禁用） | dig：首页 `Loading...` JS 壳；gate 曾诱导向 `ww1.hongxiua.com`（GDPR/广告停车）；hunt empty；`hongxiuzhao.net` 403。书架多数已在 `hongxiu.com`。Trap：`known:js_loading_jwt_ad_hijack`。 |
+| `http://api.midukanshu.com#yc1101` | **fixed** | dig `layer=ok`；设备 **校验成功**（1389ms）；清掉陈旧「搜索失效」备注。Trap：stale tag。 |
+| `https://m.bq9.cc` | **skip**（已禁用） | dig：首页「Click here to enter」+ fingerprint 停车壳；hunt empty；书架书已在其他 bq 孪生。Trap：`known:域名停车/过期`。 |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
