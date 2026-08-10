@@ -14,6 +14,8 @@
 | `https://www.69shu.xyz` | **skip**（禁用） | CF520；hunt empty；69shuba 孪生已启用；oneshot disable 需 legado-db-mutate 再确认 |
 | `http://www.shu05.com` | **skip**（禁用） | gate `l2_domain_parked_or_expired`（this domain）；force disable |
 | `https://www.ixpsge.com/` | **skip**（禁用） | CF Just a moment→`xpshuku`；hunt empty；手机书页亦 challenge；slash/m 孪生一并禁 |
+| `https://m.shouda88.com/` | **skip**（禁用） | `deadish:this domain` 停车；force disable |
+| `https://m.paipaiwx.com` | **fixed**（无搜索） | 打开/目录/正文 OK；`checkSearch=false`+发现 **校验成功** 662ms |
 
 **Trap `whole_origin_remap_without_map_filter`：** `legado-db-mutate remap` 旧语义在给了 `--map` 时仍会改写该 origin 下**全部**书。误把 6 本已是 `mhtxs.la` bookUrl 的书 `origin` 拽回禁用的 wap。修复：有 `--map` 时只动 map 列出的 bookUrl；书架已恢复（6→`https://www.mhtxs.la`，`资本论` 留禁用 wap）。
 
