@@ -1,6 +1,12 @@
 # Source repair retrospective
 
 
+## 2026-08-09 — m.yushuwu.asia dig
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `http://m.yushuwu.asia` | **fixed** | dig fake_detail；s.php 404→GET search.php；#readerlist+#YiJianZhan；校验成功 1879ms |
+
 ## 2026-08-09 — dxtxt.com → dxtxt.cc
 
 | URL | 结果 | 证据 |
