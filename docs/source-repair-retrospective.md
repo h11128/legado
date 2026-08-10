@@ -1,5 +1,16 @@
 # Source repair retrospective
 
+## 2026-08-10 — shelf stale continue (midu retag → bqg18)
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `http://api.midukanshu.com#yc1101` | **fixed**（清标签） | 已可用；备注含「搜索失效」被误扫；清备注后校验成功 1351ms |
+| `http://m.kygnew.com` | **skip**（禁用） | parklogic Redirecting 壳；kayege/kaye-ge 无同路径；hunt/OSINT 空 |
+| `http://www.7zzw.com` | **skip**（禁用） | safebrowse 威胁墙；孪生 `##@遇知` 一并禁 |
+| `http://www.969193.com` | **skip**（禁用） | NXDOMAIN；书架 bookUrl 在 236318→236317 但 POST/书页 **403** 空壳 |
+| `https://b.faloo.com#温暖满怀` | **fixed**（复验） | dig verify；校验成功 3154ms |
+| `https://m.bqg18.cc/` | **skip**（禁用） | PC TLS corrupt；手机详情 OK；目录/正文跳 `/user/verify.html` |
+
 
 ## 2026-08-10 — shelf stale-tag dig batch (shenyebook → shufahouse)
 
