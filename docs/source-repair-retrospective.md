@@ -26,6 +26,9 @@
 | `http://www.siluke.com` | **skip**（禁用） | PC/手机 timeout；hunt empty；.cc→isiluke.la 另源仍启用 |
 | `http://www.xiaoshuobuluo.com/` | **skip**（禁用） | DNS NXDOMAIN；hunt empty |
 | `http://www.xstxt.com/` | **skip**（禁用） | safebrowse→fjshu；搜索空 |
+| `https://ggs.manmeng168.com/` | **skip**（禁用） | NXDOMAIN；hunt empty |
+| `https://m.pzshen.com##@` | **skip**（禁用） | TLS packet header corrupt |
+| `https://www.75zhongwen.com/` | **skip**（禁用） | timeout；书架《洪荒…》remap→`m.75zwz.com` 打开 OK |
 
 ### 会话教训（2026-08-10 补记 — 反思曾不完整）
 

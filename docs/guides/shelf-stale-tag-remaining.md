@@ -18,10 +18,12 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 
 | # | 书架本数 | 名称 | bookSourceUrl |
 |---|---------|------|---------------|
-| 1 | 1 | 番薯小说 | `https://ggs.manmeng168.com/` |
-| 2 | 1 | 胖子小说 | `https://m.pzshen.com##@` |
-| 3 | 1 | 起舞中文 | `https://www.75zhongwen.com/` |
-| 4 | 1 | （扫库刷新） | 见手机 enabled+stale |
+| 1 | 1 | 笔趣阁 | `https://www.biqugexsw.cc/` |
+| 2 | 1 | 全本女频（发现） | `https://www.qb5.tw/` |
+| 3 | 1 | 深夜看书 | `https://www.shenyebook.com/` |
+| 4 | 1 | 起点热门（良） | `https://www.shukuai.net` |
+| 5 | 1 | 🎉 蚂蚁小说 | `https://www.tqcyjy.com` |
+| 6 | 1 | 💠 红叶书斋 | `https://m.shufahouse.com` |
 
 ## 需 hunt / 可能迁站（gate = hunt）
 
@@ -153,6 +155,9 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `http://www.siluke.com` | **skip**（2026-08-10） | timeout；已禁用 |
 | `http://www.xiaoshuobuluo.com/` | **skip**（2026-08-10） | NXDOMAIN；已禁用 |
 | `http://www.xstxt.com/` | **skip**（2026-08-10） | safebrowse→fjshu；已禁用 |
+| `https://ggs.manmeng168.com/` | **skip**（2026-08-10） | NXDOMAIN；已禁用 |
+| `https://m.pzshen.com##@` | **skip**（2026-08-10） | TLS corrupt；已禁用 |
+| `https://www.75zhongwen.com/` | **skip**（2026-08-10） | timeout；书 remap→m.75zwz.com |
 | `http://www.16kbook.co` | **fixed migrate** | `.co` unexpected EOF；→`http://www.16kbook.net`（`/search.php?q=` + `article@html` + `.book_list2`）；设备 **校验成功**；书架「游戏面板」remap→`/1/1137/`；「长生…」站内无同名靠换源；`.co` disabled。Trap：`主机跳转` |
 | `http://www.31xs.net` | **skip**（net/#/com 已禁用） | `.net` **403**；书架书在 `.com` 但同路径 **错书**；搜索 404/`search.html`→首页；hunt/OSINT 无后继。书架 8 靠换源。Trap：`fake_detail` |
 | `http://www.shuquge.co` | **skip**（已禁用） | L2/手机 **444**；hunt empty；`ishuquge.la`/wap 亦超时；书架 2 靠换源（1 本已在 ishuquge）。Trap：`known:l2_http_dead` |
