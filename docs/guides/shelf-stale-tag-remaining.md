@@ -18,14 +18,14 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 
 | # | 书架本数 | 名称 | bookSourceUrl |
 |---|---------|------|---------------|
-| 1 | 9 | UU小说 | `http://www.uu234.net` |
-| 2 | 8 | 69书xyz | `https://www.69shu.xyz` |
-| 3 | 5 | 书屋小说网 | `http://www.shu05.com` |
-| 4 | 4 | 爱读小说 | `https://www.ixpsge.com/` |
-| 5 | 4 | 手打吧 | `https://m.shouda88.com/` |
-| 6 | 3 | 派派文学 | `https://m.paipaiwx.com` |
-| 7 | 2 | 猫眼看书 | `http://download.maoyankanshu.la` |
-| 8 | 2 | 饭饭小说 | `http://www.ffxs8.com/` |
+| 1 | 8 | 69书xyz | `https://www.69shu.xyz` |
+| 2 | 5 | 书屋小说网 | `http://www.shu05.com` |
+| 3 | 4 | 爱读小说 | `https://www.ixpsge.com/` |
+| 4 | 4 | 手打吧 | `https://m.shouda88.com/` |
+| 5 | 3 | 派派文学 | `https://m.paipaiwx.com` |
+| 6 | 2 | 猫眼看书 | `http://download.maoyankanshu.la` |
+| 7 | 2 | 饭饭小说 | `http://www.ffxs8.com/` |
+| 8 | 1 | （扫库刷新） | 见手机 enabled+stale |
 
 ## 需 hunt / 可能迁站（gate = hunt）
 

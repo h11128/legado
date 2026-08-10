@@ -10,6 +10,7 @@
 | `http://wap.mhtxs.cc` | **skip**（禁用） | L2 timeout；hunt empty；`mhtxs.la` 另源已启用 |
 | `https://m.lrxs.org` | **skip**（已禁用） | dig 再确认 Web accesible→Google；hunt empty；另禁 `http://www.lrxsw.org` CF522 |
 | `https://m.75zwz.com` | **fixed** | dig oneshot `set searchUrl`；校验成功 1152ms；搜索仍混淆热门壳（打开路径 OK） |
+| `http://www.uu234.net` | **skip**（禁用） | NXDOMAIN；hunt/OSINT 无活孪生；书架 bookUrl 在 uuxs5/8 威胁/跳转壳 |
 
 **Trap `whole_origin_remap_without_map_filter`：** `legado-db-mutate remap` 旧语义在给了 `--map` 时仍会改写该 origin 下**全部**书。误把 6 本已是 `mhtxs.la` bookUrl 的书 `origin` 拽回禁用的 wap。修复：有 `--map` 时只动 map 列出的 bookUrl；书架已恢复（6→`https://www.mhtxs.la`，`资本论` 留禁用 wap）。
 
