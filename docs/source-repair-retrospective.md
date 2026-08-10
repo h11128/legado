@@ -19,6 +19,10 @@
 | `http://download.maoyankanshu.la` | **fixed** | dig 因标签域 NXDOMAIN 误走 hunt/disable；`type=maoyankanshu` API 仍活；恢复 comment 内 JS 助手；校验成功 859ms |
 | `http://www.ffxs8.com/` | **fixed**（无搜索） | 打开路径 OK；发现校验成功 1080ms；清「搜索失效」分组 |
 | `http://www.xqishuta.com` | **fixed** | PC CF 假死；手机→.org 搜索/打开 OK；校验成功 2974ms |
+| `https://www.aixiawx.com/#pb1101` | **fixed migrate** | dig 报 migrate 但未落库；手工→`http://www.aixiashu.la`；书架 remap；校验成功 2576ms |
+| `https://m.paozww.com` | **skip**（禁用） | CF Attention Required；手机书页 403；hunt empty |
+| `http://www.jpxs123.cc` | **skip**（禁用） | safebrowse 威胁页；书架 2 本 remap→已校验成功的 `https://jpxs123.com` |
+| `http://www.rzlib.org/` | **skip**（禁用） | Unexpected EOF；hunt empty |
 
 ### 会话教训（2026-08-10 补记 — 反思曾不完整）
 
@@ -38,6 +42,8 @@
 **Trap `alias_label_host_nxdomain_api_alive`：** `bookSourceUrl` 标签域 NXDOMAIN，但 `searchUrl`/`type=…` 实际打活 API（如 maoyankanshu→jxgtzxc）；**勿**仅凭 L1 hunt_empty 当死站禁用；先 `debug_source`。
 
 **Trap `alias_booksourceurl_false_dead`：** PC gate `l2_bot_shell`/CF「Just a moment」，手机仍可能 301 到 `.org` 活域；勿只凭 PC CF 禁用。
+
+**Trap `dig_migrate_report_without_persist`：** dig 报 `migrated` 不等于库已改；须 `get_source`/SQL 确认，否则手工 upsert+remap+校验。
 
 ## 2026-08-09 — faloo + hongxiua dig
 

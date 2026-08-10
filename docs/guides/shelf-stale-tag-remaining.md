@@ -18,12 +18,12 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 
 | # | 书架本数 | 名称 | bookSourceUrl |
 |---|---------|------|---------------|
-| 1 | 1 | 爱下书 #破冰 | `https://www.aixiawx.com/#pb1101` |
-| 3 | 1 | 泡泡中文 | `https://m.paozww.com` |
-| 4 | 1 | 精品小说网 | `http://www.jpxs123.cc` |
-| 5 | 1 | 日照小说 | `http://www.rzlib.org/` |
-| 6 | 1 | 思路客 | `http://www.siluke.com` |
-| 7 | 1 | （更多 1 本源） | 扫库 `enabled+stale` |
+| 1 | 1 | 思路客 | `http://www.siluke.com` |
+| 2 | 1 | 小说部落 | `http://www.xiaoshuobuluo.com/` |
+| 3 | 1 | 嗯啊小说 | `http://www.xstxt.com/` |
+| 4 | 1 | 番薯小说 | `https://ggs.manmeng168.com/` |
+| 5 | 1 | 胖子小说 | `https://m.pzshen.com##@` |
+| 6 | 1 | （更多 1 本源） | 扫库 `enabled+stale` |
 
 ## 需 hunt / 可能迁站（gate = hunt）
 
@@ -148,6 +148,10 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `http://download.maoyankanshu.la` | **fixed**（2026-08-10） | 标签域 NXDOMAIN 但 API type 活；恢复 comment JS；校验成功 859ms |
 | `http://www.ffxs8.com/` | **fixed**（2026-08-10） | 无搜索；打开 OK；发现校验成功 1080ms |
 | `http://www.xqishuta.com` | **fixed**（2026-08-10） | PC CF 假死；手机.org OK；校验成功 2974ms |
+| `https://www.aixiawx.com/#pb1101` | **fixed migrate**（2026-08-10） | →`http://www.aixiashu.la`；校验成功 2576ms；dig migrate 未落库 |
+| `https://m.paozww.com` | **skip**（2026-08-10） | CF 403；已禁用 |
+| `http://www.jpxs123.cc` | **skip**（2026-08-10） | safebrowse；2 本 remap→`jpxs123.com`（已校验成功） |
+| `http://www.rzlib.org/` | **skip**（2026-08-10） | Unexpected EOF；已禁用 |
 | `http://www.16kbook.co` | **fixed migrate** | `.co` unexpected EOF；→`http://www.16kbook.net`（`/search.php?q=` + `article@html` + `.book_list2`）；设备 **校验成功**；书架「游戏面板」remap→`/1/1137/`；「长生…」站内无同名靠换源；`.co` disabled。Trap：`主机跳转` |
 | `http://www.31xs.net` | **skip**（net/#/com 已禁用） | `.net` **403**；书架书在 `.com` 但同路径 **错书**；搜索 404/`search.html`→首页；hunt/OSINT 无后继。书架 8 靠换源。Trap：`fake_detail` |
 | `http://www.shuquge.co` | **skip**（已禁用） | L2/手机 **444**；hunt empty；`ishuquge.la`/wap 亦超时；书架 2 靠换源（1 本已在 ishuquge）。Trap：`known:l2_http_dead` |
