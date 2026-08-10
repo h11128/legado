@@ -1,5 +1,11 @@
 # Source repair retrospective
 
+## 2026-08-10 — shelf stale continue (feisxs →)
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `https://m.feisxs.com` | **skip**（禁用） | PC CF403；手机搜索空、书页 HTTP **404**；Google→官网 `www.fsuzw.com`（同 `/book-47672/` 详情/目录通）；正文 `#nr1` YHFixed/`&#13xxxx` 字体加密不可读（同 feibzw）；`hunt --probe` empty；书架 1 本靠换源。Trap：`content_font_encrypt_dynamic` |
+
 ## 2026-08-10 — shelf stale continue (midu retag → bqg18)
 
 | URL | 结果 | 证据 |
@@ -10,6 +16,7 @@
 | `http://www.969193.com` | **skip**（禁用） | NXDOMAIN；书架 bookUrl 在 236318→236317 但 POST/书页 **403** 空壳 |
 | `https://b.faloo.com#温暖满怀` | **fixed**（复验） | dig verify；校验成功 3154ms |
 | `https://m.bqg18.cc/` | **skip**（禁用） | PC TLS corrupt；手机详情 OK；目录/正文跳 `/user/verify.html` |
+| `https://m.75zwcom.com` | **skip migrate** | 搜索空；同路径孪生 `m.75zwz.com` 详情/572章/正文曾 OK；书架 remap；`start_check`/偶发 debug **PROTOCOL_ERROR** → **未**记校验成功 |
 
 
 ## 2026-08-10 — shelf stale-tag dig batch (shenyebook → shufahouse)

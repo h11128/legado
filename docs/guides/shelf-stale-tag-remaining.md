@@ -120,6 +120,7 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://www.iqushuwang.com/` | **skip**（已禁用） | `.com` 首页通但 **search POST 404**；书 URL 在 `.cc`；手机连 `.cc`→`23.224.*` **ENETUNREACH**（PC 见 WAF CAPTCHA）。书架 3 靠自动换源。Trap：`toc_href_slash_twin_unreachable` |
 | `https://m.paipaiwx.com` | **fixed**（无搜索） | search POST 字段 `searchkey`→`369koolearn` 仍恒返回热搜空壳（m/www 同）；debug 详情/目录292/正文 OK；`checkSearch=false`→校验成功；书架 3 保留。Trap：`search_post_hot_shell` |
 | `https://m.feibzw.com/` | **skip**（已禁用 m/www/`#` +试验 `fsuzw`） | TLS `record layer failure`；`feisuzw` 公告→`https://www.fsuzw.com`（同 `/book-{id}/` 详情/目录通）；正文 YHFixed **每章换 woff2** 字体加密，Legado 解不开；搜索 0。书架靠换源。Trap：`tls_packet_header_corrupt` / `content_font_encrypt_dynamic` |
+| `https://m.feisxs.com` | **skip**（已禁用） | CF/搜索空/书页404；同族后继 `www.fsuzw.com` 详情目录通、正文仍 YHFixed 加密；`fsuzw` 保持禁用。书架 1 靠换源。Trap：`content_font_encrypt_dynamic` |
 | `https://m.6yzw.com/` | **fixed migrate** | 跳转 `https://www.lzshu.cc`；新源「六月中文网」校验成功（search=`/search.php?q=`，TOC=`.book_list2`+`index_N`）；旧 `/N_ID/` **错书**不可直 remap；书架 2/3 按书名 remap（`84_84198`/`10_10911`）；`龙珠…` 无同名仍挂旧 origin。`m.6yzw` disabled。Trap：`主机跳转` |
 | `http://www.xiaoshuozu.cc` | **fixed** | `s.php` 404→`/search.php?q=`（lzshu 同模板）；https 源「小说族」校验成功；旧 `/shu/{id}/` 错书；仅「大唐开局震惊李世民」精确 remap→`/shu/92982/`；另 2 本无精确同名靠换源。http 旧源 disabled。 |
 | `http://www.shatanxs.com/` | **skip**（含无尾斜线已禁用） | CF `Attention Required` **403**（PC/手机详情+搜索同）；`hunt --probe` empty；OSINT 无后继（crt 仅本域）。书架 3 靠自动换源。Trap：`http_403_home_hunt_empty` |
