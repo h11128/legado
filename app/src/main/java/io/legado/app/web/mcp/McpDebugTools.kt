@@ -47,16 +47,12 @@ internal fun Server.registerMcpDebugTools() {
             val timeoutSec = (request.arguments.int("timeoutSec") ?: 90).coerceIn(10, 600)
             val source = appDb.bookSourceDao.getBookSource(url)
                 ?: return@addTool err("未找到书源，请检查书源地址")
-            if (!McpChannelGuard.debugMutex.tryLock()) {
-                return@addTool err("调试通道占用中，请稍后重试")
-            }
-            var acquired = false
+            val hold = McpChannelGuard.tryLockDebug()
+                ?: return@addTool err("调试通道占用中，请稍后重试")
             try {
                 if (Debug.callback != null || Debug.isChecking) {
                     return@addTool err("调试通道占用中，请稍后重试")
                 }
-                McpChannelGuard.noteDebugAcquired()
-                acquired = true
                 val (log, timedOut) = McpDebugCollector().collect(
                     debugScope,
                     source,
@@ -72,12 +68,7 @@ internal fun Server.registerMcpDebugTools() {
                     },
                 )
             } finally {
-                if (acquired) {
-                    McpChannelGuard.noteDebugReleased()
-                }
-                if (McpChannelGuard.debugMutex.isLocked) {
-                    McpChannelGuard.debugMutex.unlock()
-                }
+                McpChannelGuard.unlockDebug(hold)
             }
         } catch (error: CancellationException) {
             throw error

@@ -101,13 +101,23 @@ class McpAutorestartContractTest {
         assertTrue(guard.contains("forceReleaseStale"))
         assertTrue(guard.contains("healthJson"))
         assertTrue(guard.contains("forceUnlockDebugMutex"))
+        assertTrue(guard.contains("tryLockDebug"))
+        assertTrue(guard.contains("unlockDebug"))
         assertTrue(guard.contains("\"busy\""))
+        val toolServer = projectFile("app/src/main/java/io/legado/app/web/mcp/McpToolServer.kt")
+        assertTrue(toolServer.contains("tryLockDebug"))
+        assertTrue(toolServer.contains("unlockDebug"))
+        assertFalse(
+            "McpToolServer must not unlock debugMutex without a hold token",
+            toolServer.contains("debugMutex.unlock()"),
+        )
         val job = projectFile("app/src/main/java/io/legado/app/web/mcp/McpSourceCheckJob.kt")
         assertTrue(job.contains("Does NOT clear running"))
         val appMcp = projectFile("app/src/main/java/io/legado/app/web/mcp/McpApplication.kt")
         assertTrue(appMcp.contains("HEALTH_PATH"))
         val debug = projectFile("app/src/main/java/io/legado/app/web/mcp/McpDebugTools.kt")
         assertTrue(debug.contains("?: 90"))
+        assertTrue(debug.contains("tryLockDebug"))
         val check = projectFile("app/src/main/java/io/legado/app/web/mcp/McpCheckTools.kt")
         assertTrue(check.contains("reset_mcp_channel"))
     }

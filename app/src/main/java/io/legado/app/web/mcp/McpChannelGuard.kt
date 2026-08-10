@@ -5,6 +5,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Cross-cutting MCP liveness / busy state for health checks and hang recovery.
@@ -14,6 +15,10 @@ import kotlinx.serialization.json.put
  *
  * Check progress counters are mirrored here so [healthJson] never touches
  * [McpSourceCheckJob] (which pulls Android/Room and breaks JVM unit tests).
+ *
+ * Debug channel lock uses a hold **token**: [forceUnlockDebugMutex] / [forceResetAll]
+ * invalidate the token so a superseded holder's `finally` must not unlock the next
+ * owner or clear [debugAcquiredAtMs] (shufahouse sticky-busy fix follow-up).
  */
 object McpChannelGuard {
 
@@ -23,8 +28,13 @@ object McpChannelGuard {
     /** If a check job reports no progress for this long, treat as wedged. */
     const val STALE_CHECK_MS = 180_000L
 
-    /** Shared with [registerMcpDebugTools] so force-reset can unlock a wedged holder. */
+    /** Shared debug/eval/check mutex; acquire only via [tryLockDebug]. */
     val debugMutex = Mutex()
+
+    private val debugTokenSeq = AtomicLong(0L)
+
+    @Volatile
+    private var debugHoldToken: Long = 0L
 
     @Volatile
     private var lastToolName: String? = null
@@ -67,6 +77,33 @@ object McpChannelGuard {
         maybeNotifyIdle()
     }
 
+    /**
+     * Try to take the debug channel. On success returns a hold token that must be
+     * passed to [unlockDebug]; returns null if busy.
+     */
+    fun tryLockDebug(noteAcquired: Boolean = true): Long? {
+        if (!debugMutex.tryLock()) return null
+        val token = debugTokenSeq.incrementAndGet()
+        debugHoldToken = token
+        if (noteAcquired) {
+            noteDebugAcquired()
+        }
+        return token
+    }
+
+    /**
+     * Release only if [token] is still the current holder.
+     * After [forceUnlockDebugMutex], an old token is a no-op (no unlock / no release note).
+     */
+    fun unlockDebug(token: Long) {
+        if (token == 0L || debugHoldToken != token) return
+        debugHoldToken = 0L
+        noteDebugReleased()
+        if (debugMutex.isLocked) {
+            runCatching { debugMutex.unlock() }
+        }
+    }
+
     fun noteCheckStarted(total: Int) {
         checkRunning = true
         checkTotal = total
@@ -97,6 +134,9 @@ object McpChannelGuard {
     fun checkLastProgressAtMs(): Long = checkLastProgressAtMs
 
     fun forceUnlockDebugMutex() {
+        // Invalidate any in-flight finally before unlocking so it cannot touch the next holder.
+        debugHoldToken = 0L
+        debugAcquiredAtMs = 0L
         if (debugMutex.isLocked) {
             runCatching { debugMutex.unlock() }
         }
@@ -110,7 +150,6 @@ object McpChannelGuard {
         val debugHeld = debugAcquiredAtMs
         if (Debug.callback != null && debugHeld > 0L && nowMs - debugHeld >= STALE_DEBUG_MS) {
             Debug.forceCancelDebug()
-            debugAcquiredAtMs = 0L
             forceUnlockDebugMutex()
             parts += "stale_debug"
         }
@@ -129,7 +168,6 @@ object McpChannelGuard {
     /** Emergency unlock for MCP tool `reset_mcp_channel`. */
     fun forceResetAll(): String {
         Debug.forceCancelDebug()
-        debugAcquiredAtMs = 0L
         forceUnlockDebugMutex()
         val checkMsg = McpSourceCheckJob.requestStopFromWatchdog()
         // Keep pendingNetworkRestart; idle callback applies it when check finally ends.

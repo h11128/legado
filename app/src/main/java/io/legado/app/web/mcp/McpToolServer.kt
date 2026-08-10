@@ -67,8 +67,8 @@ object McpToolServer {
 
     private const val NOTIFICATION_TIMEOUT_MS = 500L
     private val debugScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    // Use McpChannelGuard.debugMutex so reset_mcp_channel can unlock a wedged holder.
-    // A private Mutex here made「通道占用中」sticky after force-reset (shufahouse 2026-08-10).
+    // Debug channel: McpChannelGuard.tryLockDebug / unlockDebug (tokenized) so force-reset
+    // cannot let an old finally unlock the next holder (shufahouse sticky-busy follow-up).
 
     fun create(): Server {
         return Server(
@@ -278,17 +278,13 @@ object McpToolServer {
                 val timeoutSec = (request.arguments.int("timeoutSec") ?: 120).coerceIn(10, 600)
                 val source = appDb.bookSourceDao.getBookSource(url)
                     ?: return@addTool err("未找到书源，请检查书源地址")
-                if (!McpChannelGuard.debugMutex.tryLock()) {
-                    return@addTool err("调试通道占用中，请稍后重试")
-                }
-                var acquired = false
+                val hold = McpChannelGuard.tryLockDebug()
+                    ?: return@addTool err("调试通道占用中，请稍后重试")
                 try {
                     McpChannelGuard.noteTool("debug_source")
                     if (Debug.callback != null || Debug.isChecking) {
                         return@addTool err("调试通道占用中，请稍后重试")
                     }
-                    McpChannelGuard.noteDebugAcquired()
-                    acquired = true
                     val progressToken = request.meta?.progressToken
                     val (log, timedOut) = coroutineScope {
                         // Keep only the newest unsent line; the complete bounded log is returned.
@@ -320,12 +316,7 @@ object McpToolServer {
                         }
                     )
                 } finally {
-                    if (acquired) {
-                        McpChannelGuard.noteDebugReleased()
-                    }
-                    if (McpChannelGuard.debugMutex.isLocked) {
-                        McpChannelGuard.debugMutex.unlock()
-                    }
+                    McpChannelGuard.unlockDebug(hold)
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -631,10 +622,10 @@ object McpToolServer {
                     appDb.bookSourceDao.getBookSource(url)
                         ?: return@addTool err("未找到书源，请检查书源地址")
                 }
-                if (!McpChannelGuard.debugMutex.tryLock()) {
-                    return@addTool err("调试通道占用中，请稍后重试")
-                }
+                val hold = McpChannelGuard.tryLockDebug()
+                    ?: return@addTool err("调试通道占用中，请稍后重试")
                 try {
+                    McpChannelGuard.noteTool("eval_js")
                     val collector = McpDebugCollector()
                     if (!Debug.startSimpleDebug(collector, source.getKey())) {
                         return@addTool err("调试通道占用中，请稍后重试")
@@ -689,7 +680,7 @@ object McpToolServer {
                         Debug.cancelDebug(collector)
                     }
                 } finally {
-                    McpChannelGuard.debugMutex.unlock()
+                    McpChannelGuard.unlockDebug(hold)
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -753,13 +744,13 @@ object McpToolServer {
                 appDb.bookSourceDao.getBookSourcePart(url)
                     ?: return@addTool err("未找到书源：$url")
             }
-            if (!McpChannelGuard.debugMutex.tryLock()) {
-                return@addTool err("调试通道占用中，请稍后重试")
-            }
+            val hold = McpChannelGuard.tryLockDebug()
+                ?: return@addTool err("调试通道占用中，请稍后重试")
             var serviceRequested = false
             var checkSessionId = 0L
             var selectedSourcesKey: String? = null
             try {
+                McpChannelGuard.noteTool("check_source")
                 checkSessionId = Debug.tryStartCheckSession()
                     ?: return@addTool err("调试通道占用中，请稍后重试")
                 selectedSourcesKey = CheckSource.start(appCtx, parts, checkSessionId)
@@ -831,7 +822,7 @@ object McpToolServer {
                 }
                 err(error.localizedMessage ?: error.toString())
             } finally {
-                McpChannelGuard.debugMutex.unlock()
+                McpChannelGuard.unlockDebug(hold)
             }
         }
     }
