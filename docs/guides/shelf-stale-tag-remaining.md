@@ -18,12 +18,11 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 
 | # | 书架本数 | 名称 | bookSourceUrl |
 |---|---------|------|---------------|
-| 1 | 4 | 爱读小说 | `https://www.ixpsge.com/` |
-| 2 | 4 | 手打吧 | `https://m.shouda88.com/` |
-| 3 | 3 | 派派文学 | `https://m.paipaiwx.com` |
-| 4 | 2 | 猫眼看书 | `http://download.maoyankanshu.la` |
-| 5 | 2 | 饭饭小说 | `http://www.ffxs8.com/` |
-| 6 | 1 | （扫库刷新） | 见手机 enabled+stale |
+| 1 | 4 | 手打吧 | `https://m.shouda88.com/` |
+| 2 | 3 | 派派文学 | `https://m.paipaiwx.com` |
+| 3 | 2 | 猫眼看书 | `http://download.maoyankanshu.la` |
+| 4 | 2 | 饭饭小说 | `http://www.ffxs8.com/` |
+| 5 | 1 | （扫库刷新） | 见手机 enabled+stale |
 
 ## 需 hunt / 可能迁站（gate = hunt）
 
