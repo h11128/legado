@@ -1,16 +1,43 @@
 # Source repair retrospective
 
-## 2026-08-10 — shelf deep30 batch (partial)
+## 2026-08-10 — shelf deep30 batch
+
+本批 30 条（队列 `shelf_deep30_queue.json` 余下 `fuxs1`/`kanunu8`/`kenshuwx`/`ttshu8` 另开）。  
+Process: **one `source-cli dig` at a time** → phone evidence before disable → honest ledger/retro.  
+Lessons: **never auto-disable on dig gate alone**（8kbook L2 10060、biquge365/abc 开书 OK、UAA PC-CF 均曾误判）；UAA 最终仍 **skip**（搜索活、intro API 坏——勿把「勿误禁」当成必须修通）；陷阱复用 `search_empty_shell_open_ok`、`chapter_verify_html_wall`、`booksourcecomment_holds_js_helpers`、`alias_booksourceurl_false_dead`。
 
 | URL | 结果 | 证据 |
 |-----|------|------|
-| `https://m.soushuwang.cc` | **skip** | 搜索空；TOC→verify.html |
+| `https://m.soushuwang.cc` | **skip** | 搜索空；TOC→`verify.html`（`chapter_verify_html_wall`） |
 | `https://m.telexh.com/` | **skip** | CF/404；手机开书空 |
 | `https://m.tycbooks.com#🎃` | **skip** | HTTP 401；hunt empty |
-| `https://m.wpxs.cc` | **skip** | 搜索空；TOC verify.html |
+| `https://m.wpxs.cc` | **skip** | 搜索空；TOC→`verify.html` |
 | `https://m.yundu9.com` | **skip** | TLS timeout；hunt empty |
 | `https://novelapi.kpkpo.com/h5/` | **skip** | L1 timeout；hunt empty |
 | `https://pck.tvguaa.com` → `https://www.tvgua.com` | **fixed migrate** | 打开/目录/正文 OK；搜索空；发现校验成功 **4049ms** |
+| `https://www.35meigui.com` | **skip** | TLS corrupt |
+| `https://www.773buy.cc#🎃` | **skip** | CF；开书空 |
+| `https://www.83zw.net` | **skip** | DNS fail |
+| `https://www.biqueg.com` | **skip** | L1 timeout |
+| `https://www.biquge34.net#🎃` | **skip** | cert expired；手机开书失败 |
+| `https://www.biquge365.net/` | **fixed** | 搜索空可开书（`search_empty_shell_open_ok`）；无搜索+发现 **校验成功 2321ms**（曾误 skip） |
+| `https://www.biqugeabc.com` | **fixed** | 搜索空可开书；无搜索+发现 **校验成功 3221ms**（曾误 skip） |
+| `https://www.diyitxt.com/` | **skip** | 手机 GET 405 |
+| `https://www.qiushubang.com/` → `https://www.xqiushubang.com` | **fixed migrate** | 迁域后发现/打开路径 OK；**校验成功 2050ms** |
+| `https://www.txtnovels.com` | **skip** | CF 521 |
+| `https://www.uaa.com/api/novel/app/novel/` | **skip** | PC dig CF≠手机搜索 OK（勿误禁）；intro API `访问失败` 无 `model` → 仍 skip |
+| `http://api.lestory.cn` | **skip** | L2/手机搜索超时；APP API；OSINT 无 web 后继 |
+| `http://downnovel.com` | **skip** | parked `this domain`；OSINT 无后继 |
+| `http://lgqm.huijiwiki.com/wiki/` | **fixed** | PC CF≠手机（`alias_booksourceurl_false_dead`）；书名 wiki href decode；**校验成功 9764ms** |
+| `http://m.tingroom.com` | **fixed** | dig verify；设备 **校验成功 1051ms** |
+| `http://qiman.com` | **skip** | 首页弹窗壳；qimanwu.app 路径不兼容 |
+| `http://tongren.faloo.com` | **fixed** | dig verify；设备 **校验成功 1938ms** |
+| `http://www.8kbook.com` | **fixed** | PC L2 10060 假死；oneshot 误禁→纠正；**校验成功 37693ms** |
+| `http://www.927txt.com` → `https://www.aiqu226.com/` | **fixed migrate** | 宿主跳转迁移；设备 **校验成功 3277ms**；旧源禁用 |
+| `http://www.abamh.com` | **fixed** | comment JS 主机跳转（勿覆盖 comment）；**校验成功 1799ms** |
+| `http://www.biquge.xin` | **skip** | PC+手机 CF block；sticky disable |
+| `http://www.duya.cc` | **skip** | PC+手机 safebrowse 威胁墙；sticky disable |
+| `http://www.frtxt.com` | **fixed** | 搜索空可开书；无搜索+发现 **校验成功 11558ms** |
 
 
 ## 2026-08-10 — shelf stale continue (feisxs →)
