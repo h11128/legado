@@ -8,6 +8,7 @@
 | `https://199.33.126.51/` | **skip migrate** | L1 TCP timeout；seeds 指向 `m.tongrenquan.org`（旧同人圈共享 IP）；oneshot 误改 slash 孪生 search→GET 失败；手工 **25 本** origin+bookUrl remap→`https://m.tongrenquan.org`；禁 IP 源+slash dup；`m.tongrenquan` **校验成功 2716ms**。Trap：`known:apex_no_a_try_m` |
 | `https://m.fuwenh.com` | **fixed**（无搜索） | POST `/s.php` 空壳；详情/目录/`#content` DOM 改版；发现 `sort/N-{{page}}.html`+`.topul li`；`checkSearch=false`+discovery **校验成功 738ms**。书架 ID 可能错书。Trap：`search_empty_shell_open_ok` |
 | `https://m.lingchenkanshu.com` | **skip**（禁用） | PC+手机 TLS `InvalidContentType`/`Unable to parse TLS packet header`；hunt empty；OSINT crt 502、Google 无后继；oneshot 禁用不粘→`legado-db-mutate`。Trap：`tls_packet_header_corrupt` |
+| `https://m.seyours.com` | **skip**（禁用） | PC `UnknownIssuer` 假死；手机搜索空、详情 OK，目录/章节→`user/verify.html`；hunt/OSINT 无后继；force disable。Trap：`chapter_verify_html_wall` |
 
 ## 2026-08-10 — shelf stale continue (midu retag → bqg18)
 
