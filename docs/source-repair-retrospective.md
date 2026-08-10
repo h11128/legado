@@ -1,6 +1,12 @@
 # Source repair retrospective
 
 
+## 2026-08-09 — dbxsn.com → dbxsz.com
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `https://www.dbxsn.com` | **fixed migrate** | →`dbxsz.com`；首页404路径活；校验成功709ms；书架4 remap |
+
 ## 2026-08-09 — app.yqzw5.net dig
 
 | URL | 结果 | 证据 |
