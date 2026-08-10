@@ -1,6 +1,12 @@
 # Source repair retrospective
 
 
+## 2026-08-09 — app.yqzw5.net dig
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `https://app.yqzw5.net` | **skip**（禁用） | 停车壳；hunt/OSINT `.com` 不可达 |
+
 ## 2026-08-09 — m.92popo.cc dig
 
 | URL | 结果 | 证据 |
