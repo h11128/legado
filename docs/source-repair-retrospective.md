@@ -16,10 +16,16 @@
 | `https://www.ixpsge.com/` | **skip**（禁用） | CF Just a moment→`xpshuku`；hunt empty；手机书页亦 challenge；slash/m 孪生一并禁 |
 | `https://m.shouda88.com/` | **skip**（禁用） | `deadish:this domain` 停车；force disable |
 | `https://m.paipaiwx.com` | **fixed**（无搜索） | 打开/目录/正文 OK；`checkSearch=false`+发现 **校验成功** 662ms |
+| `http://download.maoyankanshu.la` | **fixed** | dig 因标签域 NXDOMAIN 误走 hunt/disable；`type=maoyankanshu` API 仍活；恢复 comment 内 JS 助手；校验成功 859ms |
+| `http://www.ffxs8.com/` | **fixed**（无搜索） | 打开路径 OK；发现校验成功 1080ms；清「搜索失效」分组 |
 
 **Trap `whole_origin_remap_without_map_filter`：** `legado-db-mutate remap` 旧语义在给了 `--map` 时仍会改写该 origin 下**全部**书。误把 6 本已是 `mhtxs.la` bookUrl 的书 `origin` 拽回禁用的 wap。修复：有 `--map` 时只动 map 列出的 bookUrl；书架已恢复（6→`https://www.mhtxs.la`，`资本论` 留禁用 wap）。
 
 **Trap `oneshot_disable_not_sticky`：** dig/oneshot 报 `disabled` 后手机 DB 仍可能 `enabled=1`；收工前用 `legado-db-mutate disable` 再确认。
+
+**Trap `booksourcecomment_holds_js_helpers`：** 规则里 `eval(String(source.bookSourceComment))` —— **禁止**用白话备注覆盖 comment；改备注前先确认是否 JS 库。
+
+**Trap `alias_label_host_nxdomain_api_alive`：** `bookSourceUrl` 标签域 NXDOMAIN，但 `searchUrl`/`type=…` 实际打活 API（如 maoyankanshu→jxgtzxc）；**勿**仅凭 L1 hunt_empty 当死站禁用；先 `debug_source`。
 
 ## 2026-08-09 — faloo + hongxiua dig
 
