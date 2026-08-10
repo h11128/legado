@@ -18,14 +18,12 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 
 | # | 书架本数 | 名称 | bookSourceUrl |
 |---|---------|------|---------------|
-| 1 | 8 | 69书xyz | `https://www.69shu.xyz` |
-| 2 | 5 | 书屋小说网 | `http://www.shu05.com` |
-| 3 | 4 | 爱读小说 | `https://www.ixpsge.com/` |
-| 4 | 4 | 手打吧 | `https://m.shouda88.com/` |
-| 5 | 3 | 派派文学 | `https://m.paipaiwx.com` |
-| 6 | 2 | 猫眼看书 | `http://download.maoyankanshu.la` |
-| 7 | 2 | 饭饭小说 | `http://www.ffxs8.com/` |
-| 8 | 1 | （扫库刷新） | 见手机 enabled+stale |
+| 1 | 4 | 爱读小说 | `https://www.ixpsge.com/` |
+| 2 | 4 | 手打吧 | `https://m.shouda88.com/` |
+| 3 | 3 | 派派文学 | `https://m.paipaiwx.com` |
+| 4 | 2 | 猫眼看书 | `http://download.maoyankanshu.la` |
+| 5 | 2 | 饭饭小说 | `http://www.ffxs8.com/` |
+| 6 | 1 | （扫库刷新） | 见手机 enabled+stale |
 
 ## 需 hunt / 可能迁站（gate = hunt）
 
@@ -141,6 +139,9 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://m.75zwz.com` | **fixed**（batch4 再清） | 「发现失效」标签复发；`checkDiscovery=false` 再验 **校验成功** |
 | `https://m.75zwz.com` | **fixed**（2026-08-10 dig） | oneshot `set searchUrl`；设备 **校验成功** 1152ms；搜索仍混淆热门壳 |
 | `https://m.lrxs.org` | **skip**（2026-08-10 再确认） | dig：仍 Web accesible→Google；hunt empty；已 `enabled=0`；另禁 `http://www.lrxsw.org` CF522 |
+| `http://www.uu234.net` | **skip**（2026-08-10） | NXDOMAIN；hunt empty；uu234w 无法访问壳；书架 URL 在 uuxs* 威胁/跳转；已禁用 |
+| `https://www.69shu.xyz` | **skip**（2026-08-10） | CF520；hunt empty；69shuba 已启用；legado-db-mutate 再禁 |
+| `http://www.shu05.com` | **skip**（2026-08-10） | `deadish:this domain` 停车；已禁用 |
 | `http://www.16kbook.co` | **fixed migrate** | `.co` unexpected EOF；→`http://www.16kbook.net`（`/search.php?q=` + `article@html` + `.book_list2`）；设备 **校验成功**；书架「游戏面板」remap→`/1/1137/`；「长生…」站内无同名靠换源；`.co` disabled。Trap：`主机跳转` |
 | `http://www.31xs.net` | **skip**（net/#/com 已禁用） | `.net` **403**；书架书在 `.com` 但同路径 **错书**；搜索 404/`search.html`→首页；hunt/OSINT 无后继。书架 8 靠换源。Trap：`fake_detail` |
 | `http://www.shuquge.co` | **skip**（已禁用） | L2/手机 **444**；hunt empty；`ishuquge.la`/wap 亦超时；书架 2 靠换源（1 本已在 ishuquge）。Trap：`known:l2_http_dead` |

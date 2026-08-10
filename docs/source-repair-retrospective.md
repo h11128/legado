@@ -11,8 +11,12 @@
 | `https://m.lrxs.org` | **skip**（已禁用） | dig 再确认 Web accesible→Google；hunt empty；另禁 `http://www.lrxsw.org` CF522 |
 | `https://m.75zwz.com` | **fixed** | dig oneshot `set searchUrl`；校验成功 1152ms；搜索仍混淆热门壳（打开路径 OK） |
 | `http://www.uu234.net` | **skip**（禁用） | NXDOMAIN；hunt/OSINT 无活孪生；书架 bookUrl 在 uuxs5/8 威胁/跳转壳 |
+| `https://www.69shu.xyz` | **skip**（禁用） | CF520；hunt empty；69shuba 孪生已启用；oneshot disable 需 legado-db-mutate 再确认 |
+| `http://www.shu05.com` | **skip**（禁用） | gate `l2_domain_parked_or_expired`（this domain）；force disable |
 
 **Trap `whole_origin_remap_without_map_filter`：** `legado-db-mutate remap` 旧语义在给了 `--map` 时仍会改写该 origin 下**全部**书。误把 6 本已是 `mhtxs.la` bookUrl 的书 `origin` 拽回禁用的 wap。修复：有 `--map` 时只动 map 列出的 bookUrl；书架已恢复（6→`https://www.mhtxs.la`，`资本论` 留禁用 wap）。
+
+**Trap `oneshot_disable_not_sticky`：** dig/oneshot 报 `disabled` 后手机 DB 仍可能 `enabled=1`；收工前用 `legado-db-mutate disable` 再确认。
 
 ## 2026-08-09 — faloo + hongxiua dig
 
