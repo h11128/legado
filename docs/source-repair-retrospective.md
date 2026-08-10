@@ -1,5 +1,18 @@
 # Source repair retrospective
 
+## 2026-08-10 — shelf deep30 batch (partial)
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `https://m.soushuwang.cc` | **skip** | 搜索空；TOC→verify.html |
+| `https://m.telexh.com/` | **skip** | CF/404；手机开书空 |
+| `https://m.tycbooks.com#🎃` | **skip** | HTTP 401；hunt empty |
+| `https://m.wpxs.cc` | **skip** | 搜索空；TOC verify.html |
+| `https://m.yundu9.com` | **skip** | TLS timeout；hunt empty |
+| `https://novelapi.kpkpo.com/h5/` | **skip** | L1 timeout；hunt empty |
+| `https://pck.tvguaa.com` → `https://www.tvgua.com` | **fixed migrate** | 打开/目录/正文 OK；搜索空；发现校验成功 **4049ms** |
+
+
 ## 2026-08-10 — shelf stale continue (feisxs →)
 
 | URL | 结果 | 证据 |
