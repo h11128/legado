@@ -1,6 +1,12 @@
 # Source repair retrospective
 
 
+## 2026-08-09 — 5200xiaoshuo dig
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `http://www.5200xiaoshuo.com/` | **fixed**（无搜索） | dig diagnose search；搜索空分页壳；发现=首页 lastest；打开路径校验成功 6133ms |
+
 ## 2026-08-09 — lianjianxsw dig（官方 dig 路径）
 
 | URL | 结果 | 证据 |

@@ -150,5 +150,6 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://www.wodescw.com` | **fixed**（无搜索） | 原生 `POST /search/` 空壳 63B；sososhu meta 无命中；书架书详情/目录/正文 OK；`checkSearch=false`+`checkDiscovery=true`→**校验成功**（1477ms）。首轮双关曾假成功≈1ms → trap `check_search_discovery_both_off_vacuous`。 |
 | `https://cn.ttkan.co` | **fixed** | 搜索 DOM 改版：`bookList` `.novel_cell`→`.li_first_node`；`toc` `.full_chapters@div.1`→`@div`；debug 17书/正文 OK；MCP **校验成功**（2254ms）。 |
 | `http://www.lianjianxsw.com/` | **skip**（已禁用） | `source-cli dig`：L2 **403** → hunt empty；OSINT crt.sh 502、Wayback 无 redirect、孪生 NXDOMAIN/403/521；Web 仍指本域无后继；`legado-db-mutate disable`；书架 1《我有神级修改器》靠换源。Trap：`http_403_home_hunt_empty`。中间 dig 在 MCP 挂掉后卡在 `ensure_session`，已 `mcp-ensure`。 |
+| `http://www.5200xiaoshuo.com/` | **fixed**（无搜索） | dig→diagnose `layer=search`；`search.php?keywords=` 仅分页壳无结果行；书架书详情/目录143/正文 OK；加发现 `exploreUrl=最新::/`+`class.lastest@li!0`；`checkSearch=false`+discovery→**校验成功**（6133ms）。Trap：`search_empty_shell_open_ok`。 |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
