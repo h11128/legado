@@ -31,6 +31,9 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | `https://www.shukuai.net` | skip CF403 |
 | `https://www.tqcyjy.com` | skip TLS |
 | `https://m.shufahouse.com` | **fixed** 证书过期假死 |
+| `https://m.feisxs.com` | skip（YHFixed 后继不可读） |
+| `https://199.33.126.51/` | skip migrate→`m.tongrenquan.org`（25 本） |
+| `https://m.fuwenh.com` | **fixed**（无搜索；发现校验成功） |
 
 ## 需 hunt / 可能迁站（gate = hunt）
 

@@ -6,6 +6,7 @@
 |-----|------|------|
 | `https://m.feisxs.com` | **skip**（禁用） | PC CF403；手机搜索空、书页 HTTP **404**；Google→官网 `www.fsuzw.com`（同 `/book-47672/` 详情/目录通）；正文 `#nr1` YHFixed/`&#13xxxx` 字体加密不可读（同 feibzw）；`hunt --probe` empty；书架 1 本靠换源。Trap：`content_font_encrypt_dynamic` |
 | `https://199.33.126.51/` | **skip migrate** | L1 TCP timeout；seeds 指向 `m.tongrenquan.org`（旧同人圈共享 IP）；oneshot 误改 slash 孪生 search→GET 失败；手工 **25 本** origin+bookUrl remap→`https://m.tongrenquan.org`；禁 IP 源+slash dup；`m.tongrenquan` **校验成功 2716ms**。Trap：`known:apex_no_a_try_m` |
+| `https://m.fuwenh.com` | **fixed**（无搜索） | POST `/s.php` 空壳；详情/目录/`#content` DOM 改版；发现 `sort/N-{{page}}.html`+`.topul li`；`checkSearch=false`+discovery **校验成功 738ms**。书架 ID 可能错书。Trap：`search_empty_shell_open_ok` |
 
 ## 2026-08-10 — shelf stale continue (midu retag → bqg18)
 
