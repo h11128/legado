@@ -18,6 +18,7 @@
 | `https://m.paipaiwx.com` | **fixed**（无搜索） | 打开/目录/正文 OK；`checkSearch=false`+发现 **校验成功** 662ms |
 | `http://download.maoyankanshu.la` | **fixed** | dig 因标签域 NXDOMAIN 误走 hunt/disable；`type=maoyankanshu` API 仍活；恢复 comment 内 JS 助手；校验成功 859ms |
 | `http://www.ffxs8.com/` | **fixed**（无搜索） | 打开路径 OK；发现校验成功 1080ms；清「搜索失效」分组 |
+| `http://www.xqishuta.com` | **fixed** | PC CF 假死；手机→.org 搜索/打开 OK；校验成功 2974ms |
 
 **Trap `whole_origin_remap_without_map_filter`：** `legado-db-mutate remap` 旧语义在给了 `--map` 时仍会改写该 origin 下**全部**书。误把 6 本已是 `mhtxs.la` bookUrl 的书 `origin` 拽回禁用的 wap。修复：有 `--map` 时只动 map 列出的 bookUrl；书架已恢复（6→`https://www.mhtxs.la`，`资本论` 留禁用 wap）。
 
