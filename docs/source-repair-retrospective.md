@@ -9,6 +9,7 @@
 | `https://m.fuwenh.com` | **fixed**（无搜索） | POST `/s.php` 空壳；详情/目录/`#content` DOM 改版；发现 `sort/N-{{page}}.html`+`.topul li`；`checkSearch=false`+discovery **校验成功 738ms**。书架 ID 可能错书。Trap：`search_empty_shell_open_ok` |
 | `https://m.lingchenkanshu.com` | **skip**（禁用） | PC+手机 TLS `InvalidContentType`/`Unable to parse TLS packet header`；hunt empty；OSINT crt 502、Google 无后继；oneshot 禁用不粘→`legado-db-mutate`。Trap：`tls_packet_header_corrupt` |
 | `https://m.seyours.com` | **skip**（禁用） | PC `UnknownIssuer` 假死；手机搜索空、详情 OK，目录/章节→`user/verify.html`；hunt/OSINT 无后继；force disable。Trap：`chapter_verify_html_wall` |
+| `https://m.sinodan.link` | **fixed** | 搜索 `bookList` 坏 ajax `@js`→空；改 `li.column-2`；打开路径本就 OK；keyword=人生加点 **校验成功 3057ms**。Trap：`search_empty_shell_open_ok` |
 
 ## 2026-08-10 — shelf stale continue (midu retag → bqg18)
 

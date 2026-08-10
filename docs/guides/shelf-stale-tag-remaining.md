@@ -35,6 +35,8 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 | `https://199.33.126.51/` | skip migrate→`m.tongrenquan.org`（25 本） |
 | `https://m.fuwenh.com` | **fixed**（无搜索；发现校验成功） |
 | `https://m.lingchenkanshu.com` | skip TLS corrupt（force disable） |
+| `https://m.seyours.com` | skip verify.html 墙（force disable） |
+| `https://m.sinodan.link` | **fixed**（搜索 bookList CSS） |
 
 ## 需 hunt / 可能迁站（gate = hunt）
 
