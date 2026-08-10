@@ -20,6 +20,15 @@
 | `http://www.ffxs8.com/` | **fixed**（无搜索） | 打开路径 OK；发现校验成功 1080ms；清「搜索失效」分组 |
 | `http://www.xqishuta.com` | **fixed** | PC CF 假死；手机→.org 搜索/打开 OK；校验成功 2974ms |
 
+### 会话教训（2026-08-10 补记 — 反思曾不完整）
+
+两件事当时在对话里说了，但 **close-out 反思不对称**：
+
+1. **`bookSourceComment` 里藏 JS 助手**（猫眼）：已写入本文件 + SKILL，但 per-URL `retro append` 偷用了旧 trap `check_keyword_too_broad`、`skill_fix=false`，等于 **结构性反思漏记**。根因：赶着 seal，用旧 trap 过 gate，而不是为新 trap 走 `--skill-fix`。
+2. **PC CF ≠ 死站**（奇书网）：后来补全了 — SKILL `alias_booksourceurl_false_dead` + `retro --skill-fix` + `script_fix=no_auto:phone_debug_before_disable_cf`。
+
+**MUST（本批起）：** 对话里强调的新陷阱，同一回合必须同时落到 (a) SKILL Traps 行、(b) `retro append` 正确 trap + `skill_fix`/`script_fix`、(c) 本 retrospective；缺一不算反思完成。
+
 **Trap `whole_origin_remap_without_map_filter`：** `legado-db-mutate remap` 旧语义在给了 `--map` 时仍会改写该 origin 下**全部**书。误把 6 本已是 `mhtxs.la` bookUrl 的书 `origin` 拽回禁用的 wap。修复：有 `--map` 时只动 map 列出的 bookUrl；书架已恢复（6→`https://www.mhtxs.la`，`资本论` 留禁用 wap）。
 
 **Trap `oneshot_disable_not_sticky`：** dig/oneshot 报 `disabled` 后手机 DB 仍可能 `enabled=1`；收工前用 `legado-db-mutate disable` 再确认。
@@ -27,6 +36,8 @@
 **Trap `booksourcecomment_holds_js_helpers`：** 规则里 `eval(String(source.bookSourceComment))` —— **禁止**用白话备注覆盖 comment；改备注前先确认是否 JS 库。
 
 **Trap `alias_label_host_nxdomain_api_alive`：** `bookSourceUrl` 标签域 NXDOMAIN，但 `searchUrl`/`type=…` 实际打活 API（如 maoyankanshu→jxgtzxc）；**勿**仅凭 L1 hunt_empty 当死站禁用；先 `debug_source`。
+
+**Trap `alias_booksourceurl_false_dead`：** PC gate `l2_bot_shell`/CF「Just a moment」，手机仍可能 301 到 `.org` 活域；勿只凭 PC CF 禁用。
 
 ## 2026-08-09 — faloo + hongxiua dig
 
