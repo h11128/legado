@@ -1,6 +1,12 @@
 # Source repair retrospective
 
 
+## 2026-08-09 — dxtxt.com → dxtxt.cc
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `http://www.dxtxt.com` | **fixed migrate** | 手机书页 307→`.cc`；搜索 `#sitebox@dl`+POST；校验成功 2354ms；书架 remap |
+
 ## 2026-08-09 — 5200xiaoshuo dig
 
 | URL | 结果 | 证据 |

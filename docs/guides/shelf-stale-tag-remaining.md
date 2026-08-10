@@ -151,5 +151,6 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://cn.ttkan.co` | **fixed** | 搜索 DOM 改版：`bookList` `.novel_cell`→`.li_first_node`；`toc` `.full_chapters@div.1`→`@div`；debug 17书/正文 OK；MCP **校验成功**（2254ms）。 |
 | `http://www.lianjianxsw.com/` | **skip**（已禁用） | `source-cli dig`：L2 **403** → hunt empty；OSINT crt.sh 502、Wayback 无 redirect、孪生 NXDOMAIN/403/521；Web 仍指本域无后继；`legado-db-mutate disable`；书架 1《我有神级修改器》靠换源。Trap：`http_403_home_hunt_empty`。中间 dig 在 MCP 挂掉后卡在 `ensure_session`，已 `mcp-ensure`。 |
 | `http://www.5200xiaoshuo.com/` | **fixed**（无搜索） | dig→diagnose `layer=search`；`search.php?keywords=` 仅分页壳无结果行；书架书详情/目录143/正文 OK；加发现 `exploreUrl=最新::/`+`class.lastest@li!0`；`checkSearch=false`+discovery→**校验成功**（6133ms）。Trap：`search_empty_shell_open_ok`。 |
+| `http://www.dxtxt.com` | **fixed migrate** | dig oneshot 改 search 仍失败；手机详情 **307→`https://www.dxtxt.cc/`**；迁站后 `bookList=#sitebox@dl`+POST `keyword`；`checkKeyWord=龙王篓`→**校验成功**（2354ms）；书架 remap；`.com` disabled。Trap：`主机跳转`。 |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。
