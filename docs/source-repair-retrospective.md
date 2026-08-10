@@ -1,6 +1,14 @@
 # Source repair retrospective
 
 
+## 2026-08-09 — lianjianxsw dig（官方 dig 路径）
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `http://www.lianjianxsw.com/` | **skip**（禁用） | dig→L2 403→hunt empty；OSINT 无后继；`legado-db-mutate disable` |
+
+教训：oneshot 在 hunt empty 后会 `MCP ensure_session`；MCP 挂掉时会静默卡住。**dig 前/后应用 `mcp-ensure`**；硬停后 kill + closeout，勿干等。
+
 ## 2026-08-09 — dig path enforcement (A+B)
 
 Harness: Prefer→MUST dig/diagnose; `deep_active.entry`; `retro fixed` DENY without diagnose
