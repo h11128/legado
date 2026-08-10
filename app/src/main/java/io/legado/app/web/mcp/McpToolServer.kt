@@ -47,7 +47,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonArray
@@ -68,7 +67,8 @@ object McpToolServer {
 
     private const val NOTIFICATION_TIMEOUT_MS = 500L
     private val debugScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val debugMutex = Mutex()
+    // Use McpChannelGuard.debugMutex so reset_mcp_channel can unlock a wedged holder.
+    // A private Mutex here made「通道占用中」sticky after force-reset (shufahouse 2026-08-10).
 
     fun create(): Server {
         return Server(
@@ -278,13 +278,17 @@ object McpToolServer {
                 val timeoutSec = (request.arguments.int("timeoutSec") ?: 120).coerceIn(10, 600)
                 val source = appDb.bookSourceDao.getBookSource(url)
                     ?: return@addTool err("未找到书源，请检查书源地址")
-                if (!debugMutex.tryLock()) {
+                if (!McpChannelGuard.debugMutex.tryLock()) {
                     return@addTool err("调试通道占用中，请稍后重试")
                 }
+                var acquired = false
                 try {
+                    McpChannelGuard.noteTool("debug_source")
                     if (Debug.callback != null || Debug.isChecking) {
                         return@addTool err("调试通道占用中，请稍后重试")
                     }
+                    McpChannelGuard.noteDebugAcquired()
+                    acquired = true
                     val progressToken = request.meta?.progressToken
                     val (log, timedOut) = coroutineScope {
                         // Keep only the newest unsent line; the complete bounded log is returned.
@@ -316,7 +320,12 @@ object McpToolServer {
                         }
                     )
                 } finally {
-                    debugMutex.unlock()
+                    if (acquired) {
+                        McpChannelGuard.noteDebugReleased()
+                    }
+                    if (McpChannelGuard.debugMutex.isLocked) {
+                        McpChannelGuard.debugMutex.unlock()
+                    }
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -622,7 +631,7 @@ object McpToolServer {
                     appDb.bookSourceDao.getBookSource(url)
                         ?: return@addTool err("未找到书源，请检查书源地址")
                 }
-                if (!debugMutex.tryLock()) {
+                if (!McpChannelGuard.debugMutex.tryLock()) {
                     return@addTool err("调试通道占用中，请稍后重试")
                 }
                 try {
@@ -680,7 +689,7 @@ object McpToolServer {
                         Debug.cancelDebug(collector)
                     }
                 } finally {
-                    debugMutex.unlock()
+                    McpChannelGuard.debugMutex.unlock()
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -744,7 +753,7 @@ object McpToolServer {
                 appDb.bookSourceDao.getBookSourcePart(url)
                     ?: return@addTool err("未找到书源：$url")
             }
-            if (!debugMutex.tryLock()) {
+            if (!McpChannelGuard.debugMutex.tryLock()) {
                 return@addTool err("调试通道占用中，请稍后重试")
             }
             var serviceRequested = false
@@ -822,7 +831,7 @@ object McpToolServer {
                 }
                 err(error.localizedMessage ?: error.toString())
             } finally {
-                debugMutex.unlock()
+                McpChannelGuard.debugMutex.unlock()
             }
         }
     }

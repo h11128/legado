@@ -1,6 +1,21 @@
 # Source repair retrospective
 
 
+## 2026-08-10 — shelf stale-tag dig batch (shenyebook → shufahouse)
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `https://www.shenyebook.com/` | **skip**（禁用） | TLS `InvalidContentType`；hunt/OSINT empty；同停车 IP 族；`legado-db-mutate disable` |
+| `https://www.shukuai.net` | **skip**（禁用） | dig `l2_bot_shell`；301→`shukuai3.com` CF；手机书页 HTTP **403**；`shukuaixs.com` 路径 404；OSINT 无非 CF 镜像 |
+| `https://www.tqcyjy.com` | **skip**（禁用） | PC TLS corrupt；手机详情空；hunt/OSINT empty；force disable |
+| `https://m.shufahouse.com` | **fixed** | dig 因 **证书过期** 误 hunt_empty→disable；PC `danger`/手机仍 200；搜索 120 + 目录 267 + 正文 OK；校验成功 **4240ms**；清「搜索失效」 |
+| `http://m.uuxsw8.cc` | **skip**（禁用） | `deadish:this domain` 停车；`.com` NXDOMAIN；hunt/OSINT empty |
+| `https://www.121ds.cc` | **skip**（禁用） | L1 TCP timeout；手机 debug 超时；hunt/OSINT empty；slash 孪生一并禁 |
+
+**新陷阱 `cert_expired_phone_ok`**：PC rustls 拒过期证 ≠ 站死。Harness：`source-gate/classify.rs` → `l2_cert_expired` + `Verify`。
+
+**MCP sticky busy**：`McpToolServer` 私有 `debugMutex` 与 `reset_mcp_channel` 解锁的 `McpChannelGuard.debugMutex` 不是同一把锁 → force-reset 后仍「通道占用中」。已改共用 Guard mutex（需重装 debug APK 才上手机）。
+
 ## 2026-08-09 — midu + bq9 + mhtxs dig
 
 | URL | 结果 | 证据 |

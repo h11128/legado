@@ -18,12 +18,19 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 
 | # | 书架本数 | 名称 | bookSourceUrl |
 |---|---------|------|---------------|
-| 1 | 1 | 笔趣阁 | `https://www.biqugexsw.cc/` |
-| 2 | 1 | 全本女频（发现） | `https://www.qb5.tw/` |
-| 3 | 1 | 深夜看书 | `https://www.shenyebook.com/` |
-| 4 | 1 | 起点热门（良） | `https://www.shukuai.net` |
-| 5 | 1 | 🎉 蚂蚁小说 | `https://www.tqcyjy.com` |
-| 6 | 1 | 💠 红叶书斋 | `https://m.shufahouse.com` |
+| — | — | （biqugexsw / qb5 / shenyebook / shukuai / tqcyjy 本批已关门；shufahouse **fixed**） | — |
+| 下一优先 | 见下方 hunt 表 / `stale_tag_fixable_priority.urls.txt` | 如 `m.uuxsw8.cc`、`121ds.cc` 等 | 重扫后更新 |
+
+### 本批已关门（2026-08-10）
+
+| URL | 结果 |
+|-----|------|
+| `https://www.biqugexsw.cc/` | skip（已关） |
+| `https://www.qb5.tw/` | skip（已关） |
+| `https://www.shenyebook.com/` | skip TLS |
+| `https://www.shukuai.net` | skip CF403 |
+| `https://www.tqcyjy.com` | skip TLS |
+| `https://m.shufahouse.com` | **fixed** 证书过期假死 |
 
 ## 需 hunt / 可能迁站（gate = hunt）
 
