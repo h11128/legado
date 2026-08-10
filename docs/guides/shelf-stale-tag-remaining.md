@@ -14,18 +14,18 @@ URL 列表（便于 `source-cli serial`）：`temp/shelf_restore/queue/stale_tag
 
 ## 优先可修（gate = verify，站还活着）
 
-这些 **L0/L1/L2 已过**：更像是规则/搜索层坏了，值得 deep diagnose，而不是死站。
+> 2026-08-10 手机重扫：**仍启用**且备注/分组含 Error/失效、书架有书。原 top 表多条已关门（lrxs/31xs/b520/ttshu8/haitang/wfxs 等）。
 
 | # | 书架本数 | 名称 | bookSourceUrl |
 |---|---------|------|---------------|
-| 1 | 6 | 懒人小说 | `https://m.lrxs.org` |
-| 2 | 5 | 三一小说 | `http://www.31xs.com` |
-| 3 | 5 | 笔趣阁 | `http://www.b520.cc` |
-| 4 | 5 | 天天书吧 | `https://m.ttshu8.com` |
-| 5 | 4 | 海棠书屋 | `https://haitang123.net` |
-| 6 | 4 | 微风小说 | `https://m.wfxs.tw` |
-| 7 | 4 | 起舞中文 | `https://www.75zwz.com/` |
-| 8 | 3 | 看书神 | `http://apitt.kanshushenapp.com/` |
+| 1 | 9 | UU小说 | `http://www.uu234.net` |
+| 2 | 8 | 69书xyz | `https://www.69shu.xyz` |
+| 3 | 5 | 书屋小说网 | `http://www.shu05.com` |
+| 4 | 4 | 爱读小说 | `https://www.ixpsge.com/` |
+| 5 | 4 | 手打吧 | `https://m.shouda88.com/` |
+| 6 | 3 | 派派文学 | `https://m.paipaiwx.com` |
+| 7 | 2 | 猫眼看书 | `http://download.maoyankanshu.la` |
+| 8 | 2 | 饭饭小说 | `http://www.ffxs8.com/` |
 
 ## 需 hunt / 可能迁站（gate = hunt）
 
@@ -139,6 +139,8 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `https://m.shuhui8.cc` | **skip**（已禁用；含 .com） | gate migrate→`m.shuhui9.cc`；搜索 API 恒 `[]`；www TOC 有章但章节→`/user/verify.html` 加载壳、正文空。书架 3 靠换源。Trap：`chapter_verify_html_wall` |
 | `http://www.147xs.org/` | **skip**（http+https 已禁用） | http L2 **404**；https→`gwiver.bond` 安全检测跳转壳；phone search 404；hunt/OSINT 无后继。书架 2 靠换源。Trap：`域名广告劫持` |
 | `https://m.75zwz.com` | **fixed**（batch4 再清） | 「发现失效」标签复发；`checkDiscovery=false` 再验 **校验成功** |
+| `https://m.75zwz.com` | **fixed**（2026-08-10 dig） | oneshot `set searchUrl`；设备 **校验成功** 1152ms；搜索仍混淆热门壳 |
+| `https://m.lrxs.org` | **skip**（2026-08-10 再确认） | dig：仍 Web accesible→Google；hunt empty；已 `enabled=0`；另禁 `http://www.lrxsw.org` CF522 |
 | `http://www.16kbook.co` | **fixed migrate** | `.co` unexpected EOF；→`http://www.16kbook.net`（`/search.php?q=` + `article@html` + `.book_list2`）；设备 **校验成功**；书架「游戏面板」remap→`/1/1137/`；「长生…」站内无同名靠换源；`.co` disabled。Trap：`主机跳转` |
 | `http://www.31xs.net` | **skip**（net/#/com 已禁用） | `.net` **403**；书架书在 `.com` 但同路径 **错书**；搜索 404/`search.html`→首页；hunt/OSINT 无后继。书架 8 靠换源。Trap：`fake_detail` |
 | `http://www.shuquge.co` | **skip**（已禁用） | L2/手机 **444**；hunt empty；`ishuquge.la`/wap 亦超时；书架 2 靠换源（1 本已在 ishuquge）。Trap：`known:l2_http_dead` |
