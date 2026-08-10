@@ -53,6 +53,14 @@ Create and repair share the same close-out / improve gate — do not wait for th
    or phone `debug_source` + `get_http_logs`. Search-dead ≠ open-path-dead. After a deep-dig
    batch: write the **session lesson** in `docs/source-repair-retrospective.md` (not only
    per-URL `retro append`).
+5b2-comment-js. **Never overwrite `bookSourceComment` with plain notes** when rules do
+   `eval(String(source.bookSourceComment))` (trap `booksourcecomment_holds_js_helpers`).
+   Backup / restore the JS helpers first.
+5b3-cf-false-dead. **PC `l2_bot_shell`/CF ≠ dead** — confirm with phone `debug_source`/
+   check before disable (trap `alias_booksourceurl_false_dead`).
+5b4-reflection. Chat-mentioned novel traps MUST land in the **same turn**: SKILL row +
+   `retro append` (correct trap + `skill_fix`/`script_fix`) + retrospective. Reusing an
+   old trap just to seal is an incomplete reflection.
 5c. **Hunt OSINT is mandatory before「无后继」** (trap `hunt_osint_skipped`).
    After `source-cli hunt --probe`, also run
    `python scripts/domain-successor-hunt.py --url …` (+ shelf `--title`s): crt.sh,
