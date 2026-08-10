@@ -23,6 +23,9 @@
 | `https://m.paozww.com` | **skip**（禁用） | CF Attention Required；手机书页 403；hunt empty |
 | `http://www.jpxs123.cc` | **skip**（禁用） | safebrowse 威胁页；书架 2 本 remap→已校验成功的 `https://jpxs123.com` |
 | `http://www.rzlib.org/` | **skip**（禁用） | Unexpected EOF；hunt empty |
+| `http://www.siluke.com` | **skip**（禁用） | PC/手机 timeout；hunt empty；.cc→isiluke.la 另源仍启用 |
+| `http://www.xiaoshuobuluo.com/` | **skip**（禁用） | DNS NXDOMAIN；hunt empty |
+| `http://www.xstxt.com/` | **skip**（禁用） | safebrowse→fjshu；搜索空 |
 
 ### 会话教训（2026-08-10 补记 — 反思曾不完整）
 
