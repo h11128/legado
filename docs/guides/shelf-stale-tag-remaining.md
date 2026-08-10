@@ -153,5 +153,6 @@ Trap：`gate_hunt_deferred_unprobed`（tongrenquan 缓修教训）。
 | `http://www.5200xiaoshuo.com/` | **fixed**（无搜索） | dig→diagnose `layer=search`；`search.php?keywords=` 仅分页壳无结果行；书架书详情/目录143/正文 OK；加发现 `exploreUrl=最新::/`+`class.lastest@li!0`；`checkSearch=false`+discovery→**校验成功**（6133ms）。Trap：`search_empty_shell_open_ok`。 |
 | `http://www.dxtxt.com` | **fixed migrate** | dig oneshot 改 search 仍失败；手机详情 **307→`https://www.dxtxt.cc/`**；迁站后 `bookList=#sitebox@dl`+POST `keyword`；`checkKeyWord=龙王篓`→**校验成功**（2354ms）；书架 remap；`.com` disabled。Trap：`主机跳转`。 |
 | `http://m.yushuwu.asia` | **fixed** | dig `fake_detail`：旧 `s.php` **404**；改 GET `/modules/article/search.php?searchkey=` + `#sitebox@dl`；目录 `text.目录`→`#readerlist`（+下一页）；正文 `#YiJianZhan`；**校验成功**（1879ms）。书架多数挂 `yushuwu.cloud`/eyushuwu，靠换源。Trap：`fake_detail`。 |
+| `http://m.92popo.cc` | **skip**（已禁用） | dig 搜索可修（`.list@li`+https）；详情「章节目录」→`/N/` 仅「开始阅读/分卷」，无 `#chapterlist`；webView 正文仍空。书架多本已在 `popofree.com`。Trap：分卷站无标准 TOC。 |
 
 说明：浅层 gate/serial「搜不了=修不了」不可信；本轮以 HTML+手机 debug/HTTP 日志为准，能开书就按打开路径修。结构化 ledger/retro 在 `legadoSkill/temp/full_fix/repair_session_ledger.jsonl` 与 `repair_serial_retro.jsonl`（勿只看过期的 `temp/shelf_restore/backup_now/bookshelf.json`）。**教训**：孪生源勿只看首页——`dbxsn` 首页 404 曾被误判死站（trap `home_404_paths_alive`）。

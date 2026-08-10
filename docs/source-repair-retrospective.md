@@ -1,6 +1,12 @@
 # Source repair retrospective
 
 
+## 2026-08-09 — m.92popo.cc dig
+
+| URL | 结果 | 证据 |
+|-----|------|------|
+| `http://m.92popo.cc` | **skip**（禁用） | 搜索可出书；`/N/` 分卷无章节列表；webView 正文空 |
+
 ## 2026-08-09 — m.yushuwu.asia dig
 
 | URL | 结果 | 证据 |
