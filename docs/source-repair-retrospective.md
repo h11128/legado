@@ -1,5 +1,11 @@
 # Source repair retrospective
 
+## 2026-08-10 — bamxs redo deep dig
+
+`http://www.bamxs.com`（八毛，书架 10）：**skip**。  
+上次曾见搜索页空 + `read.asp` **403 region**；本轮更差——PC L1/www **timeout**，`m.` **403**，手机搜索 `ERR_CONNECTION_TIMED_OUT`、开书 debug **45s hang**。  
+hunt empty；OSINT：`5du5.us` 仅为 Google SEO 串台（吾读 /book/ 结构，非 `read.asp` 双胞胎）；`8mao.com` 博客、`bamx.net` 停车页。sticky disable。
+
 ## 2026-08-10 — cleanup tags + dig remaining queue (~41)
 
 **Cleanup:** `scripts/clear-stale-source-tags.py` 清已修源上的 Error/失效 group 行（保留 JS helpers）。  
