@@ -355,6 +355,11 @@
     <string name="group_yf">Awaiting more</string>
     <string name="bookmark">Bookmarks</string>
     <string name="bookmark_add">Add to Bookmarks</string>
+    <string name="bookmark_added">Bookmark added</string>
+    <string name="bookmark_removed">Bookmark removed</string>
+    <string name="delete_page_bookmarks">This page contains %1$d bookmarks. Delete them all?</string>
+    <string name="pull_to_toggle_bookmark">Pull down to toggle bookmark</string>
+    <string name="pull_to_toggle_bookmark_summary">Works in paged modes and at the top of a chapter in scroll mode</string>
     <string name="highlight">Highlight</string>
     <string name="highlight_tab">Highlights</string>
     <string name="highlight_bg_color">Background color</string>
@@ -827,6 +832,8 @@
     <string name="plus">Plus</string>
     <string name="system_typeface">System typeface</string>
     <string name="delete_book_file">Delete source file</string>
+    <string name="delete_webdav_book_file">Also delete the same-named WebDAV file</string>
+    <string name="delete_webdav_book_file_fail">Failed to delete the same-named WebDAV file</string>
     <string name="text_default">Default</string>
     <string name="default1">Default-1</string>
     <string name="default2">Default-2</string>
@@ -835,6 +842,11 @@
     <string name="title_left">Left</string>
     <string name="title_center">Center</string>
     <string name="title_hide">Hide</string>
+    <string name="title_color">Chapter title color</string>
+    <string name="split_chapter_title">Separate chapter number and title</string>
+    <string name="title_number_font_size">Chapter number font size</string>
+    <string name="title_number_spacing">Space below chapter number</string>
+    <string name="title_number_color">Chapter number color</string>
     <string name="add_to_group">Add to Group</string>
     <string name="save_image">Save image</string>
     <string name="no_default_path">No default path</string>
@@ -1206,6 +1218,9 @@
     <string name="auto_save_cookie">CookieJar</string>
     <string name="cookie">Clear cookie</string>
     <string name="download_and_import_file">Import online book files</string>
+    <string name="upload_imported_book_to_webdav">Sync downloaded book to WebDAV</string>
+    <string name="webdav_book_exists_confirm">A book with the same name already exists on WebDAV. Overwrite it?</string>
+    <string name="webdav_not_configured">WebDAV is not configured</string>
     <string name="upload_book_success">Upload Success</string>
     <string name="upload_book_fail">Upload Fail</string>
     <string name="download_book_success">Download Success</string>

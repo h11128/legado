@@ -19,6 +19,17 @@ class ImportBookPathMigrationTest {
     @Test
     fun `automatic restore only handles confirmed missing files`() {
         assertTrue(isMissingLocalBookFile(true, false, FileNotFoundException()))
+        assertTrue(
+            isMissingLocalBookFile(
+                true,
+                false,
+                IllegalArgumentException(
+                    "Failed to determine if child is child of parent: " +
+                            "java.io.FileNotFoundException: Missing file for child"
+                )
+            )
+        )
+        assertFalse(isMissingLocalBookFile(true, false, IllegalArgumentException()))
         assertFalse(isMissingLocalBookFile(true, false, IOException()))
         assertFalse(isMissingLocalBookFile(true, false, SecurityException()))
         assertFalse(isMissingLocalBookFile(false, false, CancellationException()))
@@ -153,7 +164,9 @@ class ImportBookPathMigrationTest {
         val remoteBook = readProjectFile(
             "src/main/java/io/legado/app/model/remote/RemoteBookWebDav.kt"
         )
-        assertTrue(remoteBook.contains("val localBookUri = book.getLocalUri()"))
+        assertTrue(remoteBook.contains("val localBookUri = if (book.isArchive)"))
+        assertTrue(remoteBook.contains("book.getArchiveUri()"))
+        assertTrue(remoteBook.contains("remoteBookUploadFileName(book)"))
         assertFalse(remoteBook.contains("Uri.parse(book.bookUrl)"))
 
         val bookInfoActivity = readProjectFile(

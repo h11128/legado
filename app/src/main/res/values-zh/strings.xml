@@ -352,6 +352,11 @@
     <string name="group_yf">养肥区</string>
     <string name="bookmark">书签</string>
     <string name="bookmark_add">添加书签</string>
+    <string name="bookmark_added">已添加书签</string>
+    <string name="bookmark_removed">已删除书签</string>
+    <string name="delete_page_bookmarks">当前页有 %1$d 个书签，是否全部删除？</string>
+    <string name="pull_to_toggle_bookmark">下拉切换书签</string>
+    <string name="pull_to_toggle_bookmark_summary">适用于翻页模式；滚动模式仅在章节顶部触发</string>
     <string name="highlight">高亮</string>
     <string name="highlight_tab">标注</string>
     <string name="highlight_bg_color">背景色</string>
@@ -823,6 +828,8 @@
     <string name="plus">加</string>
     <string name="system_typeface">系统内置字体样式</string>
     <string name="delete_book_file">删除源文件</string>
+    <string name="delete_webdav_book_file">同时删除 WebDAV 同名文件</string>
+    <string name="delete_webdav_book_file_fail">删除 WebDAV 同名文件失败</string>
     <string name="text_default">默认</string>
     <string name="default1">预设一</string>
     <string name="default2">预设二</string>
@@ -831,6 +838,11 @@
     <string name="title_left">靠左</string>
     <string name="title_center">居中</string>
     <string name="title_hide">隐藏</string>
+    <string name="title_color">章节名颜色</string>
+    <string name="split_chapter_title">章节编号与标题分行</string>
+    <string name="title_number_font_size">章节编号字号</string>
+    <string name="title_number_spacing">章节编号下边距</string>
+    <string name="title_number_color">章节编号颜色</string>
     <string name="add_to_group">加入分组</string>
     <string name="save_image">保存图片</string>
     <string name="no_default_path">没有默认路径</string>
@@ -1201,6 +1213,9 @@
     <string name="auto_save_cookie">CookieJar</string>
     <string name="cookie">清除 Cookie</string>
     <string name="download_and_import_file">导入在线书籍文件</string>
+    <string name="upload_imported_book_to_webdav">下载后同步到 WebDAV</string>
+    <string name="webdav_book_exists_confirm">WebDAV 已存在同名书籍，是否覆盖？</string>
+    <string name="webdav_not_configured">未配置 WebDAV</string>
     <string name="upload_book_success">上传成功</string>
     <string name="upload_book_fail">上传失败</string>
     <string name="download_book_success">下载成功</string>

@@ -570,7 +570,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
                         putString(JS_SOURCE_API_TOKEN, normalizedValue)
                     }
                 }
-                .apply()
+                .commit()
         }
 
     var tocUiUseReplace: Boolean
@@ -816,6 +816,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         set(value) {
             appCtx.putPrefInt(PreferKey.pageTouchClick, value)
         }
+
+    val pullToToggleBookmark
+        get() = appCtx.getPrefBoolean(PreferKey.pullToToggleBookmark, false)
 
     var bookshelfSort: Int
         get() = appCtx.getPrefInt(PreferKey.bookshelfSort, 0)

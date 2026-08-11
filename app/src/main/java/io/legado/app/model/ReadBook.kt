@@ -203,7 +203,7 @@ object ReadBook : CoroutineScope by MainScope() {
         val chapterIndex = textChapter.chapter.index
         lateinit var job: Job
         job = launch(Default, start = CoroutineStart.LAZY) {
-            val matches = HighlightRuleMatcher.match(
+            val matchResult = HighlightRuleMatcher.matchDetailed(
                 chapterText(textChapter),
                 rules,
                 shouldContinue = { job.isActive }
@@ -218,7 +218,11 @@ object ReadBook : CoroutineScope by MainScope() {
                     !isActiveTextChapter(textChapter) ||
                     textChapter.highlightRuleMatchesJob !== job
                 ) return@withContext
-                textChapter.highlightRuleMatches = matches
+                textChapter.highlightRuleMatches = if (matchResult.completed) {
+                    matchResult.matches
+                } else {
+                    emptyList()
+                }
                 textChapter.highlightRuleMatchesVersion = version
                 textChapter.highlightRuleMatchesBookUrl = bookUrl
                 callBack?.upContent(resetPageOffset = false)
@@ -563,16 +567,11 @@ object ReadBook : CoroutineScope by MainScope() {
         val restartReadAloud = ReadAloudManualPagePolicy.shouldRestartFromVisiblePage(
             isReadAloudRunning = BaseReadAloudService.isRun,
             speechDrivenNavigation = syncReadAloudFollow,
-            followManualPageTurns = AppConfig.readAloudFollowManualPage
+            followManualPageTurns = AppConfig.readAloudFollowManualPage,
+            followingReadAloudPosition = ReadAloud.followReadAloudPosition
         )
-        if (BaseReadAloudService.isRun && !syncReadAloudFollow) {
-            if (restartReadAloud) {
-                if (!ReadAloud.followReadAloudPosition) {
-                    ReadAloud.restoreReadAloudFollow()
-                }
-            } else {
-                ReadAloud.detachReadAloudFollow()
-            }
+        if (BaseReadAloudService.isRun && !syncReadAloudFollow && !restartReadAloud) {
+            ReadAloud.detachReadAloudFollow()
         }
         return restartReadAloud
     }
