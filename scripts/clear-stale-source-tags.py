@@ -28,11 +28,6 @@ _JS_HINT = re.compile(
     r"(eval\s*\(|function\s*\(|\bjava\.|source\.bookSourceComment|@js:)",
     re.I,
 )
-# Match App BookSource.removeErrorComment: drop \n\n-separated blocks that
-# start with "// Error:" / "Error:" (localizedMessage may be multi-line).
-_ERROR_BLOCK = re.compile(
-    r"(?is)(?:^|\n\n)[ \t]*(?://\s*)?(?:\"?error:|Error:).*(?=(?:\n\n|\Z))"
-)
 _ERROR_LINE = re.compile(
     r"(?im)^[ \t]*(?://\s*)?(?:\"?error:|Error:|Timed out|Unable to resolve|"
     r"Connection reset|校验失败|搜索失效|目录失效|正文内容为空).*$"
@@ -44,11 +39,23 @@ def _looks_like_js_helpers(comment: str) -> bool:
 
 
 def scrub_comment(comment: str) -> str:
-    """Strip check Error prefixes; never delete JS helper body."""
+    """Strip check Error prefixes; never delete JS helper body.
+
+    Mirrors App ``removeErrorComment``: drop ``\\n\\n``-separated blocks that
+    start with ``// Error:`` / ``Error:``; then line-scrub only if no JS helpers.
+    """
     if not comment:
         return ""
-    # Always drop App-style Error blocks first (even when JS helpers follow).
-    cleaned = _ERROR_BLOCK.sub("", comment)
+    blocks = comment.split("\n\n")
+    kept: list[str] = []
+    for b in blocks:
+        head = b.lstrip()
+        if head.startswith("// Error:") or head.startswith("//Error:") or head.startswith("Error:"):
+            continue
+        if head.lower().startswith('"error:') or head.lower().startswith("error:"):
+            continue
+        kept.append(b)
+    cleaned = "\n\n".join(kept)
     if not _looks_like_js_helpers(cleaned):
         cleaned = _ERROR_LINE.sub("", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
