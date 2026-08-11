@@ -369,8 +369,8 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                 delay(250)
             }
         }
-        lifecycleScope.launch {
-            repeatOnLifecycle(STARTED) {
+        owner.lifecycleScope.launch {
+            owner.repeatOnLifecycle(STARTED) {
                 viewModel.changeSourceProgress
                     .drop(1)
                     .conflate()
@@ -440,7 +440,10 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             event.take()
             return
         }
-        if (searchFinishDialog != null) return
+        if (searchFinishDialog != null) {
+            event.take()
+            return
+        }
         searchFinishDialog = context?.alert("搜索结果为空") {
             setMessage("${searchGroup}分组搜索结果为空,是否切换到全部分组")
             noButton { event.take() }

@@ -335,7 +335,10 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
             event.take()
             return
         }
-        if (searchFinishDialog != null) return
+        if (searchFinishDialog != null) {
+            event.take()
+            return
+        }
         searchFinishDialog = context?.alert("搜索结果为空") {
             setMessage("${searchGroup}分组搜索结果为空,是否切换到全部分组")
             cancelButton { event.take() }
