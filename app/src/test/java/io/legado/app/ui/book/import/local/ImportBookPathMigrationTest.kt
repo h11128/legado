@@ -101,6 +101,96 @@ class ImportBookPathMigrationTest {
     }
 
     @Test
+    fun `local scan matches shelf files without per-file queries`() {
+        val shelfFiles = ImportBookShelfFiles(
+            fileNames = listOf("book.txt"),
+            alternateOrigins = listOf(
+                "loc_book::ARCHIVE.ZIP",
+                "webDav::https://example.com/books/remote.epub",
+            ),
+        )
+
+        assertTrue("book.txt" in shelfFiles)
+        assertTrue("archive.zip" in shelfFiles)
+        assertTrue("remote.epub" in shelfFiles)
+        assertFalse("BOOK.TXT" in shelfFiles)
+        assertFalse("missing.txt" in shelfFiles)
+
+        val importBook = readProjectFile(
+            "src/main/java/io/legado/app/ui/book/import/local/ImportBook.kt"
+        )
+        val viewModel = readProjectFile(
+            "src/main/java/io/legado/app/ui/book/import/local/ImportBookViewModel.kt"
+        )
+        assertFalse(importBook.contains("LocalBook.isOnBookShelf"))
+        assertFalse(viewModel.contains("private var shelfFiles"))
+        assertTrue(viewModel.contains("appDb.bookDao.localBookFileNames"))
+        assertTrue(viewModel.contains("appDb.bookDao.localBookAlternateOrigins"))
+    }
+
+    @Test
+    fun `partial imports only mark successful files on shelf`() {
+        val localBook = readProjectFile(
+            "src/main/java/io/legado/app/model/localBook/LocalBook.kt"
+        ).substringAfter("fun importFiles(uris: List<Uri>)")
+            .substringBefore("private fun analyzeNameAuthor")
+        val viewModel = readProjectFile(
+            "src/main/java/io/legado/app/ui/book/import/local/ImportBookViewModel.kt"
+        ).substringAfter("fun addToBookshelf(")
+            .substringBefore("fun deleteDoc(")
+        val activity = readProjectFile(
+            "src/main/java/io/legado/app/ui/book/import/local/ImportBookActivity.kt"
+        ).substringAfter("override fun onClickSelectBarMainAction()")
+            .substringBefore("private fun initView()")
+
+        assertTrue(localBook.contains("importedUris.add(uri)"))
+        assertTrue(localBook.contains("var firstError: Throwable? = null"))
+        assertTrue(localBook.contains("if (firstError == null) firstError = it"))
+        assertTrue(localBook.contains("throw firstError"))
+        assertTrue(localBook.contains("if (importedUris.isEmpty())"))
+        assertTrue(localBook.contains("return importedUris"))
+        assertTrue(
+            localBook.indexOf("kotlin.runCatching") <
+                    localBook.indexOf("FileDoc.fromUri(uri, false)")
+        )
+        assertTrue(viewModel.contains(".onSuccess { importedUris ->"))
+        assertFalse(viewModel.contains(".onFinally"))
+        assertTrue(viewModel.contains("it.localizedMessage"))
+        assertTrue(viewModel.contains("importedUris.size == fileUris.size"))
+        assertTrue(activity.contains("it.file.uri in importedUris"))
+    }
+
+    @Test
+    fun `new local import never replaces a book with the same identity`() {
+        val localBook = readProjectFile(
+            "src/main/java/io/legado/app/model/localBook/LocalBook.kt"
+        ).substringAfter("fun importFile(uri: Uri): Book")
+            .substringBefore("fun upBookInfo(book: Book)")
+        val bookDao = readProjectFile(
+            "src/main/java/io/legado/app/data/dao/BookDao.kt"
+        )
+        val book = readProjectFile(
+            "src/main/java/io/legado/app/data/entities/Book.kt"
+        )
+
+        assertTrue(localBook.contains("appDb.bookDao.insertIgnore(book) == -1L"))
+        assertTrue(localBook.contains("R.string.local_book_identity_conflict"))
+        assertFalse(localBook.contains("appDb.bookDao.insert(book)"))
+        assertTrue(bookDao.contains("@Insert(onConflict = OnConflictStrategy.IGNORE)"))
+        assertTrue(bookDao.contains("fun insertIgnore(book: Book): Long"))
+        assertTrue(book.contains("Index(value = [\"name\", \"author\"], unique = true)"))
+
+        val baseActivity = readProjectFile(
+            "src/main/java/io/legado/app/ui/book/import/BaseImportBookActivity.kt"
+        )
+        val archiveImport = baseActivity.substringAfter("private inline fun addArchiveToBookShelf(")
+            .substringBefore("private fun showImportAlert(")
+        assertTrue(archiveImport.contains("catch (error: Exception)"))
+        assertTrue(archiveImport.contains("toastOnUi("))
+        assertTrue(archiveImport.contains("error.localizedMessage"))
+    }
+
+    @Test
     fun `local file consumers use the rebound uri`() {
         val extensions = readProjectFile(
             "src/main/java/io/legado/app/help/book/BookExtensions.kt"

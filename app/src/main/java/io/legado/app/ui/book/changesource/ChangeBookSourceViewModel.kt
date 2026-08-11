@@ -20,6 +20,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.BookSourceTypeMapper
 import io.legado.app.help.book.ContentProcessor
+import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.primaryStr
 import io.legado.app.help.book.releaseHtmlData
 import io.legado.app.help.config.AppConfig
@@ -89,6 +90,39 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.min
 
+
+internal class PendingEvent<out T>(private val value: T) {
+    private val handled = AtomicBoolean(false)
+
+    fun peek(): T? = value.takeIf { !handled.get() }
+
+    fun take(): T? = value.takeIf { handled.compareAndSet(false, true) }
+}
+
+internal class SourceChangeCompletion(
+    private val deleteAfterChange: SearchBook?,
+    private val delete: (SearchBook) -> Unit,
+) {
+    private val completed = AtomicBoolean(false)
+
+    fun success() {
+        val source = deleteAfterChange ?: return
+        if (completed.compareAndSet(false, true)) delete(source)
+    }
+}
+
+internal sealed interface SourceChangeResult {
+    data class Success(
+        val book: Book,
+        val toc: List<BookChapter>,
+        val source: BookSource,
+        val dismissDialog: Boolean,
+        val deleteAfterChange: SearchBook? = null,
+    ) : SourceChangeResult
+
+    data class Error(val throwable: Throwable) : SourceChangeResult
+}
+
 @Suppress("MemberVisibilityCanBePrivate")
 open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(application) {
     /**
@@ -101,7 +135,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private var searchPoolSize: Int = 0
     private val lastProgressPublishMs = AtomicLong(0L)
     val searchStateData = MutableLiveData<Boolean>()
+    internal val searchFinishData = MutableLiveData<PendingEvent<Boolean>>()
+    val changeSourceLoading = MutableLiveData(false)
+    val changeSourceCancelable = MutableLiveData(true)
+    internal val changeSourceResult = MutableLiveData<PendingEvent<SourceChangeResult>>()
     var searchFinishCallback: ((isEmpty: Boolean) -> Unit)? = null
+    private var changeSourceTask: Coroutine<Triple<Book, List<BookChapter>, BookSource>>? = null
     var name: String = ""
     var author: String = ""
     private var fromReadBookActivity = false
@@ -376,6 +415,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     protected open fun onSearchTaskFinished(isEmpty: Boolean) {
         searchFinishCallback?.invoke(isEmpty)
+        searchFinishData.postValue(PendingEvent(isEmpty))
     }
 
     protected fun notifySearchAdapter() {
@@ -407,6 +447,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     override fun onCleared() {
         super.onCleared()
+        changeSourceTask?.cancel()
+        changeSourceTask = null
         // Force restore: no further search owns the raised caps.
         if (httpLimitsEpoch.get() > 0) {
             restoreDefaultHttpLimits()
@@ -1979,13 +2021,56 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         searchCallback?.upAdapter()
     }
 
-    fun autoChangeSource(
-        bookType: Int?,
-        onSuccess: (book: Book, toc: List<BookChapter>, source: BookSource) -> Unit
-    ) {
-        execute {
+
+    fun changeSource(book: Book) {
+        changeSourceTask?.cancel()
+        changeSourceCancelable.value = true
+        changeSourceLoading.value = true
+        changeSourceTask = execute {
+            if (book.isWebFile) {
+                val source = appDb.bookSourceDao.getBookSource(book.origin)
+                    ?: throw NoStackTraceException("书源不存在")
+                Triple(book, emptyList(), source)
+            } else {
+                val (toc, source) = tocMap[book.primaryStr()]?.let { toc ->
+                    val source = appDb.bookSourceDao.getBookSource(book.origin)
+                        ?: throw NoStackTraceException("书源不存在")
+                    toc to source
+                } ?: getToc(book).getOrThrow().also { result ->
+                    tocMap[book.primaryStr()] = result.first
+                }
+                Triple(book, toc, source)
+            }
+        }.onSuccess { (resultBook, toc, source) ->
+            changeSourceTask = null
+            changeSourceLoading.value = false
+            changeSourceCancelable.value = true
+            changeSourceResult.value = PendingEvent(
+                SourceChangeResult.Success(resultBook, toc, source, dismissDialog = true)
+            )
+        }.onError { throwable ->
+            changeSourceTask = null
+            changeSourceLoading.value = false
+            changeSourceCancelable.value = true
+            changeSourceResult.value = PendingEvent(SourceChangeResult.Error(throwable))
+        }
+    }
+
+    fun cancelChangeSource() {
+        if (changeSourceCancelable.value == false) return
+        changeSourceTask?.cancel()
+        changeSourceTask = null
+        changeSourceLoading.value = false
+        changeSourceCancelable.value = true
+    }
+
+    fun autoChangeSource(bookType: Int?, deleteAfterChange: SearchBook) {
+        changeSourceTask?.cancel()
+        changeSourceCancelable.value = false
+        changeSourceLoading.value = true
+        changeSourceTask = execute {
             currentResults().forEach {
-                if (it.type == bookType) {
+                if (it.origin != deleteAfterChange.origin && it.type == bookType) {
                     val book = it.toBook()
                     val result = getToc(book).getOrNull()
                     if (result != null) {
@@ -1994,10 +2079,24 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 }
             }
             throw NoStackTraceException("没有有效源")
-        }.onSuccess {
-            onSuccess.invoke(it.first, it.second, it.third)
-        }.onError {
-            context.toastOnUi("自动换源失败\n${it.localizedMessage}")
+        }.onSuccess { (book, toc, source) ->
+            changeSourceTask = null
+            changeSourceLoading.value = false
+            changeSourceCancelable.value = true
+            changeSourceResult.value = PendingEvent(
+                SourceChangeResult.Success(
+                    book,
+                    toc,
+                    source,
+                    dismissDialog = false,
+                    deleteAfterChange = deleteAfterChange,
+                )
+            )
+        }.onError { throwable ->
+            changeSourceTask = null
+            changeSourceLoading.value = false
+            changeSourceCancelable.value = true
+            changeSourceResult.value = PendingEvent(SourceChangeResult.Error(throwable))
         }
     }
 

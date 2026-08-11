@@ -483,7 +483,12 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    fun changeTo(source: BookSource, book: Book, toc: List<BookChapter>) {
+    fun changeTo(
+        source: BookSource,
+        book: Book,
+        toc: List<BookChapter>,
+        onSuccess: () -> Unit = {},
+    ) {
         changeSourceCoroutine?.cancel()
         changeSourceCoroutine = execute {
             val previousBookUrl = bookData.value?.bookUrl
@@ -506,6 +511,8 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             )
             bookData.postValue(book)
             chapterListData.postValue(toc)
+        }.onSuccess {
+            onSuccess()
         }.onFinally {
             postEvent(EventBus.SOURCE_CHANGED, book.bookUrl)
         }

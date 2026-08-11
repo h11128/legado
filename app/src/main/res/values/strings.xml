@@ -506,6 +506,7 @@
     <string name="fattening_book">Awaiting more chapters books</string>
     <string name="finish_book">Finished books</string>
     <string name="local_book">Local books</string>
+    <string name="local_book_identity_conflict">A book named "%1$s" by "%2$s" is already on the bookshelf</string>
     <string name="status_bar_immersion">The status bar color becomes transparent</string>
     <string name="imm_navigation_bar">immersion navigation bar</string>
     <string name="imm_navigation_bar_s">The navigation bar becomes transparent</string>
@@ -1179,6 +1180,11 @@
     <string name="menu_refresh_all">Refresh all chapters</string>
     <string name="edit_content">Edit Content</string>
     <string name="chapter_change_source">Single chapter source switching</string>
+    <string name="batch_chapter_change_source">Batch chapter source switching</string>
+    <string name="chapter_source_skip">Skip chapter</string>
+    <string name="chapter_source_cache_next">Cache and next</string>
+    <string name="chapter_source_selected_count">%1$d target chapter(s) selected</string>
+    <string name="chapter_source_finished">No more original chapters</string>
     <string name="book_change_source">Change the source of the whole book</string>
     <string name="sort_by_time">Sort by time</string>
     <string name="enable_record">Enable record</string>
@@ -1583,8 +1589,8 @@
     <string name="open_other_video_player">其它播放器打开</string>
     <string name="show_source_comment">显示源注释</string>
     <string name="adapt_special_style">适配特殊样式</string>
-    <string name="show_line_number">展示%d行</string>
-    <string name="setting_show_line_number">设置辅助按键展示的行数</string>
+    <string name="show_line_number">Show %d rows</string>
+    <string name="setting_show_line_number">Number of secondary button rows</string>
     <string name="menu_page">第 %d 页</string>
     <string name="change_page">选择页数</string>
     <string name="auto_check_new_backup_t">自动检查新备份</string>

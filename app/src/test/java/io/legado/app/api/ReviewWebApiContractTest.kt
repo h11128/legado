@@ -31,6 +31,10 @@ class ReviewWebApiContractTest {
         assertTrue(controller.contains("ReviewRuleParser.parseReplyPage"))
         assertTrue(controller.contains("JsSourceReview.getReviewSummaryAwait"))
         assertTrue(controller.contains("JsSourceReview.getReviewDetailAwait"))
+        assertTrue(controller.contains("JsSourceReview.getReviewRepliesAwait"))
+        val replies = controller.substringAfter("fun getReplies(")
+            .substringBefore("fun openLegacyReview(")
+        assertTrue(replies.indexOf("if (source.isJsSource())") < replies.indexOf("val rule = source.ruleReview"))
         assertFalse(controller.contains("parameters[\"nextUrl\"]"))
     }
 
@@ -48,6 +52,11 @@ class ReviewWebApiContractTest {
         assertTrue(dialog.contains("API.getReviewReplies"))
         assertTrue(dialog.contains("isImageBadge"))
         assertTrue(dialog.contains("reviewIdentity"))
+        assertTrue(dialog.contains("openImage(item.imageUrl)"))
+        assertTrue(dialog.contains("openImage(reply.imageUrl)"))
+        assertTrue(dialog.contains("proxyImageUrl(url, 2048)"))
+        assertTrue(dialog.contains(":url-list=\"[previewUrl]\""))
+        assertTrue(dialog.contains("@closed=\"previewUrl = ''\""))
         assertFalse(dialog.contains(":src=\"item.audioUrl\""))
     }
 
@@ -86,6 +95,10 @@ class ReviewWebApiContractTest {
         assertFalse(server.contains("script-src https: 'unsafe-inline'"))
         assertFalse(server.contains("style-src http: https: 'unsafe-inline'"))
         assertTrue(server.contains("frame-src 'self' http: https:"))
+        val vueHtmlHeaders = server.substringAfter(
+            "if (uri.startsWith(\"/vue/\") && uri.endsWith(\".html\"))"
+        ).substringBefore("}")
+        assertTrue(vueHtmlHeaders.contains("addHeader(\"Cache-Control\", \"no-cache\")"))
         assertTrue(server.contains("if (uri == \"/legacyReviewPage\") \"<redacted>\""))
         assertTrue(axios.contains("'openLegacyReview'"))
         assertFalse(axios.contains("'legacyReviewPage'"))
@@ -146,6 +159,6 @@ class ReviewWebApiContractTest {
         val repositoryRoot = generateSequence(userDirectory) { it.parentFile }
             .firstOrNull { File(it, "app/src/main").isDirectory }
         requireNotNull(repositoryRoot) { "Repository root not found from $userDirectory" }
-        return File(repositoryRoot, path).readText()
+        return File(repositoryRoot, path).readText().replace("\r\n", "\n")
     }
 }

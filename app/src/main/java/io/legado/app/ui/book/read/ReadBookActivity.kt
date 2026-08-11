@@ -595,10 +595,12 @@ class ReadBookActivity : BaseReadBookActivity(),
     private fun showChangeSourceMenu(anchor: View) {
         popupActionMenu(this) {
             item(getString(R.string.chapter_change_source), "chapter")
+            item(getString(R.string.batch_chapter_change_source), "batchChapter")
             item(getString(R.string.book_change_source), "book")
         }.show(anchor) { action ->
             when (action) {
                 "chapter" -> showChapterChangeSource()
+                "batchChapter" -> showChapterChangeSource(batchMode = true)
                 "book" -> showBookChangeSource()
             }
         }
@@ -625,14 +627,20 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
 
-    private fun showChapterChangeSource() {
+    private fun showChapterChangeSource(batchMode: Boolean = false) {
         lifecycleScope.launch {
             val book = ReadBook.book ?: return@launch
             val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
                 ?: return@launch
             binding.readMenu.runMenuOut()
             showDialogFragment(
-                ChangeChapterSourceDialog(book.name, book.author, chapter.index, chapter.title)
+                ChangeChapterSourceDialog(
+                    book.name,
+                    book.author,
+                    chapter.index,
+                    chapter.title,
+                    batchMode = batchMode,
+                )
             )
         }
     }
@@ -687,7 +695,9 @@ class ReadBookActivity : BaseReadBookActivity(),
             R.id.menu_add_bookmark -> addBookmark()
             R.id.menu_highlight_rule -> startActivity<HighlightRuleActivity>()
             R.id.menu_simulated_reading -> showSimulatedReading()
-            R.id.menu_edit_content -> showDialogFragment(ContentEditDialog())
+            R.id.menu_edit_content -> ContentEditDialog.newInstance()?.let {
+                showDialogFragment(it)
+            }
             R.id.menu_update_toc -> ReadBook.book?.let {
                 if (it.isEpub) {
                     BookHelp.clearCache(it)
@@ -1487,10 +1497,15 @@ class ReadBookActivity : BaseReadBookActivity(),
     override val oldBook: Book?
         get() = ReadBook.book
 
-    override fun changeTo(source: BookSource, book: Book, toc: List<BookChapter>) {
+    override fun changeTo(
+        source: BookSource,
+        book: Book,
+        toc: List<BookChapter>,
+        onSuccess: () -> Unit,
+    ) {
         resetReviewSummaryState()
         if (!book.isAudio) {
-            viewModel.changeTo(book, toc)
+            viewModel.changeTo(book, toc, onSuccess)
         } else {
             ReadAloud.stop(this)
             lifecycleScope.launch {
@@ -1500,6 +1515,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                     ReadBook.book?.delete()
                     appDb.bookDao.insert(book)
                 }
+                onSuccess()
                 startActivityForBook(book)
                 finish()
             }
@@ -1509,6 +1525,13 @@ class ReadBookActivity : BaseReadBookActivity(),
     override fun replaceContent(content: String) {
         ReadBook.book?.let {
             viewModel.saveContent(it, content)
+        }
+    }
+
+    override fun contentCached(chapterIndex: Int) {
+        if (chapterIndex in ReadBook.durChapterIndex - 1..ReadBook.durChapterIndex + 1) {
+            ReadBook.clearTextChapter()
+            ReadBook.loadContent(resetPageOffset = false)
         }
     }
 

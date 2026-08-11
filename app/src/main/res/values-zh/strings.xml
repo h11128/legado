@@ -503,6 +503,7 @@
     <string name="fattening_book">养肥书籍</string>
     <string name="finish_book">完结书籍</string>
     <string name="local_book">本地书籍</string>
+    <string name="local_book_identity_conflict">书架中已存在同名同作者书籍：%1$s / %2$s</string>
     <string name="status_bar_immersion">状态栏颜色透明</string>
     <string name="imm_navigation_bar">沉浸式导航栏</string>
     <string name="imm_navigation_bar_s">导航栏颜色透明</string>
@@ -840,9 +841,9 @@
     <string name="title_hide">隐藏</string>
     <string name="title_color">章节名颜色</string>
     <string name="split_chapter_title">章节编号与标题分行</string>
-    <string name="title_number_font_size">章节编号字号</string>
-    <string name="title_number_spacing">章节编号下边距</string>
-    <string name="title_number_color">章节编号颜色</string>
+    <string name="title_number_font_size">编号字号</string>
+    <string name="title_number_spacing">编号下边距</string>
+    <string name="title_number_color">编号颜色</string>
     <string name="add_to_group">加入分组</string>
     <string name="save_image">保存图片</string>
     <string name="no_default_path">没有默认路径</string>
@@ -1174,6 +1175,11 @@
     <string name="menu_refresh_all">刷新全部章节</string>
     <string name="edit_content">编辑内容</string>
     <string name="chapter_change_source">单章换源</string>
+    <string name="batch_chapter_change_source">批量单章换源</string>
+    <string name="chapter_source_skip">跳过本章</string>
+    <string name="chapter_source_cache_next">缓存并下一章</string>
+    <string name="chapter_source_selected_count">已选 %1$d 个目标章节</string>
+    <string name="chapter_source_finished">原目录已处理完成</string>
     <string name="book_change_source">整书换源</string>
     <string name="sort_by_time">时间排序</string>
     <string name="enable_record">开启记录</string>
@@ -1190,6 +1196,8 @@
     <string name="show_default_book_icon">显示默认书籍图标</string>
     <string name="cache_export">缓存/导出</string>
     <string name="assists_key_config">辅助按键配置</string>
+    <string name="show_line_number">展示%d行</string>
+    <string name="setting_show_line_number">设置辅助按键展示的行数</string>
     <string name="url_option">URL 参数</string>
     <string name="only_wifi">仅 WiFi</string>
     <string name="only_wifi_summary">仅在 WiFi 下加载网络封面</string>

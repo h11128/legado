@@ -301,7 +301,11 @@ object LocalBook {
                 order = appDb.bookDao.minOrder - 1
             )
             upBookInfo(book)
-            appDb.bookDao.insert(book)
+            if (appDb.bookDao.insertIgnore(book) == -1L) {
+                throw NoStackTraceException(
+                    appCtx.getString(R.string.local_book_identity_conflict, book.name, book.author)
+                )
+            }
         } else {
             withParserCacheInvalidated(book) {
                 deleteBook(book, false)
@@ -411,11 +415,12 @@ object LocalBook {
         return books
     }
 
-    fun importFiles(uris: List<Uri>) {
-        var errorCount = 0
+    fun importFiles(uris: List<Uri>): Set<Uri> {
+        val importedUris = linkedSetOf<Uri>()
+        var firstError: Throwable? = null
         uris.forEach { uri ->
-            val fileDoc = FileDoc.fromUri(uri, false)
             kotlin.runCatching {
+                val fileDoc = FileDoc.fromUri(uri, false)
                 if (ArchiveUtils.isArchive(fileDoc.name)) {
                     importArchiveFile(uri) {
                         it.matches(AppPattern.bookFileRegex)
@@ -423,14 +428,18 @@ object LocalBook {
                 } else {
                     importFile(uri)
                 }
+            }.onSuccess {
+                importedUris.add(uri)
             }.onFailure {
-                AppLog.put("ImportFile Error:\nFile $fileDoc\n${it.localizedMessage}", it)
-                errorCount += 1
+                if (firstError == null) firstError = it
+                AppLog.put("ImportFile Error:\nUri $uri\n${it.localizedMessage}", it)
             }
         }
-        if (errorCount == uris.size) {
-            throw NoStackTraceException("ImportFiles Error:\nAll input files occur error")
+        if (importedUris.isEmpty()) {
+            throw firstError
+                ?: NoStackTraceException("ImportFiles Error:\nAll input files occur error")
         }
+        return importedUris
     }
 
     /**

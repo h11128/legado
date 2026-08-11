@@ -56,14 +56,33 @@ jobs:
       - name: Merge upstream changes
         if: steps.check.outputs.up_to_date == 'false'
         run: |
+          set -uo pipefail
           git checkout master
           BEFORE=$(git rev-parse HEAD)
+          UPSTREAM_REF="${{ steps.check.outputs.upstream_ref }}"
+
           # Commit only after restoring workflows so the pushed merge never
           # creates/updates .github/workflows (GITHUB_TOKEN lacks `workflows` scope).
-          git merge --no-commit --no-ff "${{ steps.check.outputs.upstream_ref }}"
+          # Do NOT use `set -e` around merge: workflow conflicts are expected and
+          # must be resolved to ours before checking remaining conflicts.
+          MERGE_OK=0
+          git merge --no-commit --no-ff "$UPSTREAM_REF" || MERGE_OK=$?
+
           rm -rf .github/workflows
           git checkout "$BEFORE" -- .github/workflows/
           git add -A .github/workflows/
+
+          CONFLICTS="$(git diff --name-only --diff-filter=U || true)"
+          if [ -n "$CONFLICTS" ]; then
+            echo "::error::Unresolved conflicts outside .github/workflows (manual merge required):"
+            printf '%s\n' "$CONFLICTS"
+            exit 1
+          fi
+
+          if [ "$MERGE_OK" -ne 0 ]; then
+            echo "Merge had conflicts; resolved by keeping fork .github/workflows."
+          fi
+
           git commit -m "chore: sync upstream from LegadoTeam/legado"
 
       - name: Push to origin
