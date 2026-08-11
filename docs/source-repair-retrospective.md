@@ -1,5 +1,45 @@
 # Source repair retrospective
 
+## 2026-08-10 — cleanup tags + dig remaining queue (~41)
+
+**Cleanup:** `scripts/clear-stale-source-tags.py` 清已修源上的 Error/失效 group 行（保留 JS helpers）。  
+**Queue:** `temp/full_fix/cache/stale_remain_dig.urls.txt` → 逐个 `source-cli dig` + 真机证据 + ledger/retro。
+
+### Fixed (device 校验成功)
+| URL | 证据 |
+|-----|------|
+| `http://www.xqishuta.com` → `http://www.xqishuta.org` | PC CF≠phone；remap 1；**944ms** |
+| `https://m.ttshu8.com` → `https://www.ttshu8.net` | search 500；explore `#alistbox` + og bookInfo；无搜索+发现 **833ms**；remap 5 |
+| `https://m.wfxs.tw` | diagnose ok / oneshot Unknown；phone **1188ms** |
+| `https://www.75zwz.com/` | search=热门标签死；explore list/top + og `read_url` TOC；发现 **1423ms** |
+| `http://www.txt80.cc` | type3；empire search tip；发现 **701ms** |
+| `https://archiveofourown.org/` | oneshot fixed；**1449ms** |
+| `https://cn.baozimhcn.com` → `https://www.baozimh.com` | dig migrate 后须 **save 新 URL**；**1756ms** |
+| `https://m.yuzhai.info/` | oneshot；**1235ms** |
+| `https://manga18fx.com/` | **type3 误标→0**；name+toc/content；**1877ms** |
+| `https://www.manmanapp.com#一程` | oneshot skip plugin；phone **3929ms** |
+
+### Skip / sticky disable (honest)
+| 类 | 例子 | 陷阱 |
+|----|------|------|
+| region/geo | `bamxs.com` 403 region denied | phone 可达但书页拒 |
+| IP Host 停车 | `154.37.154.143` 番茄 | `ip_url_host_header_parked` |
+| API 死 | `apitt.kanshushenapp.com` token search empty | shipsay API |
+| hunt empty | xbiquta/xkushu/bqg.fun/uukanshu/ranwen/yehanshu… | OSINT crt 502 + empty |
+| phpMyAdmin 壳 | `m.96biquge.com` title=admin | 勿当笔趣阁修 |
+| redesign | `zhuishushenqi` → m. 后 book/toc 空 | migrate≠verify |
+| 假成功 | `dumanwu.org` 校验成功=XH 激活说明书 | 勿记 fixed |
+| type3 空 | webtoons/pan/nadu8/zxcs | 下载链接为空 |
+| DNS | `xyyuedu` `so.` NXDOMAIN | |
+| fragment migrate | `627txt##@尐哖`→aiqu226 仍 list 空 | |
+
+### Lessons
+1. **dig `migrate` 只改 gate 提示** — 必须 `save_source(新URL)` + phone check（baozi 正例；zhuishu/627 反例）。
+2. **dig `disable`/L1≠phone dead** — CF/bot_shell 先 `debug_source`（69shuba phone 亦空才禁）。
+3. **校验成功要看内容** — dumanwu list=激活说明 → skip。
+4. **comic `bookSourceType=3`** → 走下载链；manga18fx 改 0 才通。
+5. **search 死可用发现**（ttshu8/75zwz/txt80）但 explore 选择器必须真有书。
+
 ## 2026-08-10 — shelf deep30 remain (fuxs1→ttshu8)
 
 | URL | 结果 | 证据 |
