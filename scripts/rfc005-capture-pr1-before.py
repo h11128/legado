@@ -287,6 +287,8 @@ def main() -> int:
     ap.add_argument("--query", default="天才之上")
     ap.add_argument("--limit", type=int, default=50)
     ap.add_argument("--apk", type=Path, default=TEMP / APK_NAME)
+    ap.add_argument("--out-dir", type=Path, default=ASSETS)
+    ap.add_argument("--stem", default="pr1", help="writes {stem}-before.png and {stem}-after.png")
     ap.add_argument("--skip-install", action="store_true")
     ap.add_argument("--skip-import", action="store_true")
     ap.add_argument("--uninstall", action="store_true")
@@ -294,7 +296,8 @@ def main() -> int:
 
     require_device()
     TEMP.mkdir(parents=True, exist_ok=True)
-    ASSETS.mkdir(parents=True, exist_ok=True)
+    out_dir = args.out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     db = pull_db_wal(TEMP / "debug_db", stop_app=True)
     sources = TEMP / "pr1-before-sources.json"
@@ -318,7 +321,9 @@ def main() -> int:
         if args.query in xml and ("作者" in xml or "暂无" in xml or "佚名" in xml):
             break
         time.sleep(2)
-    shot(ASSETS / "pr1-before.png")
+    before_png = out_dir / f"{args.stem}-before.png"
+    after_png = out_dir / f"{args.stem}-after.png"
+    shot(before_png)
     xml = dump()
     print(
         "before 佚名=",
@@ -335,13 +340,13 @@ def main() -> int:
         if args.query in xml:
             break
         time.sleep(2)
-    shot(ASSETS / "pr1-after.png")
+    shot(after_png)
     xml = dump()
     print("after 佚名=", "佚名" in xml, "query=", args.query in xml)
 
     if args.uninstall:
         subprocess.call(["adb", "uninstall", BEFORE_PKG])
-    print("ASSETS", ASSETS / "pr1-before.png", ASSETS / "pr1-after.png")
+    print("ASSETS", before_png, after_png)
     return 0
 
 
