@@ -7,7 +7,7 @@ Captured 2026-08-13 on SM-A366U1.
 | File | What |
 |---|---|
 | `pr1-before.png` | Upstream APK `3.26081201`: search 天才之上, **佚名** is its own card |
-| `pr1-after.png` | Fork debug: 佚名 gone, 一桶布丁 origin badge 11→20 |
+| `pr1-after.png` | Fork debug: 一桶布丁 / 来一包坚果吧 still split; empty author stays its own card (`|S|≥2` do not guess) |
 | `pr2-menu.png` | Change-source menu: new toggles vs upstream items |
 | `pr2-after.png` | Live 换源: two-line progress + mismatch badge |
 
