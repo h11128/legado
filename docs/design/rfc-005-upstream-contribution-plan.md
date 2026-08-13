@@ -1,7 +1,7 @@
 # RFC-005: Upstream contribution plan (fork → LegadoTeam)
 
-Status: draft (local planning)  
-Date: 2026-08-11  
+Status: draft (local planning, corrected 2026-08-12 against upstream)
+Date: 2026-08-11
 Scope: How to land fork product work onto [LegadoTeam/legado](https://github.com/LegadoTeam/legado) in reviewable PRs, what **not** to upstream, and copy that actually persuades maintainers.
 
 Related local RFCs: `rfc-001` (换源 ask order), `rfc-003` (author smart-merge), `rfc-004` (cross-source review).
@@ -14,29 +14,30 @@ Related local RFCs: `rfc-001` (换源 ask order), `rfc-003` (author smart-merge)
 |---|---|
 | Open a **GitHub Project** on LegadoTeam? | **No (default).** Need maintainer buy-in + `project` scopes; their cadence is Issue → small PR. |
 | Track work where? | **Local checklist in this RFC** + optional **one umbrella Issue** on LegadoTeam after first PR lands. Own-fork Project is optional for you only. |
-| How many PRs? | **First wave ~8–10** product PRs (not 283 commits; not 1 mega-PR). |
+| How many PRs? | **First wave ~7** product PRs (not 283 commits; not 1 mega-PR). |
 | First pitch? | Prefer **Issue that matches an existing ask**, then a **small PR that closes/partially addresses it**. |
 
 Upstream already has overlapping user asks:
 
-- [#697](https://github.com/LegadoTeam/legado/issues/697) 字数筛选应更细（章节向 / 单章换源钉住当前源）
-- [#666](https://github.com/LegadoTeam/legado/issues/666) 批量单章换源自动化接管
-- [#664](https://github.com/LegadoTeam/legado/issues/664) 段评增强（部分子项已拆合；其余要协议样例）
+- [#697](https://github.com/LegadoTeam/legado/issues/697) 字数筛选应更细（章节向 / 单章换源钉住当前源）— upstream **already has** the toggle; this Issue wants finer behavior.
+- [#666](https://github.com/LegadoTeam/legado/issues/666) 批量单章换源自动化接管 — discuss boundary before coding.
+- [#664](https://github.com/LegadoTeam/legado/issues/664) 段评增强（部分子项已拆合；其余要协议样例）.
 
-Hook PRs to those Issues when the fit is honest. Do **not** invent a parallel “mega roadmap Issue” before any code is reviewable.
+Hook PRs to those Issues when the fit is honest. Do **not** invent a parallel "mega roadmap Issue" before any code is reviewable.
 
 ---
 
-## 2. Do / don’t upstream
+## 2. Do / don't upstream
 
 ### Do (product, Android-facing)
 
-1. Change-source quality UX (filters, badges, progress strip, wrong-book demotion)
-2. Auto-change on info/toc failure (capped, with progress)
-3. Empty/佚名 author smart-merge (search + shelf)
-4. Cross-source review overlay (RFC-004), **phased** to match upstream’s “协议先于大 UI” preference seen on #664
+1. Author smart-merge (empty/佚名 on search + shelf) — most independent.
+2. Change-source quality toggles (filter non-novel, filter non-book-intro, drop content bad, early stop).
+3. Change-source progress strip upgrade + wrong-book demotion + badges.
+4. Auto-change on info/toc failure (capped, with progress).
+5. Cross-source review overlay (RFC-004), **phased** to match upstream's "协议先于大 UI" preference seen on #664.
 
-### Don’t (keep on fork)
+### Don't (keep on fork)
 
 - MCP / Cursor 修书源通道
 - `source-cli` / dig / hunt / shelf-stale scripts & docs
@@ -71,20 +72,64 @@ flowchart TD
 
 ## 4. PR sequence (first wave)
 
-Order = **trust → value → size**. Each PR: rebase on latest `LegadoTeam/legado` `master`, Chinese title, tests when behavior is non-obvious.
+### 4.0 What upstream already has — do NOT re-pitch
 
-| Order | PR theme | Hook | Approx size | Notes |
-|---|---|---|---|---|
-| 1 | 换源过滤菜单（作者/字数等）+ 不误触发重搜 | Soft-hook #697 | M | Easiest story: “用户可控，默认可关” |
-| 2 | 换源双行进度 / early-stop 有用计数 | — | S–M | Pure UX; screenshot in PR |
-| 3 | 错书降权 + TOC/最新章徽章 | — | M | Explain false-positive risk + how to turn soft |
-| 4 | 排除专用段评源出换源列表 | — | S | Tiny; good “second merge” |
-| 5 | 空作者 / 佚名 smart-merge | — | M | Cite local RFC-003 intent in PR body |
-| 6 | 失败自动换源（详情/目录）+ 上限 + 进度 | — | M–L | Product-sensitive; ship behind clear prefs |
-| 7 | 段评：绑定基础 / overlay 最小切片 | Partial #664 only if honest | M | Upstream said protocol samples matter—start narrow |
-| 8+ | RFC-004 后续 phase | #664 / new Issues | — | One phase per PR |
+Verified against `upstream/master` 2026-08-11. These exist upstream; fork does NOT add them:
 
-**Batch chapter auto-pilot (#666):** treat as a **later** PR. Upstream just landed manual batch cache (#659). Auto-range “按键精灵” is a bigger product leap—discuss on #666 before coding a PR.
+| Feature | Upstream menu / commit | Note |
+|---|---|---|
+| 作者校验 toggle | `menu_check_author` | — |
+| 加载字数 toggle | `menu_load_word_count` | — |
+| **字数过滤 toggle（带 off/绝对/相对、min/max UI）** | `menu_word_count_filter` + full strings | Fork does NOT add. #697 asks for *finer* (per-chapter), not the toggle itself. |
+| **按响应时间排序 toggle** | `menu_sort_respond_time` | Fork does NOT add. |
+| 加载详情 / 加载目录 toggle | `menu_load_info` / `menu_load_toc` | — |
+| 换源弹窗生命周期（PendingEvent） | #674 | Already merged this sync. |
+| 批量单章换源缓存 | #659 | Already merged this sync. |
+| JS 段评回复分页 | `020ddffa9` | Already merged this sync. |
+
+**Implication:** PR1 is NOT "字数过滤 toggle" — upstream has it. PR1 is the most independent fork-only delta.
+
+### 4.1 Fork-only delta (real contribution surface)
+
+| Group | What | New files | Needs checkalgo? |
+|---|---|---|---|
+| **C. 作者 smart-merge** | 空/佚名作者合并（搜索 + 书架） | `BookAuthorIdentity.kt`, `SearchBookMerge.kt`, SearchViewModel/Shelf wiring | No — most independent |
+| **A1. 非小说/非书籍简介过滤** | 2 toggle：`menu_filter_non_novel`, `menu_filter_non_book_intro` | `BookSourceTypeMapper.kt`, menu xml, ViewModel | Light (type sniff) |
+| **A2. 内容差丢弃 + 提前停止** | 2 toggle：`menu_drop_content_bad`, `menu_early_stop` | `ChangeBookSourceQuality.kt`, `CheckAimdLimiter.kt`, `CheckHostEwma.kt` subset | **Yes — brings quality scorer** |
+| **A3. 换源进度条升级** | 双行 metrics、early-stop 状态文案 | `ChangeSourceProgressFormat.kt`, `ChangeSourceProgressUi.kt` | On A2 events |
+| **A4. 错书降权 + 徽章** | TOC 标题身份降权、TOC/最新章软元徽章 | `ChangeChapterVerify.kt` subset, Adapter badges | Yes |
+| **B. 自动换源** | 详情/目录失败自动换源、上限 30、进度 | `AutoChangeSource.kt`, `AutoChangeProgress*.kt`, ReadBook/Info wiring | Yes + behavior change |
+| **D. 段评 overlay (RFC-004)** | 跨源段评绑定 / overlay / auto-bind / merge | 12 files in `model/review/`, `ReviewMergeDetailDialog.kt`, 4 prefs | Phased, aligns #664 |
+
+**Checkalgo 引擎**（22 files in `model/checkalgo/`）是 A2/A3/A4/B 的地基。**不要单独开"引擎" PR**——上游不会收一个没有用户可见功能的 22 文件引擎。每个 PR 只带它需要的那几块。
+
+### 4.2 Corrected PR order
+
+Order = **independence → default-safety → dependency depth**. Rebase on latest `LegadoTeam/legado` `master`, Chinese title, tests when behavior is non-obvious.
+
+| # | PR | Group | Hook | Size | Why this position |
+|---|---|---|---|---|---|
+| 1 | 空/佚名作者 smart-merge（搜索 + 书架） | C | New Issue | M | **Most independent** — no checkalgo, default-safe (only merges when author empty/佚名), clear story. Best trust builder. |
+| 2 | 过滤非小说 + 非书籍简介 toggle | A1 | New Issue | M | 2 toggles, default-off, light dependency. Builds on PR1 trust. |
+| 3 | 内容差丢弃 + 提前停止 toggle | A2 | New Issue | M–L | **Brings quality scorer** (`ChangeBookSourceQuality` + minimal checkalgo). First PR carrying engine code; needs false-positive defense. |
+| 4 | 换源进度条升级（双行 metrics + early-stop 状态） | A3 | — | S–M | Pure UX on PR3 events. Screenshot sells. Breathable after heavy PR3. |
+| 5 | 错书降权 + TOC/最新章徽章 | A4 | — | M | First ranking change. Needs PR3 quality + PR1 trust. Default soft / pref-gated. |
+| 6 | 失败自动换源（上限 30 + 进度 + 可关） | B | — | M–L | **Biggest behavior change** (App 主动换). After PR3/PR5 accepted. Pref-gated, default-off. |
+| 7+ | 段评 overlay RFC-004 分 phase | D | #664 partial | M each | Upstream said protocol samples first (#664 comment). One phase per PR. |
+
+**Not in this wave:**
+- **#666 批量换章自动化（按键精灵）**: upstream just 合 #659 手动批量. Auto-range 是更大跃迁 — **先在 #666 讨论边界，再写代码**。
+- **MCP / source-cli / dig / hunt / 修书源脚本**: 永远不进这批。
+
+### 4.3 Why this order (one line each)
+
+1. **PR1 作者 merge**: 不靠 checkalgo，最独立，故事最清楚（"同名空作者不再刷屏"）。
+2. **PR2 非小说过滤**: 2 个 toggle，默认关，依赖浅（类型嗅探）。
+3. **PR3 内容差+提前停止**: 第一次带 checkalgo 质量评分，必须给假阳性样例。
+4. **PR4 进度条**: 纯 UX，截图卖，是 PR3 之后的轻 PR。
+5. **PR5 错书降权**: 第一次动排序，靠 PR1 信任 + PR3 质量。
+6. **PR6 自动换源**: 最大行为变化，App 主动换，必须最后碰。
+7. **PR7+ 段评**: 跟上游 #664 节奏，一 phase 一 PR。
 
 Skip opening all Issues at once. Open Issue+PR for #1 first; use maintainer reaction to pace the rest.
 
@@ -113,10 +158,10 @@ Tone: **场景 → 现状痛点 → 最小改动 → 默认安全 → 验证**. 
 
 ### 5.2 New enhancement Issue (when no hook)
 
-Use LegadoTeam’s template fields. Title examples:
+Use LegadoTeam's template fields. Title examples:
 
-- `换源结果支持可选过滤（作者/字数等），默认不改变现有行为`
 - `书名相同且作者为空/佚名时合并搜索与书架条目`
+- `换源结果支持过滤非小说源与非书籍简介源`
 
 Body skeleton:
 
@@ -157,15 +202,17 @@ Titles like upstream: short Chinese, one change (`允许…` / `修复…` / `�
 Closes #<issue>   <!-- or: Partial #<issue> -->
 ```
 
-### 5.4 One-liner “why merge” (for description / comment)
+### 5.4 One-liner "why merge" (per PR)
 
 Use **one** of these, not a laundry list:
 
-1. **换源过滤：**「书源噪声大时用户能自己收窄结果，默认关闭，不改变现有搜索。」
-2. **进度条：**「长换源时能看见有效命中而不是空白转圈。」
-3. **错书降权：**「目录/最新章对不上的源往下沉，减少点进假书。」
-4. **作者 merge：**「同一书名作者空/佚名不再刷一屏重复卡片。」
-5. **自动换源：**「详情/目录加载失败时有上限地尝试可用源，带进度，可关。」
+1. **作者 merge（PR1）：**「同一书名作者空/佚名不再刷一屏重复卡片，只在作者字段确实为空时合并。」
+2. **非小说过滤（PR2）：**「书源噪声大时用户能过滤掉非小说源和字典简介源，默认关闭，不改变现有搜索。」
+3. **内容差+提前停止（PR3）：**「内容差源可一键丢弃，够了好源就停，减少无效等待。」
+4. **进度条（PR4）：**「长换源时能看见有效命中和停止进度，而不是空白转圈。」
+5. **错书降权（PR5）：**「目录/最新章对不上的源往下沉，减少点进假书。」
+6. **自动换源（PR6）：**「详情/目录加载失败时有上限地尝试可用源，带进度，可关。」
+7. **段评 overlay（PR7+）：**「跨源段评绑定与合并，按 phase 合入，先协议后 UI。」
 
 ---
 
@@ -173,24 +220,26 @@ Use **one** of these, not a laundry list:
 
 Observed maintainer pattern (2026-08): small Kotlin PRs, Chinese titles, tests on non-trivial fixes, Issues stay open when protocol is unclear (#664 comment).
 
-| Do | Don’t |
+| Do | Don't |
 |---|---|
-| Ship the smallest vertical slice | Paste “我们 fork 的 10 个 RFC 路线图” |
+| Ship the smallest vertical slice | Paste "我们 fork 的 10 个 RFC 路线图" |
 | Default-safe / pref-gated | Force new ranking on everyone |
 | Link one Issue | Open Project + 12 Issues + 12 PRs day one |
 | Rebase on latest master (they move fast) | PR against stale fork sync |
-| Accept “拆小 / 先要样例” | Argue architecture in the first PR |
+| Accept "拆小 / 先要样例" | Argue architecture in the first PR |
+| Verify upstream already has it before pitching | Re-pitch 字数过滤 / 响应时间排序 (they exist) |
 
 ---
 
 ## 7. Local checklist
 
-- [ ] Confirm PR1 scope (过滤菜单) still clean on top of latest upstream
-- [ ] Write Issue comment or new Issue with §5.1 / §5.2
+- [ ] Confirm PR1 scope (作者 smart-merge) still clean on top of latest upstream
+- [ ] Write new Issue with §5.2 (no existing hook for author merge)
 - [ ] Open PR1; wait for review signal before PR2
 - [ ] After 1–2 merges: optional umbrella Issue listing remaining table rows
 - [ ] Revisit #666 only after discussing auto-batch product boundaries
 - [ ] Never upstream MCP / repair CLI in the same wave
+- [ ] Before each PR: re-verify upstream didn't just add the same toggle/feature
 
 ---
 
