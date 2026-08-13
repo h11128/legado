@@ -277,8 +277,8 @@ Observed maintainer pattern (2026-08): small Kotlin PRs, Chinese titles, tests o
 
 - [ ] Confirm PR1 scope (作者 smart-merge) still clean on top of latest upstream
 - [ ] Write new Issue with §5.2 (no existing hook for author merge)
-- [ ] **Capture before/after screenshots or 录屏 GIF per §5.5 before opening PR**
-- [ ] Open PR1: paste §9 PR1 body into GitHub, attach 真机图; wait for review before PR2
+- [ ] Device shots: `python scripts/rfc005-pr-screenshot-session.py` → `docs/design/rfc-005-assets/` (§10)
+- [ ] Open PR1: paste §9 PR1 body + §10 image; wait for review before PR2
 - [ ] After 1–2 merges: optional umbrella Issue listing remaining table rows
 - [ ] Revisit #666 only after discussing auto-batch product boundaries
 - [ ] Never upstream MCP / repair CLI in the same wave
@@ -603,12 +603,45 @@ flowchart TD
 
 ---
 
-### 贴 PR 时的最短结构（对照 §5.3）
+## 10. Device evidence (2026-08-13, SM-A366U1)
 
-1. 摘要（上面「说明」前两段）
-2. **示意图**（Mermaid + 真机 before/after 或 GIF）
-3. 行为变化（默认 / 打开后）
-4. 非目标
-5. 测试勾选
-6. `Closes #…` 或 `Partial #664`
+Regenerate: `python scripts/rfc005-pr-screenshot-session.py`
+
+This device cannot `screenrecord` (encoder -38); GIFs are stills of the live session. PR1 has no merge-off build, so only **after** (search results).
+
+### PR1 搜索结果（作者 merge 后）
+
+![pr1-after](rfc-005-assets/pr1-after.png)
+
+同名搜索列表：完整条目带真实作者「老歌」；空作者/占位行单独列出（标题不完全相同则不合并，符合 RFC-003「不猜」）。
+
+### PR2 菜单：新 toggle vs 上游已有
+
+![pr2-menu](rfc-005-assets/pr2-menu.png)
+
+已勾选：过滤非小说源、过滤词典简介、正文不合格时移除、足够好源后提前停止。上游已有：校验作者、加载字数、按响应时间排序、字数过滤。
+
+### PR2/PR3/PR4 换源进行中（双行进度 + 列表）
+
+![pr2-after](rfc-005-assets/pr2-after.png)
+
+底栏：`结果 8 · 命中 9 · 已问 277/1237 · 问中 98/100`。行上「最新章节疑似不一致」。
+
+### PR5 徽章
+
+![pr5-after](rfc-005-assets/pr5-after.png)
+
+「校验中…」+「最新章节疑似不一致」。
+
+### PR6 自动换源进度
+
+![pr6-after](rfc-005-assets/pr6-after.png)
+
+`自动换源·已问 14/30 · 问中 16/30`，上限 30 可见。
+
+### PR7 阅读设置（跨源段评）
+
+![pr7-settings](rfc-005-assets/pr7-settings.png)
+
+跨源段评 / 自动发现段评源 / 显示段评图标 / 多源章评合集，开关均可见。
 
