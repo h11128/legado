@@ -237,17 +237,15 @@ Use **one** of these, not a laundry list:
 4. 文件名 `prN-before.png` / `prN-after.png`，放 PR 描述里
 5. GIF 用 `prN-demo.gif`
 
-**每个 PR 的完整说明、流程、界面示意、真机图清单见 §9。** 下表只作选型速查：
+**每个 PR 的完整说明、流程、界面示意见 §9。** 真机证据只要 **3 组**（不要每个 PR 都拍 before/after）：
 
-| PR | 示意图类型 | 真机文件名 |
+| # | 讲什么 | 真机文件 |
 |---|---|---|
-| 1 作者 merge | Before/After | `pr1-before.png` / `pr1-after.png` |
-| 2 非小说过滤 | 菜单 + Before/After | `pr2-menu.png` / `pr2-before.png` / `pr2-after.png` |
-| 3 内容差+提前停止 | 录屏 GIF | `pr3-demo.gif` |
-| 4 进度条升级 | Before/After | `pr4-before.png` / `pr4-after.png` |
-| 5 错书降权+徽章 | Before/After | `pr5-before.png` / `pr5-after.png` |
-| 6 自动换源 | 录屏 GIF | `pr6-demo.gif` |
-| 7+ 段评 overlay | Mermaid + 截图 | `pr7-settings.png` + 绑定前后阅读页 |
+| 1 | 空/佚名作者 merge | `pr1-before.png` / `pr1-after.png` |
+| 2 | 换源菜单新开关 vs 上游已有 | `pr2-menu.png` |
+| 3 | 换源进行中（双行进度 + 徽章） | `pr2-after.png` |
+
+其余 PR 开 PR 时复用这 3 组 + §9 示意图即可。
 
 **不要做的：**
 - 不要贴整页长截图，裁到变化区域
@@ -294,8 +292,8 @@ Implementation work, branch naming, or opening the first upstream PR. Ready-to-p
 
 ## 9. Per-PR briefing pack（开 PR 时直接贴）
 
-每个 PR 包含：**建议标题、给维护者看的说明、默认/非目标、示意图（Mermaid + 界面示意）、真机图清单**。  
-贴到 GitHub 时：§9 的文字进 PR body；真机图按文件名上传后替换「待补」占位。
+每个 PR 包含：**建议标题、给维护者看的说明、默认/非目标、示意图（Mermaid + 界面示意）**。  
+真机证据全计划只要 **§5.5 / §10 的 3 组**，不要每个 PR 再拍一套 before/after。贴 GitHub 时：§9 文字进 PR body，相关真机图按文件名上传。
 
 ### PR1 — 空/佚名作者 smart-merge
 
@@ -347,7 +345,7 @@ Before                         After
 真实作者 ≥2 种时不合并（例如「张三」和「李四」并排）。
 ```
 
-**真机图：** 搜一本作者常空的书；红框标「合并前多行 / 合并后一行」。
+**真机图：** `pr1-before.png` / `pr1-after.png`（搜「天才之上」：上游佚名单独一行，fork 叠进「一桶布丁」）。
 
 ---
 
@@ -396,7 +394,7 @@ Before（关）                    After（开）
 └──────────────────────┘
 ```
 
-**真机图：** `pr2-menu.png`（箭头指两个新项）+ `pr2-before.png` / `pr2-after.png`。
+**真机图：** 复用 `pr2-menu.png`。
 
 ---
 
@@ -435,7 +433,7 @@ flowchart LR
 3. 列表只剩合格源，底部不再无限转
 ```
 
-**真机图：** 菜单勾选 + GIF。GIF 里必须能读到「已足够好源」文案。
+**真机图：** 复用 `pr2-menu.png` + `pr2-after.png`（不必单独 GIF）。
 
 ---
 
@@ -477,7 +475,7 @@ After（双行）
 └─────────────────────────────────────────┘
 ```
 
-**真机图：** `pr4-before.png` / `pr4-after.png`，红框两行数字；另截一张 early-stop 状态。
+**真机图：** 复用 `pr2-after.png`（双行计数已在图里）。
 
 ---
 
@@ -518,7 +516,7 @@ flowchart TD
   L -->|相关| OK
 ```
 
-**真机图：** 同一本书换源，红框错书从顶部沉到底部，徽章可见。
+**真机图：** 复用 `pr2-after.png` 行上「最新章节疑似不一致」。
 
 ---
 
@@ -561,7 +559,7 @@ flowchart TD
 3. 切到可用源，进度消失，封面/目录出来
 ```
 
-**真机图：** GIF 必须包含「失败 → 进度 → 成功」三段，不要只截成功后的书页。
+**真机图：** 开 PR 时若进度条文案可见，复用 `pr2-after.png`；不必单独 GIF。
 
 ---
 
@@ -599,49 +597,36 @@ flowchart TD
   ☐ 多源章节段评合并  ← 后一 PR
 ```
 
-**真机图：** 设置页新开关；绑定前后阅读页段评入口对比。后续 phase 再补 overlay 图标 / 合并列表截图。
+**真机图：** 开该 PR 时再补设置页一张即可；不纳入 §10 的 3 组。
 
 ---
 
 ## 10. Device evidence (2026-08-13, SM-A366U1)
 
-Regenerate: `python scripts/rfc005-pr-screenshot-session.py`
+只要 **3 组**。PR1 before 来自上游正式包 `legado_app_3.26081201_universal_release`（`com.legado.app.release`）；after 是 fork debug。
 
-This device cannot `screenrecord` (encoder -38); GIFs are stills of the live session. PR1 has no merge-off build, so only **after** (search results).
+重拍 PR1：`python scripts/rfc005-capture-pr1-before.py --query 天才之上 --skip-install`  
+重拍 2/3：`python scripts/rfc005-pr-screenshot-session.py --no-prefs --only cs`
 
-### PR1 搜索结果（作者 merge 后）
+### 1. 作者 merge（搜「天才之上」）
+
+![pr1-before](rfc-005-assets/pr1-before.png)
+
+上游：同名分行，**佚名**单独一张（徽标 3），旁边是「一桶布丁」。
 
 ![pr1-after](rfc-005-assets/pr1-after.png)
 
-同名搜索列表：完整条目带真实作者「老歌」；空作者/占位行单独列出（标题不完全相同则不合并，符合 RFC-003「不猜」）。
+fork：佚名行没有了，「一桶布丁」徽标从 11 升到 20（来源叠进去）。其他真实作者（来一包坚果吧等）仍分开，符合「≥2 种不猜」。
 
-### PR2 菜单：新 toggle vs 上游已有
+### 2. 换源菜单
 
 ![pr2-menu](rfc-005-assets/pr2-menu.png)
 
-已勾选：过滤非小说源、过滤词典简介、正文不合格时移除、足够好源后提前停止。上游已有：校验作者、加载字数、按响应时间排序、字数过滤。
+新开关：过滤非小说源、词典简介、正文不合格移除、足够好源后提前停止。上游已有：校验作者、加载字数、按响应时间排序、字数过滤。
 
-### PR2/PR3/PR4 换源进行中（双行进度 + 列表）
+### 3. 换源进行中
 
 ![pr2-after](rfc-005-assets/pr2-after.png)
 
-底栏：`结果 8 · 命中 9 · 已问 277/1237 · 问中 98/100`。行上「最新章节疑似不一致」。
-
-### PR5 徽章
-
-![pr5-after](rfc-005-assets/pr5-after.png)
-
-「校验中…」+「最新章节疑似不一致」。
-
-### PR6 自动换源进度
-
-![pr6-after](rfc-005-assets/pr6-after.png)
-
-`自动换源·已问 14/30 · 问中 16/30`，上限 30 可见。
-
-### PR7 阅读设置（跨源段评）
-
-![pr7-settings](rfc-005-assets/pr7-settings.png)
-
-跨源段评 / 自动发现段评源 / 显示段评图标 / 多源章评合集，开关均可见。
+双行进度 `结果 · 命中 · 已问/问中`，行上「最新章节疑似不一致」。
 
