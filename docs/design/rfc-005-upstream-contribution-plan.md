@@ -186,10 +186,15 @@ Body skeleton:
 
 Titles like upstream: short Chinese, one change (`允许…` / `修复…` / `支持…`).
 
+**Every PR MUST include a "示意图" section** (see §5.5). A PR with only text will be skimmed and stalled.
+
 ```markdown
 ## 摘要
 - 解决：…
 - 非目标：…
+
+## 示意图
+<!-- before/after 截图 or 录屏 GIF，见 §5.5 选型 -->
 
 ## 行为变化
 - 默认：…
@@ -214,6 +219,42 @@ Use **one** of these, not a laundry list:
 6. **自动换源（PR6）：**「详情/目录加载失败时有上限地尝试可用源，带进度，可关。」
 7. **段评 overlay（PR7+）：**「跨源段评绑定与合并，按 phase 合入，先协议后 UI。」
 
+### 5.5 示意图选型（每个 PR 必须有）
+
+**原则：维护者看图 10 秒决定要不要读正文。** 没图 = 没人审。
+
+| 类型 | 何时用 | 怎么做 |
+|---|---|---|
+| **Before/After 截图** | 列表 / 卡片 / 排序变化 | 两张手机截图并排，红框标差异 |
+| **录屏 GIF** | 动画 / 进度 / 自动行为 | 录 5–10s，转 GIF，<2MB |
+| **菜单截图** | 新 toggle / 设置项 | 展开菜单的截图 + 箭头指新项 |
+| **Mermaid 流程** | 协议 / 状态机 / 触发条件 | 只在截图说不清时用（如段评绑定 phase） |
+
+**截图要求：**
+1. 真机截，不要模拟器
+2. 中文界面（上游是中文项目）
+3. 红框 / 箭头标变化点，别让审查者找
+4. 文件名 `prN-before.png` / `prN-after.png`，放 PR 描述里
+5. GIF 用 `prN-demo.gif`
+
+**每个 PR 的具体示意图：**
+
+| PR | 示意图类型 | 内容 |
+|---|---|---|
+| 1 作者 merge | Before/After 截图 | 搜索「斗破」前：一屏 5 张重复卡片（作者空/佚名）；后：合并成 1–2 张 |
+| 2 非小说过滤 | 菜单截图 + Before/After | 展开换源菜单，箭头指「过滤非小说源」「过滤字典简介」两个新 toggle；开后结果列表对比 |
+| 3 内容差+提前停止 | 录屏 GIF | 开 toggle → 换源 → 进度条跑到「够了好源」自动停，显示停止文案 |
+| 4 进度条升级 | Before/After 截图 | 前：单行「Result 5, Progress 20/100」；后：双行「Result 5 · hits 3 · asked 20/100 · asking 21/100」+ early-stop 状态 |
+| 5 错书降权+徽章 | Before/After 截图 | 前：错书排前面；后：错书沉底 + TOC/最新章徽章（绿✓/红⚠） |
+| 6 自动换源 | 录屏 GIF | 打开书 → 详情失败 → 自动进度条出现 → 换到可用源 → 进度条消失 |
+| 7+ 段评 overlay | Mermaid + 截图 | Mermaid 画绑定流程（哪个 phase）；截图画 overlay 图标和合并结果 |
+
+**不要做的：**
+- 不要贴整页长截图，裁到变化区域
+- 不要贴 fork 专属的调试 / MCP / dig 截图
+- 不要用英文界面截图
+- 不要只放文字描述「效果是…」而不给图
+
 ---
 
 ## 6. What actually persuades this repo
@@ -224,6 +265,7 @@ Observed maintainer pattern (2026-08): small Kotlin PRs, Chinese titles, tests o
 |---|---|
 | Ship the smallest vertical slice | Paste "我们 fork 的 10 个 RFC 路线图" |
 | Default-safe / pref-gated | Force new ranking on everyone |
+| **Include 示意图 in every PR** | Text-only PR description |
 | Link one Issue | Open Project + 12 Issues + 12 PRs day one |
 | Rebase on latest master (they move fast) | PR against stale fork sync |
 | Accept "拆小 / 先要样例" | Argue architecture in the first PR |
@@ -235,7 +277,8 @@ Observed maintainer pattern (2026-08): small Kotlin PRs, Chinese titles, tests o
 
 - [ ] Confirm PR1 scope (作者 smart-merge) still clean on top of latest upstream
 - [ ] Write new Issue with §5.2 (no existing hook for author merge)
-- [ ] Open PR1; wait for review signal before PR2
+- [ ] **Capture before/after screenshots or 录屏 GIF per §5.5 before opening PR**
+- [ ] Open PR1 with §5.3 template (摘要 + 示意图 + 行为变化 + 测试); wait for review signal before PR2
 - [ ] After 1–2 merges: optional umbrella Issue listing remaining table rows
 - [ ] Revisit #666 only after discussing auto-batch product boundaries
 - [ ] Never upstream MCP / repair CLI in the same wave
