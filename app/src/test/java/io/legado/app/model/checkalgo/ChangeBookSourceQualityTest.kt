@@ -70,6 +70,22 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
+    fun latestDifferentChapterNumIsUnknownNotMismatch() {
+        assertNull(
+            ChangeBookSourceQuality.latestMatchesLocal(
+                "第187章 白虎不死神药跟随",
+                "第200章 别的事情发生了",
+            )
+        )
+        assertNull(
+            ChangeBookSourceQuality.latestMatchesLocal(
+                "第187章 白虎不死神药跟随",
+                "第47章 仙府世界",
+            )
+        )
+    }
+
+    @Test
     fun sortTierPutsContentBadBelowOk() {
         val ok = ChangeBookSourceQuality.contentSortTier(3800, "字数：3800")
         val bad = ChangeBookSourceQuality.contentSortTier(-1, "疑似错书/广告劫持")

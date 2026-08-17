@@ -88,6 +88,14 @@ data class SearchBook(
     @IgnoredOnParcel
     var tocMatch: Boolean? = null
 
+    /**
+     * Latest-tip identity from peer cluster (session-only).
+     * null = unknown / not clustered; false = outlier vs the cluster.
+     */
+    @Ignore
+    @IgnoredOnParcel
+    var latestMatch: Boolean? = null
+
     /** Candidate TOC size after deep probe (session-only; 0 = unknown). */
     @Ignore
     @IgnoredOnParcel

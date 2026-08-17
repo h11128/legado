@@ -34,6 +34,7 @@ import io.legado.app.model.checkalgo.AskTimeout
 import io.legado.app.model.checkalgo.AskTimeoutBudget
 import io.legado.app.model.checkalgo.ChangeBookSourceQuality
 import io.legado.app.model.checkalgo.ChangeChapterVerify
+import io.legado.app.model.checkalgo.ChangeSourceLatestConsensus
 import io.legado.app.model.checkalgo.ChangeSourceAskMemory
 import io.legado.app.model.checkalgo.ChangeSourceLog
 import io.legado.app.model.checkalgo.CheckAlgoRuntime
@@ -1396,10 +1397,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         val referenceTrusted = wordCountEvalContext?.referenceTrusted != false
         val tags = searchBook.qualityTags.toMutableList()
         var softTocMismatch = false
-        val latestMatch = ChangeBookSourceQuality.latestMatchesLocal(
-            local?.latestChapterTitle,
-            searchBook.latestChapterTitle,
-        )
+        // Latest-tip identity is cluster-primary; pairwise vs local is not a ruler.
+        val latestMatch = searchBook.latestMatch
         val candSize = tocSize ?: candTitles?.size
         if (candSize != null && candSize > 0) {
             searchBook.tocChapterCount = candSize
@@ -1436,14 +1435,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             val label = getApplication<Application>().getString(R.string.change_source_toc_mismatch)
             if (label !in tags) tags.add(label)
         }
-        // Hard tip mismatch always surfaces as a tag + score penalty, even when soft-meta
-        // badge gates would hide "tip lag" on quality-OK + trusted local ref.
-        if (latestMatch == false) {
-            mergeTier(hitKey, ChangeBookSourceQuality.TIER_LATEST_BAD)
-            val label = getApplication<Application>()
-                .getString(R.string.change_source_latest_mismatch)
-            if (label !in tags) tags.add(label)
-        }
+        // Cluster outliers (applyBookQualityGates) own the latest-mismatch tag.
         searchBook.qualityTags = tags
         searchBook.tocMatch = tocMatch
         refreshSmartScore(
@@ -1460,10 +1452,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         tocMatch: Boolean? = null,
         tocMismatch: Boolean? = null,
     ) {
-        val tipMatch = latestMatch ?: ChangeBookSourceQuality.latestMatchesLocal(
-            oldBook?.latestChapterTitle,
-            searchBook.latestChapterTitle,
-        )
+        val tipMatch = latestMatch ?: searchBook.latestMatch
+        if (latestMatch != null) {
+            searchBook.latestMatch = latestMatch
+        }
         // Persist hard TOC identity on SearchBook so later refreshSmartScore calls
         // (gates / user score / content demote) do not wash −20 into soft −3.
         val hardToc = tocMatch ?: searchBook.tocMatch
@@ -1543,10 +1535,21 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             book.latestChapterTitle?.trim()?.takeIf { it.isNotEmpty() }?.let { book.bookUrl to it }
         }.toMap()
         if (force || titles.size >= ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES) {
-            val latestOutliers = ChangeBookSourceQuality.latestTitleOutliers(
+            val latestOutliers = ChangeSourceLatestConsensus.identityOutliers(
                 titlesByOrigin = titles,
                 localLatest = oldBook?.latestChapterTitle,
             )
+            val inlierUrls = titles.keys - latestOutliers
+            val mismatchLabel = getApplication<Application>()
+                .getString(R.string.change_source_latest_mismatch)
+            for (bookUrl in inlierUrls) {
+                val book = searchBooks.find { it.bookUrl == bookUrl } ?: continue
+                if (mismatchLabel in book.qualityTags) {
+                    book.qualityTags = book.qualityTags.filter { it != mismatchLabel }
+                }
+                book.latestMatch = true
+                refreshSmartScore(book, latestMatch = true)
+            }
             for (bookUrl in latestOutliers) {
                 val book = searchBooks.find { it.bookUrl == bookUrl } ?: continue
                 if (!ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
@@ -1559,10 +1562,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     continue
                 }
                 mergeTier(bookUrl, ChangeBookSourceQuality.TIER_LATEST_BAD)
-                val label = getApplication<Application>()
-                    .getString(R.string.change_source_latest_mismatch)
-                if (label !in book.qualityTags) {
-                    book.qualityTags = book.qualityTags + label
+                if (mismatchLabel !in book.qualityTags) {
+                    book.qualityTags = book.qualityTags + mismatchLabel
                 }
                 refreshSmartScore(book, latestMatch = false)
             }

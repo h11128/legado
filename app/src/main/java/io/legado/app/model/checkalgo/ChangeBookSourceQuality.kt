@@ -3,7 +3,6 @@ package io.legado.app.model.checkalgo
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.help.book.BookAuthorIdentity
 import java.net.URLDecoder
-import kotlin.math.abs
 
 /**
  * Book-level (整书) change-source quality: latest-title affinity, TOC size,
@@ -261,8 +260,8 @@ object ChangeBookSourceQuality {
     const val TOC_MIN_RATIO = 0.35
     const val TOC_MAX_RATIO = 3.0
 
-    /** Digram Jaccard on latest titles: below this vs local ⇒ mismatch. */
-    const val LATEST_REF_SIM_MIN = 0.06
+    /** Digram Jaccard on latest title bodies (same chapter number). */
+    const val LATEST_REF_SIM_MIN = ChangeSourceLatestConsensus.BODY_SIM_MIN
 
     /**
      * When the probed **chapter body** already matches local ref this strongly,
@@ -274,8 +273,8 @@ object ChangeBookSourceQuality {
     /** Peer latest-title cluster edge. */
     const val LATEST_PEER_SIM_MIN = 0.10
 
-    /** Absolute chapter-number gap vs local (when both parse) treated as mismatch. */
-    const val LATEST_NUM_GAP = 80
+    /** Chapter-number window for same-book progress (not a pairwise fail). */
+    const val LATEST_NUM_GAP = ChangeSourceLatestConsensus.NUM_GAP
 
     /** Sort tiers: lower ranks first. */
     const val TIER_OK = 0
@@ -698,107 +697,28 @@ object ChangeBookSourceQuality {
         return out
     }
 
-    /**
-     * Whether [candidateLatest] looks like the same book tip as [localLatest].
-     * Blank sides ⇒ unknown (not a hard fail).
-     */
-    fun latestMatchesLocal(localLatest: String?, candidateLatest: String?): Boolean? {
-        val local = localLatest?.trim().orEmpty()
-        val cand = candidateLatest?.trim().orEmpty()
-        if (local.isEmpty() || cand.isEmpty()) return null
-        val localKey = ChangeChapterVerify.parseProbeKey(ChangeChapterVerify.chapterKey(0, local))
-        val candKey = ChangeChapterVerify.parseProbeKey(ChangeChapterVerify.chapterKey(0, cand))
-        val localBody = titleBodyAfterChapterNum(local)
-        val candBody = titleBodyAfterChapterNum(cand)
-        if (localBody.isNotEmpty() && localBody == candBody) return true
-        if (localKey.num > 0 && candKey.num > 0) {
-            if (abs(localKey.num - candKey.num) >= LATEST_NUM_GAP) return false
-            if (localKey.num == candKey.num) {
-                // Same 「第N章」prefix must not count as a match — compare title bodies only.
-                if (localBody.isEmpty() || candBody.isEmpty()) return false
-                return ChangeChapterVerify.digramJaccard(localBody, candBody) >= LATEST_REF_SIM_MIN
-            }
-        }
-        if (localBody.isNotEmpty() && candBody.isNotEmpty()) {
-            return ChangeChapterVerify.digramJaccard(localBody, candBody) >= LATEST_REF_SIM_MIN
-        }
-        return ChangeChapterVerify.digramJaccard(local, cand) >= LATEST_REF_SIM_MIN
-    }
+    /** Auxiliary pairwise latest-tip rule. Different chapter numbers → unknown. */
+    fun latestMatchesLocal(localLatest: String?, candidateLatest: String?): Boolean? =
+        ChangeSourceLatestConsensus.tipsAgree(localLatest, candidateLatest)
 
-    /** Drop leading 「第N章/回/…」 so shared chapter numbers do not inflate digram scores. */
     internal fun titleBodyAfterChapterNum(
         title: String,
         fallbackToFull: Boolean = true,
-    ): String {
-        val stripped = title.replace(chapterPrefix, "").trim()
-        if (stripped.isNotEmpty()) return stripped
-        return if (fallbackToFull) title.trim() else ""
-    }
-
-    private val chapterPrefix =
-        Regex("^.*?第[\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+[章节篇回集话]")
+    ): String = ChangeSourceLatestConsensus.titleBodyAfterChapterNum(title, fallbackToFull)
 
     /**
-     * Origins whose latest title disagrees with a trustworthy cluster / local tip.
-     * Same safety idea as content consensus: do not demote a coherent minority when
-     * the majority looks like shared spam unless local tip confirms the majority.
+     * Primary latest-tip path: peer-cluster identity outliers.
+     * [localLatest] is one vote, not the ruler.
      */
     fun latestTitleOutliers(
         titlesByOrigin: Map<String, String>,
         localLatest: String? = null,
         minSamples: Int = ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES,
-    ): Set<String> {
-        if (titlesByOrigin.size < minSamples) {
-            return titlesByOrigin.mapNotNull { (origin, title) ->
-                origin.takeIf { latestMatchesLocal(localLatest, title) == false }
-            }.toSet()
-        }
-        val origins = titlesByOrigin.keys.toList()
-        val clusters = ChangeChapterVerify.connectedClusters(origins) { a, b ->
-            ChangeChapterVerify.digramJaccard(
-                titlesByOrigin.getValue(a),
-                titlesByOrigin.getValue(b),
-            ) >= LATEST_PEER_SIM_MIN
-        }.filter { it.size >= 2 }
-        if (clusters.isEmpty()) {
-            return titlesByOrigin.mapNotNull { (origin, title) ->
-                origin.takeIf { latestMatchesLocal(localLatest, title) == false }
-            }.toSet()
-        }
-
-        val local = localLatest?.trim()?.takeIf { it.isNotEmpty() }
-        val scored = clusters.map { members ->
-            val texts = members.map { titlesByOrigin.getValue(it) }
-            val avgLocal = local?.let { tip ->
-                texts.map { ChangeChapterVerify.digramJaccard(it, tip) }.average()
-            }
-            val score = if (local != null) {
-                (avgLocal ?: 0.0) * 20.0 + members.size
-            } else {
-                members.size.toDouble()
-            }
-            Triple(members, score, avgLocal)
-        }
-        val best = scored.maxByOrNull { it.second } ?: return emptySet()
-        if (local != null && (best.third ?: 0.0) < LATEST_REF_SIM_MIN) {
-            return titlesByOrigin.mapNotNull { (origin, title) ->
-                origin.takeIf { latestMatchesLocal(local, title) == false }
-            }.toSet()
-        }
-        val auth = best.first.toSet()
-        val authTitles = best.first.map { titlesByOrigin.getValue(it) }
-        val outliers = LinkedHashSet<String>()
-        for (origin in origins) {
-            if (origin in auth) continue
-            val title = titlesByOrigin.getValue(origin)
-            if (local != null && latestMatchesLocal(local, title) == true) continue
-            val maxSim = authTitles.maxOf { ChangeChapterVerify.digramJaccard(title, it) }
-            if (maxSim < LATEST_PEER_SIM_MIN) {
-                outliers.add(origin)
-            }
-        }
-        return outliers
-    }
+    ): Set<String> = ChangeSourceLatestConsensus.identityOutliers(
+        titlesByOrigin = titlesByOrigin,
+        localLatest = localLatest,
+        minSamples = minSamples,
+    )
 
     /** Merge tier codes; worse (higher) wins. */
     fun worseTier(a: Int, b: Int): Int = maxOf(a, b)
