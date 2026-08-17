@@ -1535,37 +1535,45 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             book.latestChapterTitle?.trim()?.takeIf { it.isNotEmpty() }?.let { book.bookUrl to it }
         }.toMap()
         if (force || titles.size >= ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES) {
-            val latestOutliers = ChangeSourceLatestConsensus.identityOutliers(
+            val consensus = ChangeSourceLatestConsensus.identityConsensus(
                 titlesByOrigin = titles,
                 localLatest = oldBook?.latestChapterTitle,
             )
-            val inlierUrls = titles.keys - latestOutliers
-            val mismatchLabel = getApplication<Application>()
-                .getString(R.string.change_source_latest_mismatch)
-            for (bookUrl in inlierUrls) {
-                val book = searchBooks.find { it.bookUrl == bookUrl } ?: continue
-                if (mismatchLabel in book.qualityTags) {
-                    book.qualityTags = book.qualityTags.filter { it != mismatchLabel }
+            if (consensus.decided) {
+                val latestOutliers = consensus.outliers
+                val inlierUrls = titles.keys - latestOutliers
+                val mismatchLabel = getApplication<Application>()
+                    .getString(R.string.change_source_latest_mismatch)
+                for (bookUrl in inlierUrls) {
+                    val book = searchBooks.find { it.bookUrl == bookUrl } ?: continue
+                    if (mismatchLabel in book.qualityTags) {
+                        book.qualityTags = book.qualityTags.filter { it != mismatchLabel }
+                    }
+                    if (qualityTiers[bookUrl] == ChangeBookSourceQuality.TIER_LATEST_BAD) {
+                        qualityTiers.remove(bookUrl)
+                    }
+                    book.latestMatch = true
+                    refreshSmartScore(book, latestMatch = true)
                 }
-                book.latestMatch = true
-                refreshSmartScore(book, latestMatch = true)
-            }
-            for (bookUrl in latestOutliers) {
-                val book = searchBooks.find { it.bookUrl == bookUrl } ?: continue
-                if (!ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
-                        book.chapterWordCount,
-                        contentRefSimByOrigin[bookUrl],
-                        referenceTrusted = wordCountEvalContext?.referenceTrusted != false,
-                        verdict = book.qualityVerdict,
-                    )
-                ) {
-                    continue
+                for (bookUrl in latestOutliers) {
+                    val book = searchBooks.find { it.bookUrl == bookUrl } ?: continue
+                    if (!ChangeBookSourceQuality.shouldShowLatestMismatchBadge(
+                            book.chapterWordCount,
+                            contentRefSimByOrigin[bookUrl],
+                            referenceTrusted = wordCountEvalContext?.referenceTrusted != false,
+                            verdict = book.qualityVerdict,
+                        )
+                    ) {
+                        book.latestMatch = null
+                        refreshSmartScore(book)
+                        continue
+                    }
+                    mergeTier(bookUrl, ChangeBookSourceQuality.TIER_LATEST_BAD)
+                    if (mismatchLabel !in book.qualityTags) {
+                        book.qualityTags = book.qualityTags + mismatchLabel
+                    }
+                    refreshSmartScore(book, latestMatch = false)
                 }
-                mergeTier(bookUrl, ChangeBookSourceQuality.TIER_LATEST_BAD)
-                if (mismatchLabel !in book.qualityTags) {
-                    book.qualityTags = book.qualityTags + mismatchLabel
-                }
-                refreshSmartScore(book, latestMatch = false)
             }
         }
         if (force || titles.size >= ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES ||

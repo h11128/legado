@@ -15,6 +15,13 @@ object ChangeSourceLatestConsensus {
     const val NUM_GAP = 80
     const val MIN_FACTION = 2
 
+    data class Consensus(val decided: Boolean, val outliers: Set<String> = emptySet()) {
+        companion object {
+            val Undecided = Consensus(false)
+            fun of(outliers: Set<String>) = Consensus(true, outliers)
+        }
+    }
+
     private val chapterPrefix =
         Regex("^.*?第[\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+[章节篇回集话]")
 
@@ -53,38 +60,63 @@ object ChangeSourceLatestConsensus {
         return ChangeChapterVerify.digramJaccard(a.raw, b.raw) >= BODY_SIM_MIN
     }
 
-    /**
-     * Primary path: origins whose tip is an identity outlier vs the peer cluster.
-     * Ahead/behind in chapter number is not an outlier when a real faction exists.
-     */
     fun identityOutliers(
         titlesByOrigin: Map<String, String>,
         localLatest: String? = null,
         minSamples: Int = ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES,
-    ): Set<String> {
-        if (titlesByOrigin.size < minSamples) return emptySet()
+    ): Set<String> = identityConsensus(titlesByOrigin, localLatest, minSamples).outliers
+
+    /**
+     * [Consensus.decided] is false until peers can form a cluster.
+     * Callers must not treat undecided as “everyone matches”.
+     */
+    fun identityConsensus(
+        titlesByOrigin: Map<String, String>,
+        localLatest: String? = null,
+        minSamples: Int = ChangeChapterVerify.MULTI_SOURCE_MIN_SAMPLES,
+    ): Consensus {
+        if (titlesByOrigin.size < minSamples) return Consensus.Undecided
         val parsed = titlesByOrigin.mapNotNull { (origin, title) ->
             parseTip(title)?.let { origin to it }
         }.toMap()
-        if (parsed.size < minSamples) return emptySet()
+        if (parsed.size < minSamples) return Consensus.Undecided
         val origins = parsed.keys.toList()
-        val numbered = origins.filter { parsed.getValue(it).num > 0 }
-        val progressGroups = ChangeChapterVerify.connectedClusters(numbered) { a, b ->
-            abs(parsed.getValue(a).num - parsed.getValue(b).num) < NUM_GAP
-        }
-        val dominant = pickDominantProgress(progressGroups, parsed) ?: return emptySet()
-        val dominantMedian = medianNum(dominant.map { parsed.getValue(it).num })
         val identityGroups = ChangeChapterVerify.connectedClusters(origins) { a, b ->
             tipsAgree(parsed.getValue(a).raw, parsed.getValue(b).raw) == true
         }.filter { it.size >= MIN_FACTION }
+        val numbered = origins.filter { parsed.getValue(it).num > 0 }
+        if (numbered.isEmpty()) {
+            return unnumberedConsensus(origins, parsed, identityGroups, localLatest)
+        }
+        val progressGroups = ChangeChapterVerify.connectedClusters(numbered) { a, b ->
+            abs(parsed.getValue(a).num - parsed.getValue(b).num) < NUM_GAP
+        }
+        val dominant = pickDominantProgress(progressGroups, parsed) ?: return Consensus.Undecided
         val auth = pickAuthIdentity(identityGroups, dominant, parsed, localLatest)
+        if (auth.isEmpty()) return Consensus.Undecided
+        val dominantMedian = medianNum(dominant.map { parsed.getValue(it).num })
         val outliers = LinkedHashSet<String>()
         for (origin in origins) {
             if (isIdentityOutlier(origin, parsed, dominantMedian, auth)) {
                 outliers.add(origin)
             }
         }
-        return outliers
+        return Consensus.of(outliers)
+    }
+
+    private fun unnumberedConsensus(
+        origins: List<String>,
+        parsed: Map<String, ParsedTip>,
+        identityGroups: List<List<String>>,
+        localLatest: String?,
+    ): Consensus {
+        if (identityGroups.isEmpty()) return Consensus.Undecided
+        val auth = pickAuthIdentity(identityGroups, emptyList(), parsed, localLatest)
+        if (auth.isEmpty()) return Consensus.Undecided
+        val outliers = origins.filter { origin ->
+            origin !in auth && auth.none { tipsAgree(parsed.getValue(origin).raw, parsed.getValue(it).raw) == true }
+        }.toSet()
+        return Consensus.of(outliers)
     }
 
     private fun pickDominantProgress(

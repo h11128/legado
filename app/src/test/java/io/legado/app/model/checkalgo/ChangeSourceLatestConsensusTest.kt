@@ -170,8 +170,46 @@ class ChangeSourceLatestConsensusTest {
             "a" to "第187章 白虎不死神药跟随",
             "bad" to "交易(校园NP，高H，全C)",
         )
-        assertTrue(
-            ChangeSourceLatestConsensus.identityOutliers(titlesByOrigin = titles).isEmpty(),
+        val consensus = ChangeSourceLatestConsensus.identityConsensus(titlesByOrigin = titles)
+        assertFalse(consensus.decided)
+        assertTrue(consensus.outliers.isEmpty())
+    }
+
+    @Test
+    fun clusterUnnumberedIsolateIsOutlier() {
+        val titles = mapOf(
+            "a" to "交易(校园NP，高H，全C)",
+            "b" to "交易(校园NP，高H，全C)",
+            "c" to "交易(校园NP，高H，全C)",
+            "other" to "详细",
         )
+        val consensus = ChangeSourceLatestConsensus.identityConsensus(titlesByOrigin = titles)
+        assertTrue(consensus.decided)
+        assertTrue(consensus.outliers.contains("other"))
+        assertFalse(consensus.outliers.contains("a"))
+    }
+
+    @Test
+    fun clusterNumberedWithoutIdentityFactionIsUndecided() {
+        val titles = mapOf(
+            "a" to "第187章 白虎不死神药跟随",
+            "b" to "交易甲",
+            "c" to "详细乙",
+        )
+        val consensus = ChangeSourceLatestConsensus.identityConsensus(titlesByOrigin = titles)
+        assertFalse(consensus.decided)
+        assertTrue(consensus.outliers.isEmpty())
+    }
+
+    @Test
+    fun clusterAllUnnumberedNoFactionIsUndecided() {
+        val titles = mapOf(
+            "a" to "交易甲",
+            "b" to "详细乙",
+            "c" to "目录丙",
+        )
+        val consensus = ChangeSourceLatestConsensus.identityConsensus(titlesByOrigin = titles)
+        assertFalse(consensus.decided)
+        assertTrue(consensus.outliers.isEmpty())
     }
 }
