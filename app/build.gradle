@@ -63,7 +63,8 @@ android {
     }
     defaultConfig {
         applicationId "com.legado.app"
-        minSdk 23
+        // htmlunit-core-js 5.3 uses MethodHandle.invoke (D8 requires API 26).
+        minSdk 26
         targetSdk 36
         versionCode = versionCodeValue
         versionName version
