@@ -196,7 +196,8 @@ object ReadBook : CoroutineScope by MainScope() {
                 it.isRegex,
                 it.styleObj(),
                 it.timeoutMillisecond,
-                it.applyToTitle
+                applyToTitle = it.applyToTitle,
+                applyToBody = it.applyToBody
             )
         }
         val chapterBookUrl = textChapter.chapter.bookUrl
@@ -206,7 +207,8 @@ object ReadBook : CoroutineScope by MainScope() {
             val matchResult = HighlightRuleMatcher.matchDetailed(
                 chapterText(textChapter),
                 rules,
-                shouldContinue = { job.isActive }
+                shouldContinue = { job.isActive },
+                titleLength = textChapter.layoutTitleLength
             )
             withContext(Main) {
                 if (highlightRulesVersion != version ||
@@ -1266,7 +1268,7 @@ object ReadBook : CoroutineScope by MainScope() {
             ensureActive()
             if (cList.size > chapterSize) {
                 if (oldBook.bookUrl == book.bookUrl) {
-                    appDb.bookDao.update(book)
+                    book.update()
                 } else {
                     appDb.bookDao.replace(oldBook, book)
                     BookHelp.updateCacheFolder(oldBook, book)

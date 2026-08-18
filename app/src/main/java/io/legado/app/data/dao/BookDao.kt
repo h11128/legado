@@ -14,6 +14,7 @@ import io.legado.app.data.entities.BookCacheCleanupSnapshot
 import io.legado.app.data.entities.BookCacheInfo
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.BookshelfBook
 import io.legado.app.help.book.isNotShelf
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
@@ -51,6 +52,17 @@ interface BookDao {
 
     @Query("SELECT * FROM books order by durChapterTime desc")
     fun flowAll(): Flow<List<Book>>
+
+    @Query(
+        """
+        SELECT bookUrl, origin, name, author, coverUrl, customCoverUrl, type, `group`,
+        ((SELECT coalesce(sum(groupId), 0) FROM book_groups WHERE groupId > 0) & `group`) != 0
+            AS hasUserGroup,
+        latestChapterTime, durChapterTime, `order`, persistedCoverUrl
+        FROM books WHERE type & ${BookType.notShelf} = 0
+        """
+    )
+    fun flowBookshelfBooks(): Flow<List<BookshelfBook>>
 
     @Query("SELECT * FROM books WHERE type & ${BookType.audio} > 0")
     fun flowAudio(): Flow<List<Book>>
@@ -133,6 +145,11 @@ interface BookDao {
     @get:Query("SELECT * FROM books")
     val all: List<Book>
 
+    @get:Query(
+        "SELECT * FROM books WHERE type & ${BookType.notShelf} = 0 ORDER BY `order`"
+    )
+    val allShelfByOrder: List<Book>
+
     @Query("SELECT bookUrl, name, origin, originName, type FROM books")
     fun getCacheCleanupBooks(): List<BookCacheInfo>
 
@@ -206,6 +223,70 @@ interface BookDao {
     @Update
     fun update(vararg book: Book)
 
+    @Query("UPDATE books SET `order` = :order WHERE bookUrl = :bookUrl")
+    fun updateOrder(bookUrl: String, order: Int)
+
+    @Transaction
+    fun updateOrder(books: List<Book>) {
+        books.forEach { updateOrder(it.bookUrl, it.order) }
+    }
+
+    @Query("select customCoverUrl from books where bookUrl = :bookUrl")
+    fun getCustomCoverUrl(bookUrl: String): String?
+
+    @Query("select persistedCoverUrl from books where bookUrl = :bookUrl")
+    fun getPersistedCoverUrl(bookUrl: String): String?
+
+    @Transaction
+    fun updatePreservingCustomCoverUrl(vararg books: Book) {
+        books.forEach { book ->
+            update(
+                book.copy(
+                    customCoverUrl = getCustomCoverUrl(book.bookUrl),
+                    persistedCoverUrl = getPersistedCoverUrl(book.bookUrl),
+                )
+            )
+        }
+    }
+
+    @Query(
+        """update books set persistedCoverUrl = :persistedCoverUrl
+        where bookUrl = :bookUrl
+        and origin = :expectedOrigin
+        and coverUrl is :expectedCoverUrl
+        and customCoverUrl is :expectedCustomCoverUrl
+        and persistedCoverUrl is :expectedPersistedCoverUrl"""
+    )
+    fun updatePersistedCoverUrlIfUnchanged(
+        bookUrl: String,
+        expectedOrigin: String,
+        expectedCoverUrl: String?,
+        expectedCustomCoverUrl: String?,
+        expectedPersistedCoverUrl: String?,
+        persistedCoverUrl: String?,
+    ): Int
+
+    @Query(
+        """update books set persistedCoverUrl = null
+        where bookUrl = :bookUrl and persistedCoverUrl is :expectedPersistedCoverUrl"""
+    )
+    fun clearPersistedCoverUrlIfUnchanged(
+        bookUrl: String,
+        expectedPersistedCoverUrl: String?,
+    ): Int
+
+    @Query(
+        """update books set customCoverUrl = null, persistedCoverUrl = null
+        where bookUrl = :bookUrl
+        and customCoverUrl is :expectedCustomCoverUrl
+        and persistedCoverUrl is :expectedPersistedCoverUrl"""
+    )
+    fun clearCoverOverridesIfUnchanged(
+        bookUrl: String,
+        expectedCustomCoverUrl: String?,
+        expectedPersistedCoverUrl: String?,
+    ): Int
+
     @Query("select readConfig from books where bookUrl = :bookUrl")
     fun getReadConfigJson(bookUrl: String): String?
 
@@ -215,7 +296,7 @@ interface BookDao {
     @Transaction
     fun updatePreservingReadConfig(book: Book) {
         val readConfig = getReadConfigJson(book.bookUrl)
-        update(book)
+        updatePreservingCustomCoverUrl(book)
         updateReadConfigJson(book.bookUrl, readConfig)
     }
 
@@ -234,8 +315,16 @@ interface BookDao {
 
     @Transaction
     fun replace(oldBook: Book, newBook: Book) {
+        val storedBookUrl = if (has(newBook.bookUrl)) newBook.bookUrl else oldBook.bookUrl
+        val customCoverUrl = getCustomCoverUrl(storedBookUrl)
+        val persistedCoverUrl = getPersistedCoverUrl(storedBookUrl)
         delete(oldBook)
-        insert(newBook)
+        insert(
+            newBook.copy(
+                customCoverUrl = customCoverUrl,
+                persistedCoverUrl = persistedCoverUrl,
+            )
+        )
     }
 
     @Query("update books set durChapterPos = :pos where bookUrl = :bookUrl")
@@ -246,6 +335,9 @@ interface BookDao {
 
     @Query("update books set `group` = :newGroupId where `group` = :oldGroupId")
     fun upGroup(oldGroupId: Long, newGroupId: Long)
+
+    @Query("update books set `group` = `group` | :groupId where bookUrl in (:bookUrls)")
+    fun addGroup(bookUrls: List<String>, groupId: Long)
 
     @Query("update books set `group` = `group` - :group where `group` & :group > 0")
     fun removeGroup(group: Long)

@@ -21,10 +21,21 @@ test('uses bounded labels and stable source list rows', () => {
   const form = readSource('components/SourceTabForm.vue')
   const list = readSource('components/SourceList.vue')
 
-  assert.match(form, /label-width="220px"/)
+  assert.match(form, /label-width="140px"/)
   assert.match(list, /:data-key="getSourceUniqueKey"/)
   assert.match(list, /class="source-list-panel"/)
   assert.doesNotMatch(list, /calc\(100% - 75px\)/)
+})
+
+test('measures source textareas only while their tab is visible', () => {
+  const form = readSource('components/SourceTabForm.vue')
+  const editor = readSource('views/SourceEditor.vue')
+
+  assert.match(form, /<el-tabs id="source-edit" v-model="activeTab">/)
+  assert.match(form, /:name="name"/)
+  assert.match(form, /v-if="activeTab === name"/)
+  assert.match(editor, /\.right \{\s*flex: 1/)
+  assert.doesNotMatch(editor, /flex: 0 0 360px/)
 })
 
 test('keeps the JavaScript source toolbar balanced on narrow screens', () => {
@@ -57,6 +68,10 @@ test('keeps source editor state and mobile controls reachable', () => {
   assert.match(tools, /set: val => store\.changeTabName\(val\)/)
   assert.doesNotMatch(json, /margin-bottom: 4px/)
   assert.match(config, /返回 -1 表示章评，1 开始表示正文段落/)
+  assert.match(
+    config,
+    /id: 'replyContentRule',[\s\S]*hint: 'text\/replyToName\/img\/audio\/time\/likeCount'/,
+  )
 })
 
 test('keeps a validated source token after debug transport errors', () => {
@@ -75,4 +90,23 @@ test('keeps a validated source token after debug transport errors', () => {
     axios,
     /errorMsg\.includes\('访问令牌'\)[\s\S]*clearSourceApiToken\(\)/,
   )
+})
+
+test('skips source tokens only when the server disables protection', () => {
+  const token = readSource('api/sourceToken.ts')
+  const api = readSource('api/api.ts')
+  const axios = readSource('api/axios.ts')
+
+  assert.match(token, /getJsSourceApiTokenRequired/)
+  assert.match(token, /cache: 'no-store'/)
+  assert.match(token, /if \(!response\.ok\) return true/)
+  assert.match(token, /catch \{\s*return true\s*\}/)
+  assert.match(token, /if \(!\(await isSourceApiTokenRequired\(\)\)\) return undefined/)
+  assert.match(
+    token,
+    /token \? \['legado', sourceApiTokenWebSocketProtocol\(token\)\] : \['legado'\]/,
+  )
+  assert.match(axios, /if \(token\) config\.headers\.set\('X-Legado-Token', token\)/)
+  assert.match(api, /token: string \| undefined/)
+  assert.match(api, /sourceApiTokenWebSocketProtocols\(token\)/)
 })

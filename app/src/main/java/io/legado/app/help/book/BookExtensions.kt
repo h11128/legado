@@ -252,7 +252,15 @@ fun Book.sync(currentBook: Book, toc: List<BookChapter>) {
 }
 
 fun Book.update() {
-    appDb.bookDao.update(this)
+    appDb.bookDao.updatePreservingCustomCoverUrl(this)
+}
+
+fun Book.savePreservingCustomCoverUrl() {
+    if (appDb.bookDao.has(bookUrl)) {
+        appDb.bookDao.updatePreservingCustomCoverUrl(this)
+    } else {
+        appDb.bookDao.insert(this)
+    }
 }
 
 fun Book.primaryStr(): String {
@@ -269,6 +277,7 @@ fun Book.updateTo(newBook: Book): Book {
     newBook.group = group
     newBook.order = order
     newBook.customCoverUrl = customCoverUrl
+    newBook.persistedCoverUrl = persistedCoverUrl
     newBook.customIntro = customIntro
     newBook.customTag = customTag
     newBook.canUpdate = canUpdate

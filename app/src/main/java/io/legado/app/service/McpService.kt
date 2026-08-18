@@ -204,8 +204,7 @@ class McpService : BaseService() {
             return
         }
         val token = AppConfig.jsSourceApiToken
-        if (token.isNullOrBlank()) {
-            // Missing token is user config — do not spin retries.
+        if (AppConfig.jsSourceApiTokenRequired && token.isNullOrBlank()) {
             failStart(getString(R.string.mcp_service_token_required), retry = false)
             return
         }
@@ -225,6 +224,7 @@ class McpService : BaseService() {
                 connectionIdleTimeoutSeconds = CONNECTION_IDLE_TIMEOUT_SEC
             }) {
                 configureMcp(
+                    tokenRequiredProvider = { AppConfig.jsSourceApiTokenRequired },
                     tokenProvider = { AppConfig.jsSourceApiToken },
                     unauthorizedMessage = {
                         this@McpService.getString(R.string.mcp_service_token_invalid)

@@ -7,6 +7,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.BookType
+import io.legado.app.help.book.isLegacyPersistedCoverPath
+import java.util.UUID
 
 object DatabaseMigrations {
 
@@ -21,6 +23,7 @@ object DatabaseMigrations {
             migration_35_36, migration_36_37, migration_37_38, migration_38_39,
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
             migration_101_102,
+            migration_102_103,
         )
     }
 
@@ -516,6 +519,57 @@ object DatabaseMigrations {
             db.execSQL(
                 "CREATE INDEX IF NOT EXISTS `index_book_review_bindings_providerSourceUrl` " +
                     "ON `book_review_bindings` (`providerSourceUrl`)"
+            )
+        }
+    }
+
+    /** Upstream 100–103: highlight uuid/body, persisted cover, replace-rule source scope. */
+    private val migration_102_103 = object : Migration(102, 103) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE highlightRules ADD COLUMN applyToBody INTEGER NOT NULL DEFAULT 1"
+            )
+            db.execSQL(
+                "ALTER TABLE highlightRules ADD COLUMN uuid TEXT NOT NULL DEFAULT ''"
+            )
+            val statement = db.compileStatement(
+                "UPDATE highlightRules SET uuid = ? WHERE id = ?"
+            )
+            db.query("SELECT id FROM highlightRules").use { cursor ->
+                while (cursor.moveToNext()) {
+                    statement.clearBindings()
+                    statement.bindString(1, UUID.randomUUID().toString())
+                    statement.bindLong(2, cursor.getLong(0))
+                    statement.executeUpdateDelete()
+                }
+            }
+            statement.close()
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_highlightRules_uuid " +
+                    "ON highlightRules(uuid)"
+            )
+            db.execSQL("ALTER TABLE books ADD COLUMN persistedCoverUrl TEXT")
+            val update = db.compileStatement(
+                """update books set persistedCoverUrl = ?, customCoverUrl = null
+                where bookUrl = ? and customCoverUrl is ? and persistedCoverUrl is null"""
+            )
+            db.query(
+                "select bookUrl, customCoverUrl from books where customCoverUrl is not null"
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val bookUrl = cursor.getString(0)
+                    val customCoverUrl = cursor.getString(1)
+                    if (!isLegacyPersistedCoverPath(customCoverUrl)) continue
+                    update.clearBindings()
+                    update.bindString(1, customCoverUrl)
+                    update.bindString(2, bookUrl)
+                    update.bindString(3, customCoverUrl)
+                    update.executeUpdateDelete()
+                }
+            }
+            update.close()
+            db.execSQL(
+                "ALTER TABLE replace_rules ADD COLUMN scopeSource INTEGER NOT NULL DEFAULT 0"
             )
         }
     }

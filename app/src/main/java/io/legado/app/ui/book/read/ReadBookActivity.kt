@@ -15,6 +15,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
+import android.widget.FrameLayout
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -161,7 +162,6 @@ import io.legado.app.utils.invisible
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.isTrue
 import io.legado.app.utils.launch
-import io.legado.app.utils.navigationBarGravity
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.postEvent
@@ -951,24 +951,24 @@ class ReadBookActivity : BaseReadBookActivity(),
             MotionEvent.ACTION_MOVE -> {
                 when (v.id) {
                     R.id.cursor_left -> if (!readView.curPage.getReverseStartCursor()) {
-                        readView.curPage.selectStartMove(
+                        readView.selectStartMoveAtRaw(
                             event.rawX + cursorLeft.width,
                             event.rawY - cursorLeft.height
                         )
                     } else {
-                        readView.curPage.selectEndMove(
+                        readView.selectEndMoveAtRaw(
                             event.rawX - cursorRight.width,
                             event.rawY - cursorRight.height
                         )
                     }
 
                     R.id.cursor_right -> if (readView.curPage.getReverseEndCursor()) {
-                        readView.curPage.selectStartMove(
+                        readView.selectStartMoveAtRaw(
                             event.rawX + cursorLeft.width,
                             event.rawY - cursorLeft.height
                         )
                     } else {
-                        readView.curPage.selectEndMove(
+                        readView.selectEndMoveAtRaw(
                             event.rawX - cursorRight.width,
                             event.rawY - cursorRight.height
                         )
@@ -976,7 +976,8 @@ class ReadBookActivity : BaseReadBookActivity(),
                 }
             }
 
-            MotionEvent.ACTION_UP -> {
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                readView.dismissTextMagnifier()
                 readView.curPage.resetReverseCursor()
                 showTextActionMenu()
             }
@@ -1021,12 +1022,9 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 显示文本操作菜单
      */
     override fun showTextActionMenu() {
-        val navigationBarHeight =
-            if (!ReadBookConfig.hideNavigationBar && navigationBarGravity == Gravity.BOTTOM)
-                binding.navigationBar.height else 0
         textActionMenu.show(
             binding.textMenuPosition,
-            binding.root.height + navigationBarHeight,
+            binding.root.rootView.height,
             binding.textMenuPosition.x.toInt(),
             binding.textMenuPosition.y.toInt(),
             binding.cursorLeft.y.toInt() + binding.cursorLeft.height,
@@ -2726,12 +2724,9 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
             popupAction.dismiss()
         }
-        val navigationBarHeight =
-            if (!ReadBookConfig.hideNavigationBar && navigationBarGravity == Gravity.BOTTOM)
-                binding.navigationBar.height else 0
         popupAction.showAtLocation(
             binding.readView, Gravity.BOTTOM or Gravity.LEFT, x.toInt(),
-            binding.root.height + navigationBarHeight - y.toInt()
+            binding.root.rootView.height - y.toInt()
         )
     }
 
@@ -3083,6 +3078,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         bookmarkJob = null
         bookmarkBookKey = null
         bookmarks = emptyList()
+        binding.readView.curPage.showBookmarkIndicator(false)
         binding.bookmarkIndicator.isGone = true
     }
 
@@ -3091,11 +3087,18 @@ class ReadBookActivity : BaseReadBookActivity(),
         val hasBookmark = page.lines.isNotEmpty() && bookmarks.any {
             it.chapterIndex == page.chapterIndex && page.containPos(it.chapterPos)
         }
-        binding.bookmarkIndicator.isVisible = AppConfig.pullToToggleBookmark &&
+        val showIndicator = AppConfig.pullToToggleBookmark &&
                 !binding.readView.isScroll && hasBookmark
+        val shownInHeader = binding.readView.curPage.showBookmarkIndicator(showIndicator)
+        binding.bookmarkIndicator.isVisible = showIndicator && !shownInHeader
         if (binding.bookmarkIndicator.isVisible) {
             binding.bookmarkIndicator.post {
                 if (binding.bookmarkIndicator.isVisible) {
+                    binding.bookmarkIndicator.layoutParams =
+                        (binding.bookmarkIndicator.layoutParams as FrameLayout.LayoutParams).apply {
+                            marginEnd = 12.dpToPx() +
+                                    binding.readView.curPage.displayCutoutPaddingEnd
+                        }
                     binding.bookmarkIndicator.translationY =
                         (binding.readView.curPage.headerHeight + 8.dpToPx()).toFloat()
                 }
@@ -3203,7 +3206,10 @@ class ReadBookActivity : BaseReadBookActivity(),
                 when (value) {
                     0 -> upSystemUiVisibility()
                     1 -> readView.upBg()
-                    2 -> readView.upStyle()
+                    2 -> {
+                        readView.upStyle()
+                        upBookmarkIndicator()
+                    }
                     3 -> readView.upBgAlpha()
                     4 -> readView.upPageSlopSquare()
                     5 -> if (isInitFinish) {

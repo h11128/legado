@@ -379,7 +379,6 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
             expandedHeight = heightSpec.expandedHeight,
         )
         behavior?.let { behavior ->
-            behaviorSpec.state?.let { behavior.state = it }
             behaviorSpec.peekHeight?.let { behavior.peekHeight = it }
             config.isHideable?.let { behavior.isHideable = it }
             behaviorSpec.skipCollapsed?.let { behavior.skipCollapsed = it }
@@ -541,6 +540,8 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                 }
             }
         }
+
+        behaviorSpec.state?.let { behavior?.state = it }
 
         val scrollNoDraggable = config.scrollNoDraggable ?: if (first) true else null
         scrollNoDraggable?.let {
@@ -706,6 +707,16 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                         }
                     }
                 }
+                appDb.bookSourceDao.getBookSource(sourceKey).let {
+                    if (it == null) {
+                        withContext(Dispatchers.Main) {
+                            activity?.toastOnUi("no find bookSource")
+                            dismiss()
+                        }
+                        return@launch
+                    }
+                    source = it
+                }
                 val analyzeUrl =
                     AnalyzeUrl(url, source = source, coroutineContext = coroutineContext)
                 val html = args.getString("html") ?: analyzeUrl.getStrResponseAwait().body
@@ -729,16 +740,6 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                         JS_URL + html
                     }
                 }
-                appDb.bookSourceDao.getBookSource(sourceKey).let {
-                    if (it == null) {
-                        withContext(Dispatchers.Main) {
-                            activity?.toastOnUi("no find bookSource")
-                            dismiss()
-                        }
-                        return@launch
-                    }
-                    source = it
-                }
                 val bookType = args.getInt("bookType", 0)
                 withContext(Dispatchers.Main) {
                     currentWebView.onResume() //缓存库拿的需要激活
@@ -748,7 +749,6 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
             }.onFailure { error ->
                 if (error is CancellationException) throw error
                 withContext(Dispatchers.Main) {
-                    currentWebView.resumeTimers()
                     currentWebView.onResume()
                     currentWebView.loadDataWithBaseURL(
                         url,

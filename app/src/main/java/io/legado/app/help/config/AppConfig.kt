@@ -324,6 +324,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val showDiscovery: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showDiscovery, true)
 
+    val showDiscoveryFastScroller: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.showDiscoveryFastScroller, false)
+
     val showRSS: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showRss, true)
 
@@ -556,6 +559,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.mcpPort, value)
         }
 
+    val jsSourceApiTokenRequired: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.jsSourceApiTokenRequired, true)
+
     var jsSourceApiToken: String?
         get() = appCtx.getSharedPreferences(JS_SOURCE_API_PREFS, MODE_PRIVATE)
             .getString(JS_SOURCE_API_TOKEN, null)
@@ -696,12 +702,17 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         set(value) {
             appCtx.putPrefBoolean(PreferKey.importShowComment, value)
         }
+    var importReplaceSource: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.importReplaceSource, false)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.importReplaceSource, value)
+        }
 
     val clickImgWay: String?
         get() = appCtx.getPrefString(PreferKey.clickImgWay)
 
-    val highlightActionByLongPress: Boolean
-        get() = appCtx.getPrefString(PreferKey.highlightActionTrigger, "click") == "longPress"
+    val highlightActionTrigger: String?
+        get() = appCtx.getPrefString(PreferKey.highlightActionTrigger, "click")
 
     var preDownloadNum
         get() = appCtx.getPrefInt(PreferKey.preDownloadNum, 2)
@@ -905,6 +916,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.disableMangaScale, true)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.disableMangaScale, value)
+        }
+
+    var mangaLongClickSaveImage: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.mangaLongClickSaveImage, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.mangaLongClickSaveImage, value)
         }
 
     var disableMangaPageAnim: Boolean

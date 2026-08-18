@@ -1,7 +1,13 @@
 package io.legado.app.ui.book.read.page
 
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.LayerDrawable
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ReplacementSpan
 import android.view.LayoutInflater
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
@@ -20,6 +26,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
 import io.legado.app.help.config.ReaderInfoValues
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.page.entities.TextLine
@@ -37,6 +44,54 @@ import io.legado.app.utils.setTextIfNotEqual
 import splitties.views.backgroundColor
 import java.util.Date
 
+internal object BookmarkIndicatorGeometry {
+    fun size(ascent: Int, descent: Int): Int = (descent - ascent).coerceAtLeast(1)
+
+    fun top(baseline: Int, ascent: Int): Int = baseline + ascent
+}
+
+private class BookmarkIndicatorSpan(
+    private val drawable: Drawable,
+) : ReplacementSpan() {
+
+    override fun getSize(
+        paint: Paint,
+        text: CharSequence,
+        start: Int,
+        end: Int,
+        fm: Paint.FontMetricsInt?,
+    ): Int {
+        val metrics = paint.fontMetricsInt
+        fm?.apply {
+            top = metrics.top
+            ascent = metrics.ascent
+            descent = metrics.descent
+            bottom = metrics.bottom
+            leading = metrics.leading
+        }
+        return BookmarkIndicatorGeometry.size(metrics.ascent, metrics.descent)
+    }
+
+    override fun draw(
+        canvas: Canvas,
+        text: CharSequence,
+        start: Int,
+        end: Int,
+        x: Float,
+        top: Int,
+        y: Int,
+        bottom: Int,
+        paint: Paint,
+    ) {
+        val metrics = paint.fontMetricsInt
+        val size = BookmarkIndicatorGeometry.size(metrics.ascent, metrics.descent)
+        val left = x.toInt()
+        val drawableTop = BookmarkIndicatorGeometry.top(y, metrics.ascent)
+        drawable.setBounds(left, drawableTop, left + size, drawableTop + size)
+        drawable.draw(canvas)
+    }
+}
+
 /**
  * 页面视图
  */
@@ -48,6 +103,22 @@ class PageView(context: Context) : FrameLayout(context) {
     private var readerInfoValues = ReaderInfoValues(battery = 100)
     private var readerInfoViews = emptyArray<ReaderInfoView>()
     private var isMainView = false
+    private var bookmarkIndicatorVisible = false
+    private val bookmarkDrawable by lazy {
+        requireNotNull(ContextCompat.getDrawable(context, R.drawable.ic_bookmark_filled))
+            .mutate()
+            .apply { setTint(context.accentColor) }
+    }
+    private val bookmarkIndicatorText by lazy {
+        SpannableString("\uFFFC").apply {
+            setSpan(
+                BookmarkIndicatorSpan(bookmarkDrawable),
+                0,
+                length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
+    }
     var isScroll = false
 
     val headerHeight: Int
@@ -60,6 +131,8 @@ class PageView(context: Context) : FrameLayout(context) {
         get() {
             return binding.vwRoot.paddingStart
         }
+    val displayCutoutPaddingEnd: Int
+        get() = binding.vwRoot.paddingEnd
 
     init {
         if (!isInEditMode) {
@@ -147,6 +220,9 @@ class PageView(context: Context) : FrameLayout(context) {
                     insets.right,
                     insets.bottom
                 )
+                if (isMainView) {
+                    readBookActivity?.upBookmarkIndicator()
+                }
                 windowInsets
             }
         } else {
@@ -200,7 +276,7 @@ class PageView(context: Context) : FrameLayout(context) {
             readerInfoView.view.apply {
                 isBattery = false
                 typeface = ChapterProvider.typeface
-                textSize = 12f
+                textSize = ReadTipConfig.tipTextSize.toFloat()
             }
         }
     }
@@ -209,6 +285,16 @@ class PageView(context: Context) : FrameLayout(context) {
         readerInfoViews.forEach { readerInfoView ->
             val view = readerInfoView.view
             val template = readerInfoView.template
+            if (view === binding.tvHeaderRight) {
+                view.setCompoundDrawablesRelative(null, null, null, null)
+                if (bookmarkIndicatorVisible) {
+                    view.setTextIfNotEqual(bookmarkIndicatorText)
+                    view.contentDescription = context.getString(R.string.bookmark)
+                    view.isGone = false
+                    return@forEach
+                }
+                view.contentDescription = null
+            }
             if (view === binding.tvFooterLeft) {
                 view.isInvisible = template.isEmpty()
             } else {
@@ -220,6 +306,14 @@ class PageView(context: Context) : FrameLayout(context) {
                 )
             }
         }
+    }
+
+    fun showBookmarkIndicator(show: Boolean): Boolean {
+        if (bookmarkIndicatorVisible != show) {
+            bookmarkIndicatorVisible = show
+            renderReaderInfo()
+        }
+        return show && !binding.llHeader.isGone
     }
 
     private data class ReaderInfoView(

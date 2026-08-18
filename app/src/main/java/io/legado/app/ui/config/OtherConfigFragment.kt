@@ -86,7 +86,11 @@ class OtherConfigFragment : PreferenceFragment(),
                 val token = normalizeJsSourceApiToken(newValue?.toString())
                 AppConfig.jsSourceApiToken = token
                 upPreferenceSummary(PreferKey.jsSourceApiToken, token)
-                if (McpService.isRun && previousToken != token) {
+                if (
+                    McpService.isRun &&
+                    AppConfig.jsSourceApiTokenRequired &&
+                    previousToken != token
+                ) {
                     if (token == null) {
                         McpService.stop(requireContext())
                     } else {
@@ -242,6 +246,16 @@ class OtherConfigFragment : PreferenceFragment(),
 
             PreferKey.mcpPort -> {
                 upPreferenceSummary(key, AppConfig.mcpPort.toString())
+                if (McpService.isRun) {
+                    McpService.restart(requireContext())
+                }
+            }
+
+            PreferKey.jsSourceApiTokenRequired -> {
+                if (WebService.isRun) {
+                    WebService.stop(requireContext())
+                    WebService.start(requireContext())
+                }
                 if (McpService.isRun) {
                     McpService.restart(requireContext())
                 }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
+import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
@@ -33,6 +34,7 @@ import io.legado.app.utils.writeToOutputStream
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -47,6 +49,51 @@ import java.util.concurrent.TimeUnit
 import androidx.core.content.edit
 import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
 
+internal fun selectedBackupFileNames(isEnabled: (String) -> Boolean): List<String> =
+    buildList {
+        if (isEnabled(BackupConfig.bookshelfContentKey)) {
+            addAll(listOf("bookshelf.json", "bookGroup.json"))
+        }
+        if (isEnabled(BackupConfig.annotationContentKey)) {
+            addAll(listOf("bookmark.json", "highlight.json", "highlightRule.json"))
+        }
+        if (isEnabled(BackupConfig.sourceContentKey)) {
+            addAll(listOf("bookSource.json", "rssSources.json", "rssStar.json", "sourceSub.json"))
+        }
+        if (isEnabled(BackupConfig.cookieContentKey)) {
+            add(BackupConfig.cookieFileName)
+        }
+        if (isEnabled(BackupConfig.ruleContentKey)) {
+            addAll(
+                listOf(
+                    "replaceRule.json",
+                    "txtTocRule.json",
+                    "httpTTS.json",
+                    "keyboardAssists.json",
+                    "dictRule.json",
+                    "autoTask.json",
+                    "servers.json",
+                    DirectLinkUpload.ruleFileName,
+                    BookCover.configFileName,
+                )
+            )
+        }
+        if (isEnabled(BackupConfig.historyContentKey)) {
+            addAll(listOf("readRecord.json", "searchHistory.json"))
+        }
+        if (isEnabled(BackupConfig.settingContentKey)) {
+            addAll(
+                listOf(
+                    ReadBookConfig.configFileName,
+                    ReadBookConfig.shareConfigFileName,
+                    ThemeConfig.configFileName,
+                    "config.xml",
+                    "videoConfig.xml",
+                )
+            )
+        }
+    }
+
 /**
  * 备份
  */
@@ -60,36 +107,6 @@ object Backup {
     private const val TAG = "Backup"
 
     private val mutex = Mutex()
-
-    private val backupFileNames by lazy {
-        arrayOf(
-            "bookshelf.json",
-            "bookmark.json",
-            "highlight.json",
-            "highlightRule.json",
-            "bookGroup.json",
-            "bookSource.json",
-            "rssSources.json",
-            "rssStar.json",
-            "replaceRule.json",
-            "readRecord.json",
-            "searchHistory.json",
-            "sourceSub.json",
-            "txtTocRule.json",
-            "httpTTS.json",
-            "keyboardAssists.json",
-            "dictRule.json",
-            "autoTask.json",
-            "servers.json",
-            DirectLinkUpload.ruleFileName,
-            ReadBookConfig.configFileName,
-            ReadBookConfig.shareConfigFileName,
-            ThemeConfig.configFileName,
-            BookCover.configFileName,
-            "config.xml",
-            "videoConfig.xml"
-        )
-    }
 
     private fun getNowZipFileName(): String {
         val backupDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -137,10 +154,44 @@ object Backup {
 
     private suspend fun backup(context: Context, path: String?) {
         LogUtils.d(TAG, "开始备份 path:$path")
+        val enabledContentKeys = BackupConfig.contentKeys.filterTo(hashSetOf()) {
+            BackupConfig.contentIsEnabled(it)
+        }
+        val password = LocalConfig.password
+        if (BackupConfig.cookieContentKey in enabledContentKeys &&
+            password.isNullOrBlank()
+        ) {
+            throw NoStackTraceException(appCtx.getString(R.string.cookie_backup_password_required))
+        }
         LocalConfig.lastBackup = System.currentTimeMillis()
-        val aes = BackupAES()
+        val aes = BackupAES(password)
         FileUtils.delete(backupPath)
-        writeListToJson(appDb.bookDao.all, "bookshelf.json", backupPath)
+        val backupPersistedCovers = BackupConfig.persistedCoverContentKey in enabledContentKeys
+        val backupOtherCovers = BackupConfig.otherCoverContentKey in enabledContentKeys
+        val backupBackgrounds = BackupConfig.backgroundContentKey in enabledContentKeys
+        val readConfigSnapshot = ReadBookConfig.configList.map { it.copy() }
+        val shareReadConfigSnapshot = ReadBookConfig.shareConfig.copy()
+        val backgroundPaths = if (backupBackgrounds) {
+            arrayListOf<String>().apply {
+                (readConfigSnapshot + shareReadConfigSnapshot).forEach { config ->
+                    if (config.bgType == 2) add(config.bgStr)
+                    if (config.bgTypeNight == 2) add(config.bgStrNight)
+                    if (config.bgTypeEInk == 2) add(config.bgStrEInk)
+                }
+            }
+        } else {
+            emptyList()
+        }
+        writeListToJson(
+            appDb.bookDao.all.map { book ->
+                book.copy(
+                    persistedCoverUrl = book.persistedCoverUrl
+                        .takeIf { backupPersistedCovers },
+                )
+            },
+            "bookshelf.json",
+            backupPath,
+        )
         writeListToJson(appDb.bookmarkDao.all, "bookmark.json", backupPath)
         writeListToJson(appDb.bookHighlightDao.all, "highlight.json", backupPath)
         writeListToJson(
@@ -170,12 +221,18 @@ object Backup {
                     .writeText(it)
             }
         }
+        if (BackupConfig.cookieContentKey in enabledContentKeys) {
+            val encryptedCookies = aes.encryptBase64(GSON.toJson(appDb.cookieDao.all))
+            FileUtils.createFileIfNotExist(
+                backupPath + File.separator + BackupConfig.cookieFileName
+            ).writeText(encryptedCookies)
+        }
         currentCoroutineContext().ensureActive()
-        GSON.toJson(ReadBookConfig.configList).let {
+        GSON.toJson(readConfigSnapshot).let {
             FileUtils.createFileIfNotExist(backupPath + File.separator + ReadBookConfig.configFileName)
                 .writeText(it)
         }
-        GSON.toJson(ReadBookConfig.shareConfig).let {
+        GSON.toJson(shareReadConfigSnapshot).let {
             FileUtils.createFileIfNotExist(backupPath + File.separator + ReadBookConfig.shareConfigFileName)
                 .writeText(it)
         }
@@ -231,7 +288,7 @@ object Backup {
         }
         currentCoroutineContext().ensureActive()
         val zipFileName = getNowZipFileName()
-        val paths = arrayListOf(*backupFileNames)
+        val paths = ArrayList(selectedBackupFileNames(enabledContentKeys::contains))
         for (i in 0 until paths.size) {
             paths[i] = backupPath + File.separator + paths[i]
         }
@@ -239,7 +296,10 @@ object Backup {
             prepareBackupMediaDirectories(
                 appCtx.externalFiles,
                 File(backupPath),
-                ReadBookConfig.getAllPicBgStr(),
+                backgroundPaths,
+                backupPersistedCovers,
+                backupOtherCovers,
+                backupBackgrounds,
             ).map { it.absolutePath }
         )
         FileUtils.delete(zipFilePath)
@@ -266,20 +326,24 @@ object Backup {
             try {
                 AppWebDav.backUpWebDav(zipFileName)
             } catch (e: Exception) {
-                AppLog.put("上传备份至webdav失败\n$e", e)
+                if (currentCoroutineContext().isActive) {
+                    AppLog.put("上传备份至webdav失败\n$e", e)
+                }
             }
         }
         FileUtils.delete(backupPath)
         FileUtils.delete(zipFilePath)
         currentCoroutineContext().ensureActive()
-        ReadBookConfig.getAllPicBgStr().map {
-            if (it.contains(File.separator)) {
-                File(it)
-            } else {
-                appCtx.externalFiles.getFile("bg", it)
+        if (backupBackgrounds) {
+            backgroundPaths.map {
+                if (it.contains(File.separator)) {
+                    File(it)
+                } else {
+                    appCtx.externalFiles.getFile("bg", it)
+                }
+            }.let {
+                AppWebDav.upBgs(it.toTypedArray())
             }
-        }.let {
-            AppWebDav.upBgs(it.toTypedArray())
         }
     }
 

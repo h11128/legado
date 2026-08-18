@@ -53,6 +53,7 @@ import io.legado.app.help.book.isVideo
 import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.readProgress
 import io.legado.app.help.book.removeType
+import io.legado.app.help.book.update
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.webView.PooledWebView
@@ -926,7 +927,12 @@ class BookInfoActivity :
             var kinds = book.getKindList()
             if (book.isLocal) {
                 withContext(IO) {
-                    val size = FileDoc.fromUri(book.getLocalUri(), false).size
+                    val size = try {
+                        FileDoc.fromUri(book.getLocalUri(), false).size
+                    } catch (e: Exception) {
+                        currentCoroutineContext().ensureActive()
+                        0L
+                    }
                     if (size > 0) {
                         kinds = kinds.toMutableList()
                         kinds.add(ConvertUtils.formatFileSize(size))
@@ -1547,7 +1553,7 @@ class BookInfoActivity :
             } else {
                 lifecycleScope.launch {
                     withContext(IO) {
-                        appDb.bookDao.update(book)
+                        book.update()
                     }
                     startReadActivity(
                         book,
@@ -1732,9 +1738,10 @@ class BookInfoActivity :
     override fun coverChangeTo(coverUrl: String) {
         viewModel.bookData.value?.let { book ->
             book.customCoverUrl = coverUrl
+            book.persistedCoverUrl = null
             showCover(book)
             if (viewModel.inBookshelf) {
-                viewModel.saveBook(book)
+                viewModel.saveBook(book, preserveCustomCoverUrl = false)
             }
         }
     }

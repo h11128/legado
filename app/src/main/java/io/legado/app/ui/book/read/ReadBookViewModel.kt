@@ -21,6 +21,7 @@ import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isLocalModified
 import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
+import io.legado.app.help.book.update
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.ImageProvider
@@ -222,7 +223,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                 LocalBook.getChapterList(book).let {
                     appDb.bookChapterDao.delByBook(book.bookUrl)
                     appDb.bookChapterDao.insert(*it.toTypedArray())
-                    appDb.bookDao.update(book)
+                    book.update()
                     ReadBook.onChapterListUpdated(book)
                 }
                 return true
@@ -245,7 +246,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                 WebBook.getChapterListAwait(it, book, true)
                     .onSuccess { cList ->
                         if (oldBook.bookUrl == book.bookUrl) {
-                            appDb.bookDao.update(book)
+                            book.update()
                         } else {
                             appDb.bookDao.replace(oldBook, book)
                             BookHelp.updateCacheFolder(oldBook, book)

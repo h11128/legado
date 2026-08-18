@@ -18,6 +18,7 @@ import io.legado.app.ui.book.search.SearchScope
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.mapParallelSafe
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -51,7 +52,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private var searchBooks = arrayListOf<SearchBook>()
     /** Raw per-source hits for RFC-003 rebuild (never absorb these in place). */
     private var rawSearchHits = arrayListOf<SearchBook>()
-    private var searchJob: Job? = null
+    private val pageOwner = SearchPageOwner()
     private var workingState = MutableStateFlow(true)
     private var activeProgress = AtomicReference<SearchProgressReporter?>()
     /** URLs already noted for the current [mSearchId] (once per source per run). */
@@ -61,7 +62,6 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     /** Scope string captured at search() — avoids pool reading a later UI edit. */
     private var pendingScopeSnapshot: String? = null
 
-
     private fun initSearchPool() {
         searchPool?.close()
         searchPool = Executors
@@ -69,28 +69,31 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     }
 
     fun search(searchId: Long, key: String) {
-        if (searchId != mSearchId) {
-            if (key.isEmpty()) {
-                return
+        synchronized(pageOwner) {
+            if (searchId == mSearchId && pageOwner.isRunning()) return
+            if (searchId != mSearchId) {
+                if (key.isEmpty()) {
+                    return
+                }
+                searchKey = key
+                if (mSearchId != 0L) {
+                    close()
+                }
+                searchBooks.clear()
+                rawSearchHits.clear()
+                bookSourceParts = emptyList()
+                mSearchId = searchId
+                searchPage = 1
+                notedRespondTimeUrls.clear()
+                reloadPartsOnStart = true
+                pendingScopeSnapshot = callBack.getSearchScope().toString()
+                initSearchPool()
+            } else {
+                searchPage++
+                reloadPartsOnStart = false
             }
-            searchKey = key
-            if (mSearchId != 0L) {
-                close()
-            }
-            searchBooks.clear()
-            rawSearchHits.clear()
-            bookSourceParts = emptyList()
-            mSearchId = searchId
-            searchPage = 1
-            notedRespondTimeUrls.clear()
-            reloadPartsOnStart = true
-            pendingScopeSnapshot = callBack.getSearchScope().toString()
-            initSearchPool()
-        } else {
-            searchPage++
-            reloadPartsOnStart = false
+            startSearch()
         }
-        startSearch()
     }
 
     private fun startSearch() {
@@ -103,20 +106,23 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
         reloadPartsOnStart = false
         pendingScopeSnapshot = null
         activeProgress.getAndSet(null)?.cancel()
-        searchJob = scope.launch(searchPool!!) {
+        val job = scope.launch(searchPool!!, start = CoroutineStart.LAZY) {
             if (needReloadParts) {
-                // Heal on the search pool (not main): App startup may still be racing.
                 SourceHelp.ensureRespondTimeHealed()
                 val parts = SearchScope(scopeSnapshot.orEmpty()).getBookSourceParts()
                 if (parts.isEmpty()) {
-                    callBack.onSearchCancel(NoStackTraceException("启用书源为空"))
+                    pageOwner.complete(currentCoroutineContext()[Job]) {
+                        callBack.onSearchCancel(NoStackTraceException("启用书源为空"))
+                    }
                     return@launch
                 }
                 bookSourceParts = parts
             }
             val sourceParts = bookSourceParts
             if (sourceParts.isEmpty()) {
-                callBack.onSearchCancel(NoStackTraceException("启用书源为空"))
+                pageOwner.complete(currentCoroutineContext()[Job]) {
+                    callBack.onSearchCancel(NoStackTraceException("启用书源为空"))
+                }
                 return@launch
             }
             val progress = SearchProgressReporter(sourceParts.size, callBack::onSearchProgress)
@@ -176,26 +182,30 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
             }.onCompletion { error ->
                 withContext(NonCancellable) {
                     RespondTimeUpdater.flush()
-                    // §4.6(b): final rebuild when query completes or cancels.
                     runCatching {
                         rebuildDisplay(precision, key)
                         callBack.onSearchSuccess(searchBooks)
                     }
                 }
-                when {
-                    error == null -> progress.finish {
-                        callBack.onSearchFinish(searchBooks.isEmpty(), hasMore)
+                val context = currentCoroutineContext()
+                pageOwner.complete(context[Job]) {
+                    when {
+                        error == null -> progress.finish {
+                            callBack.onSearchFinish(searchBooks.isEmpty(), hasMore)
+                        }
+                        context.isActive -> progress.finish {
+                            callBack.onSearchCancel()
+                        }
+                        else -> progress.cancel()
                     }
-                    currentCoroutineContext().isActive -> progress.finish {
-                        callBack.onSearchCancel()
-                    }
-                    else -> progress.cancel()
+                    activeProgress.compareAndSet(progress, null)
                 }
-                activeProgress.compareAndSet(progress, null)
             }.catch {
                 AppLog.put("书源搜索出错\n${it.localizedMessage}", it)
             }.collect()
         }
+        check(pageOwner.register(job))
+        job.start()
     }
 
     private suspend fun mergeItems(newDataS: List<SearchBook>, precision: Boolean, key: String) {
@@ -249,13 +259,15 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     }
 
     fun close() {
-        activeProgress.getAndSet(null)?.cancel()
-        searchJob?.cancel()
-        searchPool?.close()
-        searchPool = null
-        reloadPartsOnStart = false
-        pendingScopeSnapshot = null
-        mSearchId = 0L
+        synchronized(pageOwner) {
+            activeProgress.getAndSet(null)?.cancel()
+            pageOwner.cancel()?.cancel()
+            searchPool?.close()
+            searchPool = null
+            reloadPartsOnStart = false
+            pendingScopeSnapshot = null
+            mSearchId = 0L
+        }
     }
 
     interface CallBack {
@@ -265,43 +277,5 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
         fun onSearchSuccess(searchBooks: List<SearchBook>)
         fun onSearchFinish(isEmpty: Boolean, hasMore: Boolean)
         fun onSearchCancel(exception: Throwable? = null)
-    }
-
-}
-
-internal class SearchProgressReporter(
-    total: Int,
-    private val onProgress: (searched: Int, total: Int) -> Unit,
-) {
-    private val total = total.coerceAtLeast(0)
-    private var completed = 0
-    private var active = true
-    private var started = false
-
-    @Synchronized
-    fun start(onStart: () -> Unit = {}) {
-        if (!active || started) return
-        started = true
-        onStart()
-        onProgress(0, total)
-    }
-
-    @Synchronized
-    fun completeOne() {
-        if (!active || !started || completed >= total) return
-        completed++
-        onProgress(completed, total)
-    }
-
-    @Synchronized
-    fun finish(onFinish: () -> Unit) {
-        if (!active || !started) return
-        active = false
-        onFinish()
-    }
-
-    @Synchronized
-    fun cancel() {
-        active = false
     }
 }

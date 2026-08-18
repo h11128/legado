@@ -16,7 +16,7 @@
     <string name="select_backup_path">請選擇備份路徑</string>
     <string name="menu_import_old_version">匯入舊版資料</string>
     <string name="menu_import_github">匯入Github資料</string>
-    <string name="menu_replace_rule">淨化取代</string>
+    <string name="menu_replace_rule">取代管理</string>
     <string name="menu_send">傳送</string>
 
     <string name="dialog_title">提示</string>
@@ -88,8 +88,8 @@
     <string name="web_service">Web 服務</string>
     <string name="web_service_desc">瀏覽器寫源、看書</string>
     <string name="mcp_service">MCP 服務</string>
-    <string name="mcp_service_desc">受權杖保護的書源開發工具</string>
-    <string name="mcp_service_token_required">請先設定 Web 書源存取權杖</string>
+    <string name="mcp_service_desc">書源開發工具</string>
+    <string name="mcp_service_token_required">請先設定 Web 與 MCP 存取權杖</string>
     <string name="mcp_service_token_invalid">MCP 存取權杖未設定或不正確</string>
     <string name="mcp_service_start_failed">MCP 服務啟動失敗</string>
     <string name="mcp_service_start_retry">MCP 啟動失敗，正在重試（%1$d）…\n%2$s</string>
@@ -182,6 +182,15 @@
     <string name="aloud_stop">朗讀停止</string>
     <string name="clear_cache">清理快取</string>
     <string name="clear_cache_success">成功清理快取</string>
+    <string name="persist_network_covers">將網路封面儲存到本機</string>
+    <string name="restore_network_covers">還原網路封面</string>
+    <string name="restore_network_covers_confirm">清除所選書籍儲存在本機的封面並重新顯示網路封面？</string>
+    <string name="restore_source_covers">還原書源封面</string>
+    <string name="restore_source_covers_confirm">清除所選書籍儲存在本機的封面和自訂封面並重新顯示書源封面？</string>
+    <string name="persist_cover_progress">正在儲存封面 %1$d/%2$d</string>
+    <string name="persist_cover_result">已儲存 %1$d，本機略過 %2$d，失敗 %3$d</string>
+    <string name="restore_network_cover_result">已還原 %1$d 本書的網路封面</string>
+    <string name="restore_source_cover_result">已還原 %1$d 本書的書源封面</string>
     <string name="action_save">儲存</string>
     <string name="edit_source">編輯源</string>
     <string name="edit_book_source">編輯書源</string>
@@ -204,7 +213,7 @@
     <string name="import_book_source">匯入書源</string>
     <string name="import_local">本機匯入</string>
     <string name="import_on_line">網路匯入</string>
-    <string name="replace_rule_title">取代淨化</string>
+    <string name="replace_rule_title">取代管理</string>
     <string name="replace_rule_edit">取代規則編輯</string>
     <string name="replace_rule">取代規則</string>
     <string name="replace_to">取代為</string>
@@ -571,8 +580,10 @@
     <string name="web_port_summary">目前埠 %s</string>
     <string name="mcp_port_title">MCP 埠</string>
     <string name="mcp_port_summary">目前埠 %s</string>
-    <string name="js_source_api_token_title">Web 書源存取權杖</string>
-    <string name="js_source_api_token_summary">MCP、純 JS、書源寫入、搜尋和偵錯介面均需要</string>
+    <string name="js_source_api_token_required_title">存取權杖保護</string>
+    <string name="js_source_api_token_required_summary">開啟時 Web 書源與 MCP 介面必須提供權杖；僅在可信網路中關閉</string>
+    <string name="js_source_api_token_title">Web 與 MCP 存取權杖</string>
+    <string name="js_source_api_token_summary">開啟存取權杖保護時使用</string>
     <string name="js_source_api_token_configured">已設定</string>
     <string name="qr_share">二維碼分享</string>
     <string name="str_share">字串分享</string>
@@ -791,6 +802,17 @@
     <string name="default_cover">預設封面</string>
     <string name="restore_ignore">復原忽略列表</string>
     <string name="restore_ignore_summary">復原時忽略一些內容不復原，方便不同手機配置不同</string>
+    <string name="backup_content">備份內容</string>
+    <string name="backup_content_summary">選擇本機與 WebDAV 備份中包含的資料和媒體</string>
+    <string name="backup_content_bookshelf">書架與分組</string>
+    <string name="backup_content_annotations">書籤與標註</string>
+    <string name="backup_content_sources">書源與訂閱</string>
+    <string name="backup_content_rules">規則與工具</string>
+    <string name="backup_content_history">閱讀記錄與搜尋歷史</string>
+    <string name="backup_content_settings">閱讀、主題與應用設定</string>
+    <string name="backup_content_persisted_covers">書籍固化封面</string>
+    <string name="backup_content_other_covers">其他封面檔案</string>
+    <string name="backup_content_backgrounds">閱讀背景</string>
     <string name="read_config">閱讀介面設定</string>
     <string name="group_name">分組名稱</string>
     <string name="note_content">備註內容</string>

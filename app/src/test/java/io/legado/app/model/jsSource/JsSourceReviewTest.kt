@@ -113,6 +113,24 @@ class JsSourceReviewTest {
     }
 
     @Test
+    fun `detail preserves string ids outside the JavaScript safe integer range`() = runBlocking {
+        val source = source(
+            """
+            function getReviewSummary() { return []; }
+            function getReviewDetail() {
+                return JSON.parse('{"items":[{"id":"1051979893439332353","content":"评论"}]}');
+            }
+            """.trimIndent(),
+        )
+
+        val item = JsSourceReview.getReviewDetailAwait(
+            source, book, chapter, 1, "", 1,
+        )!!.items.single()
+
+        assertEquals("1051979893439332353", item.id)
+    }
+
+    @Test
     fun `detail parses structured content and badge arrays`() = runBlocking {
         val source = source(
             """
@@ -131,7 +149,7 @@ class JsSourceReviewTest {
                     },
                     replies: [{
                         badge: ["读者"],
-                        content: { img: "/reply.png" }
+                        content: { replyToName: "用户", img: "/reply.png" }
                     }]
                 }] };
             }
@@ -151,6 +169,7 @@ class JsSourceReviewTest {
         assertEquals(3, item.replyCount)
         val reply = item.replies.single()
         assertEquals(listOf("读者"), reply.badges)
+        assertEquals("用户", reply.replyToName)
         assertEquals("", reply.content)
         assertEquals("https://example.com/reply.png", reply.imageUrl)
     }

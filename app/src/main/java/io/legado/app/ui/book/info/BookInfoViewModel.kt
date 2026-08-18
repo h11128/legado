@@ -33,6 +33,8 @@ import io.legado.app.help.book.isSameNameAuthor
 import io.legado.app.help.book.isVideo
 import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeType
+import io.legado.app.help.book.savePreservingCustomCoverUrl
+import io.legado.app.help.book.update
 import io.legado.app.help.book.updateTo
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
@@ -197,7 +199,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
 
     private fun upCoverByRule(book: Book) {
         execute {
-            if (book.coverUrl.isNullOrBlank() && book.customCoverUrl.isNullOrBlank()) {
+            if (book.getDisplayCover().isNullOrBlank()) {
                 val coverUrl = BookCover.searchCover(book)
                 if (coverUrl.isNullOrBlank()) {
                     return@execute
@@ -205,7 +207,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                 book.customCoverUrl = coverUrl
                 bookData.postValue(book)
                 if (inBookshelf) {
-                    saveBook(book)
+                    saveBook(book, preserveCustomCoverUrl = false)
                 }
             }
         }
@@ -287,7 +289,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                     if (it.isWebFile) {
                         bookData.postValue(it)
                         if (inBookshelf) {
-                            it.save()
+                            it.savePreservingCustomCoverUrl()
                         }
                         loadWebFile(it)
                     } else {
@@ -319,7 +321,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
         if (book.isLocal) {
             execute(scope) {
                 LocalBook.getChapterList(book).let {
-                    appDb.bookDao.update(book)
+                    book.update()
                     appDb.bookChapterDao.delByBook(book.bookUrl)
                     appDb.bookChapterDao.insert(*it.toTypedArray())
                     ReadBook.onChapterListUpdated(book)
@@ -556,12 +558,16 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                 val minOrder = appDb.bookDao.minOrder
                 book.order = minOrder - 1
                 book.durChapterTime = System.currentTimeMillis()
-                appDb.bookDao.update(book)
+                book.update()
             }
         }
     }
 
-    fun saveBook(book: Book?, success: (() -> Unit)? = null) {
+    fun saveBook(
+        book: Book?,
+        preserveCustomCoverUrl: Boolean = true,
+        success: (() -> Unit)? = null,
+    ) {
         book ?: return
         execute {
             if (book.order == 0) {
@@ -574,7 +580,11 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                     BookAuthorIdentity.copyProgress(it, book)
                 }
             }
-            book.save()
+            if (preserveCustomCoverUrl) {
+                book.savePreservingCustomCoverUrl()
+            } else {
+                book.save()
+            }
             if (ReadBook.book?.bookUrl == book.bookUrl ||
                 ReadBook.book?.isSameNameAuthor(book) == true
             ) {

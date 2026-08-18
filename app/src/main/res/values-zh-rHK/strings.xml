@@ -15,7 +15,7 @@
     <string name="backup_path">備份路徑</string>
     <string name="menu_import_old_version">導入舊版數據</string>
     <string name="menu_import_github">導入 Github 數據</string>
-    <string name="menu_replace_rule">淨化替換</string>
+    <string name="menu_replace_rule">替換管理</string>
     <string name="menu_send">Send</string>
 
     <string name="dialog_title">提示</string>
@@ -86,8 +86,8 @@
     <string name="web_service">Web 服務</string>
     <string name="web_service_desc">瀏覽器寫源,看書</string>
     <string name="mcp_service">MCP 服務</string>
-    <string name="mcp_service_desc">受權杖保護的書源開發工具</string>
-    <string name="mcp_service_token_required">請先設定 Web 書源存取權杖</string>
+    <string name="mcp_service_desc">書源開發工具</string>
+    <string name="mcp_service_token_required">請先設定 Web 與 MCP 存取權杖</string>
     <string name="mcp_service_token_invalid">MCP 存取權杖未設定或不正確</string>
     <string name="mcp_service_start_failed">MCP 服務啟動失敗</string>
     <string name="mcp_service_start_retry">MCP 啟動失敗，正在重試（%1$d）…\n%2$s</string>
@@ -180,6 +180,15 @@
     <string name="aloud_stop">朗讀停止</string>
     <string name="clear_cache">清理緩存</string>
     <string name="clear_cache_success">成功清理緩存</string>
+    <string name="persist_network_covers">保存網絡封面到本地</string>
+    <string name="restore_network_covers">恢復網絡封面</string>
+    <string name="restore_network_covers_confirm">清除所選書籍保存在本地的封面並重新顯示網絡封面？</string>
+    <string name="restore_source_covers">恢復書源封面</string>
+    <string name="restore_source_covers_confirm">清除所選書籍保存在本地的封面和自訂封面並重新顯示書源封面？</string>
+    <string name="persist_cover_progress">正在保存封面 %1$d/%2$d</string>
+    <string name="persist_cover_result">已保存 %1$d，本地跳過 %2$d，失敗 %3$d</string>
+    <string name="restore_network_cover_result">已恢復 %1$d 本書的網絡封面</string>
+    <string name="restore_source_cover_result">已恢復 %1$d 本書的書源封面</string>
     <string name="action_save">保存</string>
     <string name="edit_source">編輯源</string>
     <string name="edit_book_source">編輯書源</string>
@@ -202,7 +211,7 @@
     <string name="import_book_source">導入書源</string>
     <string name="import_local">本地導入</string>
     <string name="import_on_line">網絡導入</string>
-    <string name="replace_rule_title">替換淨化</string>
+    <string name="replace_rule_title">替換管理</string>
     <string name="replace_rule_edit">替換規則編輯</string>
     <string name="replace_rule">替換規則</string>
     <string name="replace_to">替換為</string>
@@ -563,8 +572,10 @@
     <string name="web_port_summary">當前端口 %s</string>
     <string name="mcp_port_title">MCP 端口</string>
     <string name="mcp_port_summary">當前端口 %s</string>
-    <string name="js_source_api_token_title">Web 書源存取權杖</string>
-    <string name="js_source_api_token_summary">MCP、純 JS、書源寫入、搜尋和偵錯介面均需要</string>
+    <string name="js_source_api_token_required_title">存取權杖保護</string>
+    <string name="js_source_api_token_required_summary">開啟時 Web 書源與 MCP 介面必須提供權杖；僅在可信網絡中關閉</string>
+    <string name="js_source_api_token_title">Web 與 MCP 存取權杖</string>
+    <string name="js_source_api_token_summary">開啟存取權杖保護時使用</string>
     <string name="js_source_api_token_configured">已設定</string>
     <string name="qr_share">二維碼分享</string>
     <string name="str_share">字符串分享</string>
@@ -784,6 +795,17 @@
     <string name="default_cover">默認封面</string>
     <string name="restore_ignore">恢復忽略列表</string>
     <string name="restore_ignore_summary">恢復時忽略一些內容不恢復,方便不同手機配置不同</string>
+    <string name="backup_content">備份內容</string>
+    <string name="backup_content_summary">選擇本機與 WebDAV 備份中包含的資料和媒體</string>
+    <string name="backup_content_bookshelf">書架與分組</string>
+    <string name="backup_content_annotations">書籤與標註</string>
+    <string name="backup_content_sources">書源與訂閱</string>
+    <string name="backup_content_rules">規則與工具</string>
+    <string name="backup_content_history">閱讀記錄與搜尋歷史</string>
+    <string name="backup_content_settings">閱讀、主題與應用設置</string>
+    <string name="backup_content_persisted_covers">書籍固化封面</string>
+    <string name="backup_content_other_covers">其他封面文件</string>
+    <string name="backup_content_backgrounds">閱讀背景</string>
     <string name="read_config">閱讀界面設置</string>
     <string name="rule_image_style">圖片樣式 (imageStyle)</string>
     <string name="rule_replace_regex">替換規則 (replaceRegex)</string>

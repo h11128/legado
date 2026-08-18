@@ -397,7 +397,7 @@ object SearchBookShelfHelp {
         }
 
         override fun update(book: Book) {
-            appDb.bookDao.update(book)
+            book.update()
         }
 
         override fun delete(book: Book) {
