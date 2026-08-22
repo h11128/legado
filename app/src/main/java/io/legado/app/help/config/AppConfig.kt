@@ -254,6 +254,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val textSelectAble: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.textSelectAble, true)
 
+    val longPressSelectParagraph: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.longPressSelectParagraph, false)
+
+    val twoFingerReplacePreview: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.twoFingerReplacePreview, false)
+
     val isTransparentStatusBar: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.transparentStatusBar, true)
 
@@ -830,6 +836,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     val pullToToggleBookmark
         get() = appCtx.getPrefBoolean(PreferKey.pullToToggleBookmark, false)
+
+    var pullBookmarkDistance: Int
+        get() = appCtx.getPrefInt(PreferKey.pullBookmarkDistance, 0)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.pullBookmarkDistance, value)
+        }
 
     var bookshelfSort: Int
         get() = appCtx.getPrefInt(PreferKey.bookshelfSort, 0)

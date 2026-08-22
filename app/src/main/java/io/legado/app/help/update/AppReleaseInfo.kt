@@ -13,7 +13,8 @@ data class AppReleaseInfo(
     val downloadUrl: String,
     val assetUrl: String,
     val versionName: String,
-    val size: Long = 0L
+    val size: Long = 0L,
+    val versionCode: Long = 0L
 )
 
 enum class AppVariant {
@@ -31,7 +32,7 @@ enum class AppVariant {
 @Keep
 data class GithubRelease(
     val assets: List<Asset>?,
-    val body: String,
+    val body: String?,
     @SerializedName("prerelease")
     val isPreRelease: Boolean,
     @SerializedName("tag_name")
@@ -41,7 +42,7 @@ data class GithubRelease(
         assets ?: throw NoStackTraceException("获取新版本出错")
         return assets
             .filter { it.isValid }
-            .map { it.assetToAppReleaseInfo(isPreRelease, body, tagName) }
+            .map { it.assetToAppReleaseInfo(isPreRelease, body.orEmpty(), tagName) }
     }
 }
 @Keep
@@ -79,7 +80,8 @@ data class Asset(
             downloadUrl = apkUrl,
             assetUrl = url,
             versionName = parseReleaseVersionName(releaseTag, name),
-            size = size
+            size = size,
+            versionCode = parseAssetVersionCode(name)
         )
     }
 }
@@ -89,6 +91,8 @@ private val legacyDottedVersionPattern = Regex("""^3\.(\d{2})\.(\d{6,})$""")
 private val compactVersionPattern = Regex("""^3\.(\d{8,})$""")
 private val releaseAPattern = Regex("""(?:^|[_\-.])releasea(?:[_\-.]|$)""", RegexOption.IGNORE_CASE)
 private val releasePattern = Regex("""(?:^|[_\-.])release(?:[_\-.]|$)""", RegexOption.IGNORE_CASE)
+private val assetVersionCodePattern =
+    Regex("""(?:^|[_\-.])vc(\d+)(?:[_\-.]|$)""", RegexOption.IGNORE_CASE)
 
 internal fun inferAppVariant(assetName: String, preRelease: Boolean): AppVariant {
     return when {
@@ -107,6 +111,14 @@ internal fun parseReleaseVersionName(
         ?: versionPattern.find(assetName)?.value
         ?: return ""
     return normalizeLegadoVersionName(versionName)
+}
+
+internal fun parseAssetVersionCode(assetName: String): Long {
+    return assetVersionCodePattern.find(assetName)
+        ?.groupValues
+        ?.get(1)
+        ?.toLongOrNull()
+        ?: 0L
 }
 
 internal fun normalizeLegadoVersionName(versionName: String): String {

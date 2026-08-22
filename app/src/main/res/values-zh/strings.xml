@@ -3,6 +3,7 @@
     <string name="app_name">阅读</string>
     <string name="app_name_a">阅读·A</string>
     <string name="receiving_shared_label">阅读·搜索</string>
+    <string name="receiving_shared_import_label">阅读·导入</string>
     <string name="tip_perm_request_storage">阅读需要访问存储卡权限，请前往“设置”—“应用权限”，打开所需权限</string>
 
     <!--Other-->
@@ -82,6 +83,7 @@
     <string name="version">版本</string>
     <string name="local">本地</string>
     <string name="search">搜索</string>
+    <string name="config_search_empty">未找到匹配的设置</string>
     <string name="help_search_prev">上一个匹配项</string>
     <string name="help_search_next">下一个匹配项</string>
     <string name="origin_format">来源：%s</string>
@@ -158,6 +160,13 @@
     <string name="pt_auto_download">自动下载最新章节</string>
     <string name="ps_auto_download">更新书籍时自动下载最新章节</string>
     <string name="backup_restore">备份与恢复</string>
+    <string name="lan_backup_transfer">局域网传输</string>
+    <string name="lan_backup_transfer_summary">两台设备都保持打开时发送或接收当前选中的备份内容</string>
+    <string name="lan_backup_send">发送备份</string>
+    <string name="lan_backup_receive">接收备份</string>
+    <string name="lan_backup_send_confirm">将生成临时加密备份，不含已保存的 Cookie、登录信息、源/书籍变量、WebDAV/远程服务器设置、直链上传设置、缓存、字体和本地书原文件。所选书源和规则的定义文本及自定义请求头会传输，请仅与可信设备配对，并在扫码期间保持此页面打开。</string>
+    <string name="lan_backup_receive_confirm">接收来自“%2$s”的 %1$s 备份并恢复吗？恢复前会先备份当前设备。已保存的 Cookie、登录信息、源/书籍变量、服务器设置、缓存、字体和本地书原文件不会传输；所选书源和规则的定义文本及自定义请求头会传输。</string>
+    <string name="lan_backup_waiting">请在接收设备扫描此二维码。临时会话五分钟后失效。</string>
     <string name="web_dav_set">WebDav 设置</string>
     <string name="web_dav_set_import_old">WebDav 设置/导入旧版本数据</string>
     <string name="backup">备份</string>
@@ -270,6 +279,12 @@
     <string name="paste_source">粘贴源</string>
     <string name="source_rule_s">源规则说明</string>
     <string name="check_update">检查更新</string>
+    <string name="check_beta_update">检查测试版更新</string>
+    <string name="check_beta_update_failed">检查测试版更新失败</string>
+    <string name="beta_update_unsupported">当前安装包不能直接升级测试版，仅支持 beta 签名的 release 或 releaseA 安装包</string>
+    <string name="beta_update_no_compatible_apk">发现新版测试版，但没有适用于当前设备的安装包</string>
+    <string name="latest_beta_version">已是最新测试版</string>
+    <string name="beta_update_now">立即更新</string>
     <string name="camera_scan">扫描二维码</string>
     <string name="scan_image">扫描本地图片</string>
     <string name="rule_summary">规则说明</string>
@@ -368,6 +383,9 @@
     <string name="delete_page_bookmarks">当前页有 %1$d 个书签，是否全部删除？</string>
     <string name="pull_to_toggle_bookmark">下拉切换书签</string>
     <string name="pull_to_toggle_bookmark_summary">适用于翻页模式；滚动模式仅在章节顶部触发</string>
+    <string name="pull_bookmark_distance_title">下拉书签阈值</string>
+    <string name="pull_bookmark_distance_dialog_title">下拉书签阈值（0 = 默认值）</string>
+    <string name="pull_bookmark_distance_summary">下拉多远距离才会切换书签（默认值 %s px）</string>
     <string name="highlight">高亮</string>
     <string name="highlight_tab">标注</string>
     <string name="highlight_bg_color">背景色</string>
@@ -454,6 +472,8 @@
     <string name="fonts_folder">请将字体文件放到存储根目录 Fonts 文件夹下后重新选择</string>
     <string name="default_font">默认字体</string>
     <string name="select_font">选择字体</string>
+    <string name="font_item_external">%1$s · 外部目录</string>
+    <string name="font_item_private">%1$s · 应用目录</string>
     <string name="text_size">字号</string>
     <string name="line_size">行距</string>
     <string name="paragraph_size">段距</string>
@@ -834,6 +854,10 @@
     <string name="aloud_config">朗读设置</string>
     <string name="main_activity">主界面</string>
     <string name="selectText">长按选择文本</string>
+    <string name="long_press_select_paragraph">长按选择整段</string>
+    <string name="long_press_select_paragraph_summary">长按时选择当前页内可见的段落片段</string>
+    <string name="two_finger_replace_preview">双指长按预览替换净化</string>
+    <string name="two_finger_replace_preview_summary">双指按住时临时切换当前章节的替换效果，松开后恢复</string>
     <string name="header">页眉</string>
     <string name="main_body">正文</string>
     <string name="footer">页脚</string>

@@ -78,7 +78,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 103,
+    version = 104,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -149,6 +149,7 @@ val appDb by lazy {
         AutoMigration(from = 100, to = 101),
         // 101→102: manual unique-index rewrite
         // 102→103: manual (uuid / cover persist / applyToBody / scopeSource)
+        // 103→104: manual (rssSources.nextContentUrl, from upstream sync)
     ]
 )
 abstract class AppDatabase : RoomDatabase() {

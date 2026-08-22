@@ -24,6 +24,7 @@ object DatabaseMigrations {
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
             migration_101_102,
             migration_102_103,
+            migration_103_104,
         )
     }
 
@@ -570,6 +571,15 @@ object DatabaseMigrations {
             update.close()
             db.execSQL(
                 "ALTER TABLE replace_rules ADD COLUMN scopeSource INTEGER NOT NULL DEFAULT 0"
+            )
+        }
+    }
+
+    /** From upstream sync 2026-08-22: RSS 分页续读地址。 */
+    private val migration_103_104 = object : Migration(103, 104) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE rssSources ADD COLUMN nextContentUrl TEXT"
             )
         }
     }

@@ -9,6 +9,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.WindowManager
 import android.view.animation.LinearInterpolator
+import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.core.net.toUri
@@ -167,6 +168,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        onBackPressedDispatcher.addCallback(this) { finish() }
         ReadManga.register(this)
         upSystemUiVisibility(false)
         initRecyclerView()
@@ -379,6 +381,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
 
     override fun onResume() {
         super.onResume()
+        ReadManga.readStartTime = System.currentTimeMillis()
         networkChangedListener.register()
         networkChangedListener.onNetworkChanged = {
             // 当网络是可用状态且无需初始化时同步进度（初始化中已有同步进度逻辑）
@@ -396,6 +399,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
 
     override fun onPause() {
         super.onPause()
+        ReadManga.upReadTime()
         if (ReadManga.inBookshelf) {
             ReadManga.saveRead()
             if (!BuildConfig.DEBUG) {

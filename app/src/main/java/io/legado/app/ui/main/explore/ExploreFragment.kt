@@ -27,6 +27,7 @@ import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.book.explore.ExploreShowActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
+import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
@@ -238,6 +239,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     private fun updateGroupsMenuChecks(query: CharSequence? = searchView.query) {
         val selectedGroup = selectedExploreGroup(query, groups)
         groupsMenu?.transaction { menu ->
+            menu.setGroupCheckable(R.id.menu_group_text, true, false)
             for (index in 0 until menu.size()) {
                 val item = menu.getItem(index)
                 if (item.groupId != R.id.menu_group_text) continue
@@ -247,6 +249,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                     item.title.toString() == selectedGroup
                 }
             }
+            menu.setGroupCheckable(R.id.menu_group_text, true, true)
         }
     }
 
@@ -256,6 +259,8 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     override fun onCompatOptionsItemSelected(item: MenuItem) {
         super.onCompatOptionsItemSelected(item)
         when {
+            item.itemId == R.id.menu_source_manage -> startActivity<BookSourceActivity>()
+
             item.itemId == R.id.menu_group_all -> {
                 item.isChecked = true
                 searchView.setQuery("", true)

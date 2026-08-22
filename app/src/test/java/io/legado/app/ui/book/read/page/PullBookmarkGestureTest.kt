@@ -9,6 +9,55 @@ import java.io.File
 class PullBookmarkGestureTest {
 
     @Test
+    fun `bookmark pull distance preserves the old default and accepts overrides`() {
+        assertEquals(48, resolvePullBookmarkDistance(0, 8))
+        assertEquals(48, resolvePullBookmarkDistance(-1, 8))
+        assertEquals(96, resolvePullBookmarkDistance(96, 8))
+
+        val readView = source("app/src/main/java/io/legado/app/ui/book/read/page/ReadView.kt")
+        val settings = source(
+            "app/src/main/java/io/legado/app/ui/book/read/config/MoreConfigDialog.kt"
+        )
+        val preferences = source("app/src/main/res/xml/pref_config_read.xml")
+        assertTrue(readView.contains("AppConfig.pullBookmarkDistance"))
+        assertTrue(settings.contains("PreferKey.pullBookmarkDistance ->"))
+        assertTrue(settings.contains("AppConfig.pullBookmarkDistance = it"))
+        assertTrue(preferences.contains("android:key=\"pullBookmarkDistance\""))
+    }
+
+    @Test
+    fun `bookmark pull moves the page with bounded resistance and rebounds`() {
+        assertEquals(0f, resolvePullBookmarkPageOffset(-20f, 1000), 0.001f)
+        assertEquals(50f, resolvePullBookmarkPageOffset(100f, 1000), 0.001f)
+        assertEquals(350f, resolvePullBookmarkPageOffset(1000f, 1000), 0.001f)
+
+        val readView = source("app/src/main/java/io/legado/app/ui/book/read/page/ReadView.kt")
+        val move = readView.substringAfter("MotionEvent.ACTION_MOVE ->")
+            .substringBefore("MotionEvent.ACTION_UP ->")
+        assertTrue(move.contains("setPullBookmarkPageOffset("))
+        assertTrue(readView.contains("ValueAnimator.ofFloat(startOffset, 0f)"))
+        val pointerChange = readView.substringAfter("//在多点触控时")
+            .substringBefore("when (event.actionMasked)")
+        assertTrue(pointerChange.contains("resetPullBookmarkGesture(animatePage = false)"))
+        assertTrue(pointerChange.indexOf("resetPullBookmarkGesture") <
+                pointerChange.indexOf("pageDelegate?.onTouch(event)"))
+
+        val pageOffset = readView.substringAfter("private fun setPullBookmarkPageOffset")
+            .substringBefore("fun cancelSelect")
+        assertTrue(pageOffset.contains("curPage.translationY = offset"))
+        assertFalse(pageOffset.contains("callBack"))
+    }
+
+    @Test
+    fun `bookmark pull exposes an opaque reader background`() {
+        val readView = source("app/src/main/java/io/legado/app/ui/book/read/page/ReadView.kt")
+        val upBg = readView.substringAfter("fun upBg()")
+            .substringBefore("fun upBgAlpha()")
+
+        assertTrue(upBg.contains("setBackgroundColor(ReadBookConfig.bgMeanColor)"))
+    }
+
+    @Test
     fun `only downward vertical pulls are consumed`() {
         assertEquals(
             PullBookmarkGestureState.NONE,
@@ -80,23 +129,35 @@ class PullBookmarkGestureTest {
     }
 
     @Test
-    fun `bookmark indicator uses the header before the floating fallback`() {
+    fun `bookmark indicator follows the animated page in both header modes`() {
         val activity = source("app/src/main/java/io/legado/app/ui/book/read/ReadBookActivity.kt")
         val update = activity.substringAfter("fun upBookmarkIndicator()")
             .substringBefore("override fun changeReplaceRuleState")
-        assertTrue(update.contains("curPage.showBookmarkIndicator(showIndicator)"))
-        assertTrue(update.contains("showIndicator && !shownInHeader"))
-        assertTrue(update.contains("curPage.displayCutoutPaddingEnd"))
+        assertTrue(update.contains("pageView.showBookmarkIndicator(showIndicator)"))
+        assertFalse(update.contains("binding.bookmarkIndicator"))
 
         val pageView = source("app/src/main/java/io/legado/app/ui/book/read/page/PageView.kt")
         val render = pageView.substringAfter("private fun renderReaderInfo()")
             .substringBefore("private data class ReaderInfoView")
         assertTrue(render.contains("view === binding.tvHeaderRight"))
         assertTrue(render.contains("bookmarkIndicatorVisible"))
-        assertTrue(pageView.contains("R.drawable.ic_bookmark_filled"))
+        assertTrue(render.contains("view.minimumWidth = 32.dpToPx()"))
+        assertTrue(render.contains("view.setTextIfNotEqual(\" \")"))
+        assertTrue(render.contains("view.contentDescription = context.getString(R.string.bookmark)"))
         val showInHeader = pageView.substringAfter("fun showBookmarkIndicator(show: Boolean)")
             .substringBefore("private data class ReaderInfoView")
-        assertTrue(showInHeader.contains("return show && !binding.llHeader.isGone"))
+        assertTrue(showInHeader.contains("pageBookmarkIndicator.isVisible = show"))
+        assertTrue(showInHeader.contains("if (showInHeader) 32 else 20"))
+        assertTrue(showInHeader.contains("if (showInHeader) 32 else 40"))
+        assertTrue(showInHeader.contains("R.drawable.ic_bookmark_long"))
+        assertTrue(showInHeader.contains("View.IMPORTANT_FOR_ACCESSIBILITY_AUTO"))
+        assertTrue(showInHeader.contains("doOnLayout"))
+        assertTrue(showInHeader.contains("translationX"))
+        assertTrue(showInHeader.contains("translationY"))
+        assertTrue(showInHeader.contains("bookmarkIndicatorMarginRight("))
+        assertTrue(showInHeader.contains("bookmarkIndicatorTop("))
+        assertTrue(showInHeader.contains("binding.vwRoot.paddingRight"))
+        assertTrue(showInHeader.contains("translationY = (headerHeight - top).toFloat()"))
         val insets = pageView.substringAfter("fun upPaddingDisplayCutouts()")
             .substringBefore("private fun upTipStyle()")
         assertTrue(insets.contains("readBookActivity?.upBookmarkIndicator()"))
@@ -108,8 +169,41 @@ class PullBookmarkGestureTest {
         assertTrue(styleRefresh.indexOf("readView.upStyle()") <
                 styleRefresh.indexOf("upBookmarkIndicator()"))
 
-        val layout = source("app/src/main/res/layout/activity_book_read.xml")
-        assertTrue(layout.contains("android:src=\"@drawable/ic_bookmark_filled\""))
+        val pageLayout = source("app/src/main/res/layout/view_book_page.xml")
+        val pageOverlayId = "android:id=\"@+id/page_bookmark_indicator\""
+        assertTrue(pageLayout.contains(pageOverlayId))
+        val pageOverlay = pageLayout.substringAfter(pageOverlayId)
+            .substringBefore("/>")
+        assertFalse(pageLayout.contains("android:id=\"@+id/bookmark_indicator\""))
+        assertTrue(pageOverlay.contains("android:layout_width=\"32dp\""))
+        assertTrue(pageOverlay.contains("android:layout_height=\"32dp\""))
+        assertTrue(pageOverlay.contains("android:contentDescription=\"@string/bookmark\""))
+        assertTrue(pageOverlay.contains("android:importantForAccessibility=\"no\""))
+        assertTrue(pageOverlay.contains("android:src=\"@drawable/ic_bookmark_filled\""))
+        assertTrue(pageOverlay.contains("app:layout_constraintTop_toTopOf=\"parent\""))
+        assertTrue(pageOverlay.contains("app:layout_constraintRight_toRightOf=\"parent\""))
+
+        val activityLayout = source("app/src/main/res/layout/activity_book_read.xml")
+        assertFalse(activityLayout.contains("android:id=\"@+id/bookmark_indicator\""))
+        assertFalse(activity.contains("override fun setPullBookmarkPageOffset"))
+
+        val longIndicator = source("app/src/main/res/drawable/ic_bookmark_long.xml")
+        assertTrue(longIndicator.contains("android:width=\"20dp\""))
+        assertTrue(longIndicator.contains("android:height=\"40dp\""))
+        assertTrue(longIndicator.contains("android:pathData=\"M4,0h12v40"))
+
+        val horizontal = source(
+            "app/src/main/java/io/legado/app/ui/book/read/page/delegate/HorizontalPageDelegate.kt"
+        )
+        val cover = source(
+            "app/src/main/java/io/legado/app/ui/book/read/page/delegate/CoverPageDelegate.kt"
+        )
+        val simulation = source(
+            "app/src/main/java/io/legado/app/ui/book/read/page/delegate/SimulationPageDelegate.kt"
+        )
+        assertTrue(horizontal.contains("curPage.screenshot(curRecorder)"))
+        assertTrue(cover.contains("curPage.screenshot(curRecorder)"))
+        assertTrue(simulation.contains("curPage.screenshot(curBitmap, canvas)"))
         assertTrue(activity.substringAfter("private fun resetBookmarkObserver()")
             .substringBefore("fun upBookmarkIndicator()")
             .contains("curPage.showBookmarkIndicator(false)"))
@@ -117,18 +211,17 @@ class PullBookmarkGestureTest {
 
     @Test
     fun `bookmark indicator keeps the existing header line metrics`() {
-        assertEquals(16, BookmarkIndicatorGeometry.size(-12, 4))
-        assertEquals(18, BookmarkIndicatorGeometry.top(30, -12))
+        assertEquals(20, BookmarkIndicatorGeometry.marginRight(12, 12, 4))
+        assertEquals(-4, BookmarkIndicatorGeometry.marginRight(0, 0, 4))
+        assertEquals(6, BookmarkIndicatorGeometry.top(30, 28, 4, 0))
+        assertEquals(8, BookmarkIndicatorGeometry.top(10, 32, 4, 8))
 
         val pageView = source("app/src/main/java/io/legado/app/ui/book/read/page/PageView.kt")
         val indicator = pageView.substringAfter("if (bookmarkIndicatorVisible)")
             .substringBefore("return@forEach")
-        assertTrue(indicator.contains("bookmarkIndicatorText"))
+        assertTrue(indicator.contains("view.setTextIfNotEqual(\" \")"))
         assertFalse(indicator.contains("setCompoundDrawablesRelative"))
-        val span = pageView.substringAfter("private class BookmarkIndicatorSpan")
-            .substringBefore("class PageView")
-        assertTrue(span.contains("top = metrics.top"))
-        assertTrue(span.contains("bottom = metrics.bottom"))
+        assertFalse(pageView.contains("BookmarkIndicatorSpan"))
     }
 
     @Test
@@ -146,8 +239,10 @@ class PullBookmarkGestureTest {
             .substringBefore("private fun selectMoveAtRaw")
         assertTrue(magnifier.contains("Build.VERSION.SDK_INT < Build.VERSION_CODES.P"))
         assertTrue(magnifier.contains("SelectionMagnifierApi28(this)"))
-        assertTrue(readView.contains("@RequiresApi(Build.VERSION_CODES.P)\n" +
-                "    private class SelectionMagnifierApi28"))
+        assertTrue(readView.replace("\r\n", "\n").contains(
+            "@RequiresApi(Build.VERSION_CODES.P)\n" +
+                "    private class SelectionMagnifierApi28"
+        ))
 
         val handleMove = readView.substringAfter("private fun selectMoveAtRaw")
             .substringBefore("fun selectStartMoveAtRaw")

@@ -15,10 +15,10 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
-import android.widget.FrameLayout
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.core.view.doOnLayout
 import androidx.core.view.get
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -175,6 +175,7 @@ import io.legado.app.utils.sysScreenOffTime
 import io.legado.app.utils.throttle
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.visible
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.CancellationException
@@ -283,6 +284,8 @@ class ReadBookActivity : BaseReadBookActivity(),
     private var menu: Menu? = null
     private var backupJob: Job? = null
     private var bookmarkJob: Job? = null
+    private var replacePreviewJob: Job? = null
+    private var replacePreviewGeneration = 0L
     private val bookmarkToggleMutex = Mutex()
     private var bookmarkTogglePending = false
     private var bookmarkBookKey: Pair<String, String>? = null
@@ -371,7 +374,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         super.onActivityCreated(savedInstanceState)
         binding.cursorLeft.setColorFilter(accentColor)
         binding.cursorRight.setColorFilter(accentColor)
-        binding.bookmarkIndicator.setColorFilter(accentColor)
         binding.cursorLeft.setOnTouchListener(this)
         binding.cursorRight.setOnTouchListener(this)
         binding.readAloudFloatBarContainer.llBackToSpeech.setOnClickListener {
@@ -438,9 +440,11 @@ class ReadBookActivity : BaseReadBookActivity(),
         super.onPostCreate(savedInstanceState)
         viewModel.initReadBookConfig(intent)
         ChapterProvider.clearReviewProviders()
-        Looper.myQueue().addIdleHandler {
-            viewModel.initData(intent)
-            false
+        binding.readView.doOnLayout {
+            Looper.myQueue().addIdleHandler {
+                viewModel.initData(intent)
+                false
+            }
         }
         justInitData = true
     }
@@ -510,6 +514,7 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onPause() {
         super.onPause()
+        binding.readView.cancelTouchGestures()
         autoPageStop()
         backupJob?.cancel()
         updateScrollReadPosition()
@@ -651,6 +656,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             upContent()
         } else {
             ReadBook.book?.let {
+                ReadBook.preserveCurrentPositionForRefresh()
                 ReadBook.curTextChapter = null
                 binding.readView.upContent()
                 viewModel.refreshContentDur(it)
@@ -1315,6 +1321,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     private fun keyPage(direction: PageDirection) {
+        binding.readView.cancelTouchGestures()
         binding.readView.cancelSelect()
         binding.readView.pageDelegate?.isCancel = false
         binding.readView.pageDelegate?.keyTurnPage(direction)
@@ -1356,6 +1363,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         success: (() -> Unit)?
     ) {
         lifecycleScope.launch {
+            binding.readView.cancelTouchGestures()
             binding.readView.upContent(relativePosition, resetPageOffset)
             observeBookmarks()
             upBookmarkIndicator()
@@ -1373,6 +1381,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         resetPageOffset: Boolean,
         success: (() -> Unit)?
     ) = withContext(Main.immediate) {
+        binding.readView.cancelTouchGestures()
         binding.readView.upContent(relativePosition, resetPageOffset)
         observeBookmarks()
         upBookmarkIndicator()
@@ -3079,31 +3088,17 @@ class ReadBookActivity : BaseReadBookActivity(),
         bookmarkBookKey = null
         bookmarks = emptyList()
         binding.readView.curPage.showBookmarkIndicator(false)
-        binding.bookmarkIndicator.isGone = true
     }
 
     fun upBookmarkIndicator() {
-        val page = binding.readView.curPage.textPage
-        val hasBookmark = page.lines.isNotEmpty() && bookmarks.any {
-            it.chapterIndex == page.chapterIndex && page.containPos(it.chapterPos)
+        val pageView = binding.readView.curPage
+        val textPage = pageView.textPage
+        val hasBookmark = textPage.lines.isNotEmpty() && bookmarks.any {
+            it.chapterIndex == textPage.chapterIndex && textPage.containPos(it.chapterPos)
         }
         val showIndicator = AppConfig.pullToToggleBookmark &&
                 !binding.readView.isScroll && hasBookmark
-        val shownInHeader = binding.readView.curPage.showBookmarkIndicator(showIndicator)
-        binding.bookmarkIndicator.isVisible = showIndicator && !shownInHeader
-        if (binding.bookmarkIndicator.isVisible) {
-            binding.bookmarkIndicator.post {
-                if (binding.bookmarkIndicator.isVisible) {
-                    binding.bookmarkIndicator.layoutParams =
-                        (binding.bookmarkIndicator.layoutParams as FrameLayout.LayoutParams).apply {
-                            marginEnd = 12.dpToPx() +
-                                    binding.readView.curPage.displayCutoutPaddingEnd
-                        }
-                    binding.bookmarkIndicator.translationY =
-                        (binding.readView.curPage.headerHeight + 8.dpToPx()).toFloat()
-                }
-            }
-        }
+        pageView.showBookmarkIndicator(showIndicator)
     }
 
     override fun changeReplaceRuleState() {
@@ -3112,6 +3107,32 @@ class ReadBookActivity : BaseReadBookActivity(),
             ReadBook.saveRead()
             menu?.findItem(R.id.menu_enable_replace)?.isChecked = it.getUseReplaceRule()
             viewModel.replaceRuleChanged()
+        }
+    }
+
+    override fun setReplacePreview(enabled: Boolean) {
+        val generation = ++replacePreviewGeneration
+        replacePreviewJob?.cancel()
+        replacePreviewJob = null
+        if (!enabled) return
+        val sourcePosition = binding.readView.getReadPosition()
+            ?.takeIf { it.first == ReadBook.durChapterIndex }
+            ?.second?.chapterPosition
+            ?: ReadBook.durChapterPos
+        replacePreviewJob = lifecycleScope.launch {
+            val preview = try {
+                ReadBook.buildReplacePreview(sourcePosition)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLog.put("生成替换净化预览失败\n${e.localizedMessage}", e)
+                null
+            } ?: return@launch
+            if (generation != replacePreviewGeneration ||
+                !binding.readView.showReplacePreview(preview)
+            ) {
+                preview.previewChapter.cancelLayout()
+            }
         }
     }
 

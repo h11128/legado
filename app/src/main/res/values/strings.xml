@@ -5,6 +5,7 @@
     <string name="app_name_a">Legado·A</string>
     <string name="app_name_s" translatable="false">LegadoPlus</string>
     <string name="receiving_shared_label">Legado·search</string>
+    <string name="receiving_shared_import_label">Legado·import</string>
     <string name="tip_perm_request_storage">Legado needs storage access to find and read books. please go "App Settings" to allow "Storage permission".</string>
 
     <!--Other-->
@@ -84,6 +85,7 @@
     <string name="version">Version</string>
     <string name="local">Local</string>
     <string name="search">Search</string>
+    <string name="config_search_empty">No matching settings</string>
     <string name="help_search_prev">Previous match</string>
     <string name="help_search_next">Next match</string>
     <string name="origin_format">Origin: %s</string>
@@ -160,6 +162,13 @@
     <string name="pt_auto_download">Auto-download</string>
     <string name="ps_auto_download">Download the latest chapters automatically  when updating books</string>
     <string name="backup_restore">Backup and restore</string>
+    <string name="lan_backup_transfer">LAN transfer</string>
+    <string name="lan_backup_transfer_summary">Send or receive the selected backup content while both devices are open</string>
+    <string name="lan_backup_send">Send backup</string>
+    <string name="lan_backup_receive">Receive backup</string>
+    <string name="lan_backup_send_confirm">Creates a temporary encrypted backup without saved cookies, login data, source/book variables, WebDAV/remote server settings, direct-link upload settings, caches, fonts, or local book files. Selected source/rule definitions and custom headers are transferred. Pair only with a trusted device and keep this screen open while it scans the QR code.</string>
+    <string name="lan_backup_receive_confirm">Receive %1$s from %2$s and restore it? The current device will be backed up first. Saved cookies, login data, source/book variables, server settings, caches, fonts, and local book files are not transferred; selected source/rule definitions and custom headers are transferred.</string>
+    <string name="lan_backup_waiting">Scan this QR code on the receiving device. The temporary session expires in five minutes.</string>
     <string name="web_dav_set">WebDav settings</string>
     <string name="web_dav_set_import_old">WebDav settings/Import legacy data</string>
     <string name="backup">Backup</string>
@@ -272,6 +281,12 @@
     <string name="paste_source">Paste source</string>
     <string name="source_rule_s">Source rules description</string>
     <string name="check_update">Check for Updates</string>
+    <string name="check_beta_update">Check for Beta Updates</string>
+    <string name="check_beta_update_failed">Failed to check for beta updates</string>
+    <string name="beta_update_unsupported">This installation cannot be updated to a beta build. Only beta-signed release or releaseA packages are supported.</string>
+    <string name="beta_update_no_compatible_apk">A newer beta exists, but it has no APK compatible with this device</string>
+    <string name="latest_beta_version">Already on the latest beta version</string>
+    <string name="beta_update_now">Update now</string>
     <string name="camera_scan">Scan QR code</string>
     <string name="scan_image">Scan local images</string>
     <string name="rule_summary">Rules description</string>
@@ -371,6 +386,9 @@
     <string name="delete_page_bookmarks">This page contains %1$d bookmarks. Delete them all?</string>
     <string name="pull_to_toggle_bookmark">Pull down to toggle bookmark</string>
     <string name="pull_to_toggle_bookmark_summary">Works in paged modes and at the top of a chapter in scroll mode</string>
+    <string name="pull_bookmark_distance_title">Pull bookmark threshold</string>
+    <string name="pull_bookmark_distance_dialog_title">Pull bookmark threshold (0 = default)</string>
+    <string name="pull_bookmark_distance_summary">How far to pull down before toggling a bookmark (default %s px)</string>
     <string name="highlight">Highlight</string>
     <string name="highlight_tab">Highlights</string>
     <string name="highlight_bg_color">Background color</string>
@@ -457,6 +475,8 @@
     <string name="fonts_folder">Please put the font files in the Fonts folder of the storage root directory and reselect</string>
     <string name="default_font">Default font</string>
     <string name="select_font">Select fonts</string>
+    <string name="font_item_external">%1$s · External folder</string>
+    <string name="font_item_private">%1$s · App folder</string>
     <string name="text_size">Text size</string>
     <string name="line_size">Line spacing</string>
     <string name="paragraph_size">Paragraph spacing</string>
@@ -837,6 +857,10 @@
     <string name="aloud_config">Speech settings</string>
     <string name="main_activity">Start page</string>
     <string name="selectText">Long Tap to select text</string>
+    <string name="long_press_select_paragraph">Select paragraph on long press</string>
+    <string name="long_press_select_paragraph_summary">Select the visible part of the paragraph on the current page</string>
+    <string name="two_finger_replace_preview">Preview replacements with two-finger hold</string>
+    <string name="two_finger_replace_preview_summary">Temporarily switch replacement effects for the current chapter while holding two fingers</string>
     <string name="header">Header</string>
     <string name="main_body">Content</string>
     <string name="footer">Footer</string>

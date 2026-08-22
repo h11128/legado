@@ -1,5 +1,6 @@
 package io.legado.app.ui.about
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -16,11 +17,17 @@ class UpdateDialogLifecycleTest {
         val about = functionBody(
             "src/main/java/io/legado/app/ui/about/AboutFragment.kt",
             "private fun checkUpdate()",
+            "private fun checkBetaUpdate()"
+        )
+        val beta = functionBody(
+            "src/main/java/io/legado/app/ui/about/AboutFragment.kt",
+            "private fun checkBetaUpdate()",
             "private fun joinQQGroup("
         )
 
         assertGuardBeforeDialog(main, "supportFragmentManager.isStateSaved")
         assertGuardBeforeDialog(about, "childFragmentManager.isStateSaved")
+        assertGuardBeforeDialog(beta, "childFragmentManager.isStateSaved")
     }
 
     @Test
@@ -33,6 +40,36 @@ class UpdateDialogLifecycleTest {
         assertTrue(source.contains("putLong(\"createdAt\", updateInfo.createdAt)"))
         assertTrue(source.contains("ConvertUtils.formatFileSize(size)"))
         assertTrue(source.contains("DateTimeFormatter.ISO_LOCAL_DATE"))
+    }
+
+    @Test
+    fun `beta update dialog opens the selected github asset in the browser`() {
+        val source = projectFile(
+            "src/main/java/io/legado/app/ui/about/UpdateDialog.kt"
+        ).readText()
+        val betaBranch = source
+            .substringAfter("binding.betaActions.isVisible = isBetaUpdate")
+            .substringBefore("} else {")
+
+        assertTrue(source.contains("putBoolean(\"isBeta\", updateInfo.isBeta)"))
+        assertTrue(betaBranch.contains("requireContext().openUrl(url)"))
+        assertTrue(!betaBranch.contains("startDownload("))
+    }
+
+    @Test
+    fun `manual update errors show their message without a redundant action prefix`() {
+        val source = projectFile(
+            "src/main/java/io/legado/app/ui/about/AboutFragment.kt"
+        ).readText()
+        val official = source.substringAfter("private fun checkUpdate()")
+            .substringBefore("private fun checkBetaUpdate()")
+        val beta = source.substringAfter("private fun checkBetaUpdate()")
+            .substringBefore("private fun joinQQGroup(")
+
+        assertTrue(official.contains("appCtx.toastOnUi(it.localizedMessage)"))
+        assertFalse(official.contains("getString(R.string.check_update)"))
+        assertTrue(beta.contains("appCtx.toastOnUi(it.localizedMessage)"))
+        assertFalse(beta.contains("getString(R.string.check_beta_update)"))
     }
 
     private fun assertGuardBeforeDialog(source: String, guard: String) {

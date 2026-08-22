@@ -126,6 +126,9 @@ internal sealed interface SourceChangeResult {
 
 @Suppress("MemberVisibilityCanBePrivate")
 open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(application) {
+    /** Chapter-level source switch pins the book's current source at top; whole-book switch does not. */
+    protected open val pinCurrentSource = false
+
     /**
      * Live 「更新和搜索线程数」— never cache at ViewModel init (prefs may change).
      */
@@ -402,6 +405,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             maximum = AppConfig.changeSourceWordCountFilterMax,
             referenceWordCount = getReferenceWordCount(books),
             comparator = comparator,
+            pinnedBookUrl = if (pinCurrentSource) oldBook?.bookUrl else null,
         )
     }
 

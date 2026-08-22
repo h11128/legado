@@ -27,10 +27,13 @@ import io.legado.app.ui.book.group.GroupEditDialog
 import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
+import io.legado.app.utils.MenuExtensions
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChangeFirst
+import io.legado.app.utils.getCompatDrawable
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setEdgeEffectColor
+import io.legado.app.utils.setTintMutate
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
@@ -83,6 +86,7 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         setSupportToolbar(binding.titleBar.toolbar)
+        binding.titleBar.setNavigationOnClickListener { back() }
         bindShelfHeader(binding.shelfHeader)
         initRecyclerView()
         initBookGroupData()
@@ -91,6 +95,10 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
 
     private fun initRecyclerView() {
         binding.rvBookshelf.setEdgeEffectColor(primaryColor)
+        binding.rvBookshelf.canHandleHorizontalSwipe = { offset ->
+            adjacentBookshelfGroupId(bookGroups, groupId, offset) != null
+        }
+        binding.rvBookshelf.onHorizontalSwipe = ::switchBookGroup
         binding.fastScroller.attachRecyclerView(binding.rvBookshelf)
         upFastScrollerBar()
         binding.refreshLayout.setColorSchemeColors(accentColor)
@@ -170,6 +178,7 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
     }
 
     private fun initBooksData() {
+        upNavigationIcon()
         if (groupId == BookGroup.IdRoot) {
             if (isAdded) {
                 binding.titleBar.title = getString(R.string.bookshelf)
@@ -235,6 +244,29 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
                 delay(100)
             }
         }
+    }
+
+    private fun upNavigationIcon() {
+        binding.titleBar.toolbar.apply {
+            navigationIcon = if (groupId == BookGroup.IdRoot) {
+                null
+            } else {
+                getCompatDrawable(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
+            }
+            navigationContentDescription = getString(R.string.back)
+            navigationIcon?.setTintMutate(
+                MenuExtensions.getMenuColor(
+                    requireContext(),
+                    transparentBar = binding.titleBar.usesTransparentForeground,
+                )
+            )
+        }
+    }
+
+    private fun switchBookGroup(offset: Int) {
+        val targetGroupId = adjacentBookshelfGroupId(bookGroups, groupId, offset) ?: return
+        groupId = targetGroupId
+        initBooksData()
     }
 
     private fun sortBooks(books: List<Book>, groupId: Long): List<Book> {
@@ -327,7 +359,19 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
     }
 
     override fun onDestroyView() {
+        binding.rvBookshelf.canHandleHorizontalSwipe = null
+        binding.rvBookshelf.onHorizontalSwipe = null
         binding.fastScroller.detachRecyclerView()
         super.onDestroyView()
     }
+}
+
+internal fun adjacentBookshelfGroupId(
+    groups: List<BookGroup>,
+    currentGroupId: Long,
+    offset: Int,
+): Long? {
+    val currentIndex = groups.indexOfFirst { it.groupId == currentGroupId }
+    if (currentIndex < 0) return null
+    return groups.getOrNull(currentIndex + offset)?.groupId
 }

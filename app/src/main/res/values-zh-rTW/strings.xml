@@ -4,6 +4,7 @@
     <string name="app_name">閱讀</string>
     <string name="app_name_a">閱讀·A</string>
     <string name="receiving_shared_label">閱讀·搜尋</string>
+    <string name="receiving_shared_import_label">閱讀·匯入</string>
     <string name="tip_perm_request_storage">閱讀需要存取記憶卡權限，請前往「設定」—「應用程式權限」—打開所需權限</string>
 
     <!--Other-->
@@ -335,6 +336,8 @@
     <string name="fonts_folder">請將字體檔案放到SD根目錄Fonts資料夾下重新選擇</string>
     <string name="default_font">預設字體</string>
     <string name="select_font">選擇字體</string>
+    <string name="font_item_external">%1$s · 外部目錄</string>
+    <string name="font_item_private">%1$s · 應用程式目錄</string>
     <string name="text_size">字號</string>
     <string name="line_size">行距</string>
     <string name="paragraph_size">段距</string>
@@ -691,6 +694,10 @@
     <string name="aloud_config">朗讀設定</string>
     <string name="main_activity">主介面</string>
     <string name="selectText">長按選擇文字</string>
+    <string name="long_press_select_paragraph">長按選擇整段</string>
+    <string name="long_press_select_paragraph_summary">長按時選擇目前頁面內可見的段落片段</string>
+    <string name="two_finger_replace_preview">雙指長按預覽替換淨化</string>
+    <string name="two_finger_replace_preview_summary">雙指按住時暫時切換目前章節的替換效果，鬆開後恢復</string>
     <string name="header">頁首</string>
     <string name="main_body">正文</string>
     <string name="footer">頁尾</string>
@@ -1093,6 +1100,9 @@
     <string name="reading_time_tag">閱讀時長：</string>
     <string name="last_read_time_tag">最後閱讀時間：</string>
     <string name="page_touch_slop_title">滑動翻頁閾值</string>
+    <string name="pull_bookmark_distance_title">下拉書籤閾值</string>
+    <string name="pull_bookmark_distance_dialog_title">下拉書籤閾值（0 = 預設值）</string>
+    <string name="pull_bookmark_distance_summary">下拉多遠距離才會切換書籤（預設值 %s px）</string>
     <string name="page_touch_slop_dialog_title">滑動翻頁閾值（0 = 系統預設值）</string>
     <string name="page_touch_slop_summary">滑動多長距離才會觸發滑動翻頁（系統預設值 %s px）</string>
     <string name="example">範例</string>

@@ -77,6 +77,8 @@ android {
                 'pt-rBR',
                 'vi',
                 'zh',
+                // AndroidX stores Simplified Chinese switch labels under zh-rCN.
+                'zh-rCN',
                 'zh-rHK',
                 'zh-rTW'
         ]

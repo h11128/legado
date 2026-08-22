@@ -214,6 +214,8 @@ class ChangeChapterSourceViewModel(application: Application) :
         private const val PROBE_TTL_MS = 86_400_000L
     }
 
+    protected override val pinCurrentSource = true
+
     private val progress = ChapterSourceProgress()
     val chapterIndex: Int
         get() = progress.chapterIndex
