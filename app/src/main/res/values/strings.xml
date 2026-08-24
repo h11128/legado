@@ -1170,6 +1170,10 @@
     <string name="cover_show_name_summary">Book title shown on cover</string>
     <string name="cover_show_author">show author</string>
     <string name="cover_show_author_summary">Author shown on cover</string>
+    <string name="cover_horizontal">Horizontal cover text</string>
+    <string name="cover_horizontal_summary">Draw the title at the top and the author at the lower right</string>
+    <string name="cover_keep_punctuation">Keep title and author punctuation</string>
+    <string name="cover_keep_punctuation_summary">Do not remove punctuation from generated cover text</string>
     <string name="read_aloud_prev_paragraph">Read aloud the previous paragraph</string>
     <string name="read_aloud_next_paragraph">Read aloud the next paragraph</string>
     <string name="wait_download">wait download</string>
@@ -1183,6 +1187,8 @@
     <string name="double_page_horizontal">Tablet/Landscape Dual Page</string>
     <string name="open_in_browser">open in browser</string>
     <string name="download_from_github">Download from GitHub</string>
+    <string name="download_from_backup_cdn">Download from cdn.gigu.edu.kg</string>
+    <string name="download_from_second_cdn">Download from cdn.mgz.edu.kg</string>
     <string name="ignore_this_version">Ignore this version</string>
     <string name="copy_url">copy url</string>
     <string name="full_screen">full screen</string>
@@ -1812,4 +1818,6 @@
     <string name="curl_converter_failed">Conversion failed</string>
     <string name="curl_converter_no_output">Convert content first</string>
     <string name="curl_converter_insert_failed">The editor is not ready</string>
+    <string name="live_update_notifications">Live update notifications</string>
+    <string name="live_update_notifications_summary">Promote supported progress notifications on Android 16 when allowed by the system</string>
 </resources>

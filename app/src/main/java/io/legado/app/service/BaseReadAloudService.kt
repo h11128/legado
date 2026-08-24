@@ -59,6 +59,7 @@ import io.legado.app.utils.observeEvent
 import io.legado.app.utils.observeSharedPreferences
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
+import java.text.BreakIterator
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
@@ -71,6 +72,20 @@ import splitties.systemservices.notificationManager
 import splitties.systemservices.powerManager
 import splitties.systemservices.telephonyManager
 import splitties.systemservices.wifiManager
+
+internal fun shouldRewindReadAloudToSentenceStart(
+    rewindToSentenceStart: Boolean,
+    readAloudByPage: Boolean,
+    toLast: Boolean
+): Boolean = rewindToSentenceStart && !readAloudByPage && !toLast
+
+internal fun findReadAloudSentenceStart(text: String, visibleOffset: Int): Int {
+    if (text.isEmpty()) return 0
+    val limit = visibleOffset.coerceIn(0, text.length)
+    val sentenceIterator = BreakIterator.getSentenceInstance().apply { setText(text) }
+    val searchOffset = if (limit < text.length) limit + 1 else limit
+    return sentenceIterator.preceding(searchOffset).coerceAtLeast(0)
+}
 
 /**
  * 朗读服务
@@ -247,7 +262,8 @@ abstract class BaseReadAloudService : BaseService(),
             val play = it.getBoolean("play")
             val pageIndex = it.getInt("pageIndex")
             val startPos = it.getInt("startPos")
-            newReadAloud(play, pageIndex, startPos)
+            val rewindToSentenceStart = it.getBoolean("rewindToSentenceStart")
+            newReadAloud(play, pageIndex, startPos, rewindToSentenceStart)
         }
         observeSharedPreferences { _, key ->
             when (key) {
@@ -297,7 +313,8 @@ abstract class BaseReadAloudService : BaseService(),
             IntentAction.play -> newReadAloud(
                 intent.getBooleanExtra("play", true),
                 intent.getIntExtra("pageIndex", ReadBook.durPageIndex),
-                intent.getIntExtra("startPos", 0)
+                intent.getIntExtra("startPos", 0),
+                intent.getBooleanExtra("rewindToSentenceStart", false)
             )
 
             IntentAction.pause -> pauseReadAloud()
@@ -316,7 +333,12 @@ abstract class BaseReadAloudService : BaseService(),
         return START_NOT_STICKY
     }
 
-    private fun newReadAloud(play: Boolean, pageIndex: Int, startPos: Int) {
+    private fun newReadAloud(
+        play: Boolean,
+        pageIndex: Int,
+        startPos: Int,
+        rewindToSentenceStart: Boolean
+    ) {
         playStop()
         restoreReadAloudFollow()
         execute(executeContext = IO) {
@@ -328,7 +350,6 @@ abstract class BaseReadAloudService : BaseService(),
             }
             updateReadAloudChapterIndex(textChapter.chapter.index)
             readAloudNumber = textChapter.getReadLength(pageIndex) + startPos
-            readAloudChapterStart = readAloudNumber
             readAloudByPage = getPrefBoolean(PreferKey.readAloudByPage)
             contentList = textChapter.getNeedReadAloud(0, readAloudByPage, 0)
                 .split("\n")
@@ -343,10 +364,24 @@ abstract class BaseReadAloudService : BaseService(),
                 }
             }
             nowSpeak = textChapter.getParagraphNum(readAloudNumber + 1, readAloudByPage) - 1
-            if (!readAloudByPage && startPos == 0 && !toLast) {
+            if (shouldRewindReadAloudToSentenceStart(
+                    rewindToSentenceStart,
+                    readAloudByPage,
+                    toLast
+                )
+            ) {
+                val paragraph = textChapter.paragraphs[nowSpeak]
+                val sentenceStart = findReadAloudSentenceStart(
+                    paragraph.text,
+                    readAloudNumber - paragraph.chapterPosition
+                )
+                readAloudNumber = paragraph.chapterPosition + sentenceStart
+                pos = sentenceStart
+            } else if (!readAloudByPage && startPos == 0 && !toLast) {
                 pos = page.chapterPosition -
                         textChapter.paragraphs[nowSpeak].chapterPosition
             }
+            readAloudChapterStart = readAloudNumber
             if (toLast) {
                 toLast = false
                 readAloudNumber = textChapter.getLastParagraphPosition()

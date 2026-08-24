@@ -1167,6 +1167,10 @@
     <string name="cover_show_name_summary">封面上显示书名</string>
     <string name="cover_show_author">显示作者</string>
     <string name="cover_show_author_summary">封面上显示作者</string>
+    <string name="cover_horizontal">横向显示封面文字</string>
+    <string name="cover_horizontal_summary">书名显示在顶部，作者显示在右下角</string>
+    <string name="cover_keep_punctuation">保留书名和作者标点</string>
+    <string name="cover_keep_punctuation_summary">生成文字封面时不移除标点符号</string>
     <string name="read_aloud_prev_paragraph">朗读上一段</string>
     <string name="read_aloud_next_paragraph">朗读下一段</string>
     <string name="wait_download">待下载</string>
@@ -1180,6 +1184,8 @@
     <string name="double_page_horizontal">平板/横屏双页</string>
     <string name="open_in_browser">浏览器打开</string>
     <string name="download_from_github">GitHub 直链下载</string>
+    <string name="download_from_backup_cdn">从 cdn.gigu.edu.kg 下载</string>
+    <string name="download_from_second_cdn">从 cdn.mgz.edu.kg 下载</string>
     <string name="ignore_this_version">忽略此版本</string>
     <string name="copy_url">拷贝 URL</string>
     <string name="full_screen">全屏</string>
@@ -1701,4 +1707,6 @@
     <string name="show_source_replacement">显示替换后的书源</string>
     <string name="source_replacement_error">替换失败：%1$s</string>
     <string name="import_status_error">替换错误</string>
+    <string name="live_update_notifications">实时更新通知</string>
+    <string name="live_update_notifications_summary">在 Android 16 上将系统允许的进度通知提升为实时更新</string>
 </resources>
