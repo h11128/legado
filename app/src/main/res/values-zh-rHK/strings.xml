@@ -1319,4 +1319,6 @@
     <string name="apply_view_to_manual_order_confirm">將目前列表順序寫入手動順序（customOrder）？這不會單獨改變換源詢問順序；換源按響應時間與置頂排序。</string>
     <string name="apply_view_to_manual_order_need_clear_filter">請先清空搜尋過濾，再寫入手動順序（避免只重排目前篩選子集）。</string>
 
+    <string name="live_update_notifications">即時更新通知</string>
+    <string name="live_update_notifications_summary">在 Android 16 上將系統允許的進度通知提升為即時更新</string>
 </resources>

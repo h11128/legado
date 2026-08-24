@@ -3,6 +3,9 @@ package io.legado.app
 import io.legado.app.data.entities.Book
 import io.legado.app.service.buildHttpTtsCacheFileName
 import io.legado.app.ui.book.info.normalizeWebFileName
+import io.legado.app.ui.widget.image.coverBitmapCacheKey
+import io.legado.app.ui.widget.image.coverTitleTextSize
+import io.legado.app.ui.widget.image.normalizeCoverText
 import io.legado.app.utils.calculateSvgBitmapSize
 import io.legado.app.utils.isForegroundServiceStartDenied
 import org.junit.Assert.assertEquals
@@ -73,7 +76,7 @@ class RuntimeMediaStabilityTest {
         val load = source.substringAfter("path: String? = null,")
             .substringBefore("override fun onDetachedFromWindow")
         val emptyPath = load.substringAfter("if (currentPath == null) {")
-            .substringBefore("if (drawBookName")
+            .substringBefore("if (BookCover.drawBookName")
 
         assertTrue(load.contains("currentJob?.cancel()"))
         assertTrue(load.contains("triggerChannel.tryReceive()"))
@@ -109,6 +112,82 @@ class RuntimeMediaStabilityTest {
         assertTrue(generation.contains("nameBitmapCache.put(cacheKey, bitmap)"))
         assertTrue(generation.contains("currentNameBitmap = cacheKey to bitmap"))
         assertTrue(generation.contains("postInvalidate()"))
+    }
+
+    @Test
+    fun textCoverKeepsOneTitleSizeAcrossColumns() {
+        val width = 105f
+        val height = 140f
+        val largeTextHeight = 18f
+
+        for (characterCount in 4..7) {
+            assertEquals(
+                width / 7,
+                coverTitleTextSize(width, height, characterCount, largeTextHeight),
+                0.001f
+            )
+        }
+        assertEquals(
+            width / 9,
+            coverTitleTextSize(width, height, 8, largeTextHeight),
+            0.001f
+        )
+
+        val source = listOf(File("src/main/java"), File("app/src/main/java"))
+            .first { it.isDirectory }
+            .resolve("io/legado/app/ui/widget/image/CoverImageView.kt")
+            .readText()
+        val titleLoop = source.substringAfter("name.forEachIndexed { index, char ->")
+            .substringBefore("if (!drawBookAuthor)")
+
+        assertFalse(titleLoop.contains("namePaint.textSize ="))
+    }
+
+    @Test
+    fun coverTextOptionsPreservePunctuationAndSeparateRenderCaches() {
+        assertEquals("Title Author", normalizeCoverText("Title, Author", false))
+        assertEquals("Title, Author", normalizeCoverText("Title, Author", true))
+        assertEquals("Title", normalizeCoverText("  Title  ", true))
+        assertNotEquals(
+            coverBitmapCacheKey("ab", "c", 105, 140, false, true, 1, 2),
+            coverBitmapCacheKey("a", "bc", 105, 140, false, true, 1, 2)
+        )
+        assertNotEquals(
+            coverBitmapCacheKey("Title", "Author", 105, 140, false, true, 1, 2),
+            coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 1, 2)
+        )
+        assertNotEquals(
+            coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 1, 2),
+            coverBitmapCacheKey("Title", "Author", 105, 140, true, true, 3, 4)
+        )
+    }
+
+    @Test
+    fun horizontalTextCoverHonorsReportedLayoutContract() {
+        val source = listOf(File("src/main/java"), File("app/src/main/java"))
+            .first { it.isDirectory }
+            .resolve("io/legado/app/ui/widget/image/CoverImageView.kt")
+            .readText()
+        val horizontal = source.substringAfter("private fun drawHorizontalTextCover")
+            .substringBefore("fun setHeight")
+
+        assertTrue(horizontal.contains("HORIZONTAL_TITLE_MAX_LINES"))
+        assertTrue(horizontal.contains("setMaxLines(HORIZONTAL_TITLE_MAX_LINES)"))
+        assertTrue(horizontal.contains("TextUtils.TruncateAt.END"))
+        assertTrue(horizontal.contains("titlePaint.measureText(title) > titleWidth"))
+        assertTrue(horizontal.contains("textAlign = Paint.Align.RIGHT"))
+        assertTrue(horizontal.contains("textSize = viewWidth / 10"))
+        assertTrue(horizontal.contains("viewHeight * 0.92f"))
+
+        assertTrue(source.contains("sourceName = name"))
+        assertTrue(source.contains("updateNormalizedText()"))
+        assertTrue(source.contains("val renderWidth = width"))
+        assertTrue(source.contains("val renderHeight = height"))
+        assertTrue(source.contains("currentJob?.cancel()"))
+        val configSource = File("src/main/java/io/legado/app/ui/config/CoverConfigFragment.kt")
+            .takeIf { it.isFile }
+            ?: File("app/src/main/java/io/legado/app/ui/config/CoverConfigFragment.kt")
+        assertTrue(configSource.readText().contains("postEvent(EventBus.BOOKSHELF_REFRESH, \"\")"))
     }
 
     @Test

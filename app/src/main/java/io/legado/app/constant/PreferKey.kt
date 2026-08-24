@@ -24,6 +24,8 @@ object PreferKey {
     const val coverShowAuthor = "coverShowAuthor"
     const val coverShowNameN = "coverShowNameN"
     const val coverShowAuthorN = "coverShowAuthorN"
+    const val coverHorizontal = "coverHorizontal"
+    const val coverKeepPunctuation = "coverKeepPunctuation"
     const val remoteServerId = "remoteServerId"
     const val hideStatusBar = "hideStatusBar"
     const val clickActionTL = "clickActionTopLeft"
@@ -232,6 +234,7 @@ object PreferKey {
     const val paddingDisplayCutouts = "paddingDisplayCutouts"
     const val autoCheckNewBackup = "autoCheckNewBackup"
     const val autoBackup = "autoBackup"
+    const val liveUpdateNotifications = "liveUpdateNotifications"
 
     const val dThemeName = "durThemeName"
     const val dNThemeName = "durThemeNameNight"
