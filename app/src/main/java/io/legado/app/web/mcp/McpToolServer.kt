@@ -349,10 +349,26 @@ object McpToolServer {
 
         server.addTool(
             name = "list_sources",
-            description = "列出书源摘要，可按名称或 URL 子串过滤。",
+            description = "分页列出书源摘要。默认每页 ${McpFormat.DEFAULT_LIST_LIMIT}，" +
+                "最大 ${McpFormat.MAX_LIST_LIMIT}；用 offset/limit 翻页避免截断。",
             inputSchema = ToolSchema(
                 properties = buildJsonObject {
                     put("search", stringProp("名称或 URL 子串，大小写不敏感"))
+                    putJsonObject("enabledOnly") {
+                        put("type", "boolean")
+                        put("description", "true 仅启用，false 仅禁用，缺省不过滤")
+                    }
+                    putJsonObject("offset") {
+                        put("type", "integer")
+                        put("description", "偏移，默认 0")
+                    }
+                    putJsonObject("limit") {
+                        put("type", "integer")
+                        put(
+                            "description",
+                            "每页条数，默认 ${McpFormat.DEFAULT_LIST_LIMIT}，最大 ${McpFormat.MAX_LIST_LIMIT}",
+                        )
+                    }
                 },
                 required = emptyList(),
             ),
@@ -360,10 +376,16 @@ object McpToolServer {
         ) { request ->
             try {
                 val summaries = McpFormat.summarizeSources(
-                    appDb.bookSourceDao.all,
-                    request.arguments.str("search"),
+                    sources = appDb.bookSourceDao.all,
+                    search = request.arguments.str("search"),
+                    enabledOnly = request.arguments.bool("enabledOnly"),
                 )
-                ok("共 ${summaries.size} 条\n${McpFormat.truncate(McpFormat.toPrettyJson(summaries))}")
+                val page = McpFormat.pageSummaries(
+                    summaries = summaries,
+                    offset = request.arguments.int("offset") ?: 0,
+                    limit = request.arguments.int("limit") ?: McpFormat.DEFAULT_LIST_LIMIT,
+                )
+                ok(McpFormat.toPrettyJson(page))
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
