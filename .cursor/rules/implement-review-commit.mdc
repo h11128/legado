@@ -1,5 +1,5 @@
 ---
-description: After implementing work, run a review subagent, fix all findings, then commit. Applies to every project on this machine.
+description: After implementing work, decide review depth from skill code-review, then fix and commit. Do not spawn a reviewer for every small change, and never launch several reviewers in parallel.
 alwaysApply: true
 ---
 
@@ -9,19 +9,33 @@ alwaysApply: true
 
 ## MUST
 
-1. **Subagent 审查**：用 `Task` 拉起 `code-reviewer`（或项目里的 code-review skill 流程）。按任务难度自选 `model`（禁用任何 Opus / Sonnet）；审查类默认用会话允许列表里的强模型（当前常见：`cursor-grok-4.5-high`），轻量探路可用 fast/flash。不传 `model` 时会继承父会话，一般不推荐。
-2. **修完全部问题**：审查里的 Critical 和 Warning 都要修完（或写清为何不修并得到用户同意）。修完后如改动仍大，可再开一轮短审查。
-3. **再 commit**：审查通过（或用户同意的残留项已记录）后才 `git commit`。用户本轮已要求交付/收尾时，默认应提交；用户明确说「先别 commit」则停下。
-4. **证据**：回复里写清审查结论、修了什么、commit hash/message。
+1. **先按 skill `code-review` 决定审不审。** 打开 skill，用决策表选 Skip / 主代理自查 / 一个 `code-reviewer`。不要默认拉审查员，也不要按功能域并行拆多个。只有表里写「一个审查员」、或用户点名审查时，才 `Task` 拉起只读 `code-reviewer`。Prompt 必须带范围、文件列表、意图、验收消费者+超时。一次最多一个审查员。按任务难度自选 `model`（禁用任何 Opus / Sonnet）；审查类默认用会话允许列表里的强模型（当前常见：`cursor-grok-4.5-high`），轻量探路可用 fast/flash。不传 `model` 时会继承父会话，一般不推荐。
+2. **用声明范围量审查结论，再决定修还是拒。**  
+   判断方法见 alwaysApply `feedback-refuse-judgment`（两刀：我们改坏？→ 在声明范围？；未交分类表禁止改代码）。  
+   内部 `code-reviewer` 和外部 PR 评论同一把尺。范围内 Critical / Warning 要修完（或写清不修并得到用户同意）。  
+   「再加一门禁 / 新身份 / 新代次」且改完也不改变声明目标 → 按该规则拒绝实现，不要当必须修。
+3. **再 commit**：审查通过（或用户同意的残留项已记录）后才 `git commit`。Skip / 主代理自查也要在回复里写清选了哪一档。用户本轮已要求交付/收尾时，默认应提交；用户明确说「先别 commit」则停下。
+4. **证据**：回复里写清审查档位、结论、修了什么、拒了什么、commit hash/message。
+5. **开 PR 也是关门动作（自有仓库必审并提交 GitHub 状态）**：在自有仓库创建或更新 PR（`gh pr create` / 新 push）时，**严禁建完 PR 就不管**。必须对 PR 完整变动范围（`<base>..<head>`）按决策表执行审查：
+   - 审查通过（0 Critical, 0 Warning）→ 必须向 GitHub 提交官方审批：`gh pr review <pr_number> --approve`，以便 CI 门禁放行合并。
+   - 发现声明范围内的 Critical / Warning → 提交 `gh pr review <pr_number> --request-changes` 并确保关闭 auto-merge，修复并重新审查后再 Approve。
+   - 外部第三方仓库贡献除外（严禁向外部项目乱提 review 状态）。
+6. **复发类 agent/ops 失误：改脚本不够。** 同一失败类再次出现时，收工条件包括
+   Harness 组件（MdcRule / HookRule / Skill 至少一项），不能只交产品补丁 +
+   事件复盘。原则见 alwaysApply `no-substitute-oracle`；做法见 skill
+   `agent-harness`。
 
 ## 何时触发
 
-- 功能/RFC 步骤/bugfix 做完，准备说「好了」之前
-- 一次改动触及约 5+ 文件或公开行为变化
-- 用户说「做完」「收尾」「提交」且尚无独立审查
+- 关门时先走 skill 决策表（看剩余 diff 的大小、模块数、是否碰到高风险面）
+- 用户点名「审查 / CR」→ 一个审查员
+- **在自有仓库创建或更新 Pull Request 时**（必须审查 PR 变动并向 GitHub 提交 review 结论与状态）
+- 不要：小改、纯文档、单模块小补丁也强制拉审查员（按决策表走 Skip / 主代理自查即可）
 
 ## 不要
 
-- 只自审、跳过 subagent 就宣称可提交
+- 决策表写「一个审查员」时只自审就宣称可提交
+- 同一轮并行 2+ 个 `code-reviewer`
 - 带着未修 Critical 去 commit
 - 用 `--no-verify` 躲 hook（除非用户明确要求）
+- 把外部审查默认当成全量工单（先走 `feedback-refuse-judgment`）
