@@ -286,6 +286,15 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                     ChangeBookSourceQuality.decorateSearchHitForChangeSource(it)
                     searchBooks.add(it)
                 }
+            searchHitCount.set(searchBooks.size)
+            listPublishCount.set(searchBooks.size)
+            if (searchBooks.isNotEmpty()) {
+                _changeSourceProgress.value = ChangeSourceProgressUi(
+                    completed = 0,
+                    hitCount = searchBooks.size,
+                    finished = true,
+                )
+            }
             trySend(arrayOf(searchBooks))
         }
 

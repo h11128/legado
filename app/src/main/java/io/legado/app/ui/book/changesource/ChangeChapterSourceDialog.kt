@@ -274,10 +274,15 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
     }
 
     private fun initBottomBar() {
-        binding.tvProgressMetrics.text = getString(
-            R.string.change_source_progress_metrics,
-            0, 0, 0, viewModel.totalSourceCount.coerceAtLeast(1), 0, 1,
-        )
+        val count = searchBookAdapter.itemCount
+        if (count > 0) {
+            binding.tvProgressMetrics.text = getString(
+                R.string.change_source_progress_metrics,
+                count, count, 0, viewModel.totalSourceCount.coerceAtLeast(1), 0, 1,
+            )
+        } else {
+            binding.tvProgressMetrics.text = ""
+        }
         binding.tvProgressCurrent.text =
             callBack?.oldBook?.originName?.takeIf { it.isNotBlank() }
                 ?: getString(R.string.change_source_progress_idle)
@@ -427,6 +432,18 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             owner.lifecycle.currentStateFlow.first { it.isAtLeast(STARTED) }
             viewModel.searchDataFlow.conflate().collect {
                 searchBookAdapter.setItems(it)
+                if (!viewModel.isChapterVerifying && viewModel.searchStateData.value != true) {
+                    val progress = viewModel.changeSourceProgress.value
+                    bindChangeSourceProgressStrip(
+                        metricsView = binding.tvProgressMetrics,
+                        currentView = binding.tvProgressCurrent,
+                        resultCount = it.size,
+                        progress = if (progress.completed == 0 && progress.hitCount == 0 && it.isNotEmpty()) {
+                            progress.copy(hitCount = it.size)
+                        } else progress,
+                        total = viewModel.totalSourceCount.takeIf { t -> t > 0 } ?: it.size.coerceAtLeast(1),
+                    )
+                }
                 delay(250)
             }
         }
@@ -449,11 +466,23 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                         )
                         val count = progress.completed
                         val name = progress.label
+                        val isVerifying = viewModel.isChapterVerifying
+                        val isSearching = viewModel.searchStateData.value == true
                         if (count == 0 && name.isEmpty()) {
-                            if (!progress.finished && !viewModel.isChapterVerifying) {
+                            if (!progress.finished && !isVerifying && !isSearching) {
                                 binding.tvProgressCurrent.text =
                                     callBack?.oldBook?.originName?.takeIf { it.isNotBlank() }
                                         ?: getString(R.string.change_source_progress_idle)
+                                val currentCount = searchBookAdapter.itemCount
+                                if (currentCount > 0) {
+                                    bindChangeSourceProgressStrip(
+                                        metricsView = binding.tvProgressMetrics,
+                                        currentView = binding.tvProgressCurrent,
+                                        resultCount = currentCount,
+                                        progress = progress.copy(hitCount = currentCount),
+                                        total = viewModel.totalSourceCount.takeIf { t -> t > 0 } ?: currentCount,
+                                    )
+                                }
                                 delay(100)
                                 return@collect
                             }
