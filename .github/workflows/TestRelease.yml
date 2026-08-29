@@ -4,6 +4,18 @@ on:
   push:
     branches:
       - master
+    # Only run when actual app / build code changes. Skips agent-tooling,
+    # rule files, and docs-only commits that don't affect the APK.
+    paths:
+      - 'app/**'
+      - 'modules/**'
+      - '*.gradle'
+      - '*.gradle.kts'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'settings.gradle'
+      - 'settings.gradle.kts'
+      - '.github/workflows/TestRelease.yml'
   workflow_dispatch:
     inputs:
       commit_sha:
