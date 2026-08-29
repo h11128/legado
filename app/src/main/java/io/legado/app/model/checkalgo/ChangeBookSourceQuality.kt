@@ -3,6 +3,7 @@ package io.legado.app.model.checkalgo
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.help.book.BookAuthorIdentity
 import java.net.URLDecoder
+import kotlin.math.ln
 
 /**
  * Book-level (整书) change-source quality: latest-title affinity, TOC size,
@@ -525,6 +526,8 @@ object ChangeBookSourceQuality {
         respondTimeMs: Int = -1,
         userScore: Int = 0,
         expectedChars: Int? = null,
+        tocChapterCount: Int = 0,
+        expectedTocChapterCount: Int? = null,
     ): Int {
         val v = verdict ?: return -1
         if (v == QualityVerdict.Pending) return -1
@@ -539,11 +542,14 @@ object ChangeBookSourceQuality {
         }
         val tipMatch = latestMatch
         var lengthBonus = lengthSmartBonus(measuredChars, expectedChars)
+        var tocSizeBonus = tocSizeSmartBonus(tocChapterCount, expectedTocChapterCount)
         if (tipMatch == false || tocMatch == false) {
-            // Wrong-book long shells must not win on raw length alone.
+            // Wrong-book long shells must not win on raw length/chapter-count alone.
             lengthBonus = lengthBonus.coerceAtMost(WRONG_BOOK_LENGTH_CAP)
+            tocSizeBonus = tocSizeBonus.coerceAtMost(WRONG_BOOK_LENGTH_CAP)
         }
         score += lengthBonus
+        score += tocSizeBonus
         val sim = contentRefSim
         if (sim != null) {
             score += when {
@@ -593,6 +599,35 @@ object ChangeBookSourceQuality {
         return continuous + relative
     }
 
+    /**
+     * Total-chapter-count contribution so a source with far fewer chapters than the
+     * reader already has does not outrank a more complete one on response time /
+     * single-sample-chapter length alone (session evidence: a 108-chapter source
+     * outscoring 1000+/2000+ chapter sources for the same book — total chapter count
+     * and total word count were shown in the list but never fed into the score).
+     * Log-scaled absolute size when there is nothing to compare against yet, plus a
+     * relative catch-up band once the local book's own chapter count is known.
+     */
+    fun tocSizeSmartBonus(tocChapterCount: Int, expectedTocChapterCount: Int? = null): Int {
+        if (tocChapterCount <= 0) return 0
+        val continuous = (ln((tocChapterCount + 1).toDouble()) * TOC_SIZE_SCORE_SCALE)
+            .toInt()
+            .coerceIn(0, TOC_SIZE_SCORE_CAP)
+        val expected = expectedTocChapterCount?.takeIf { it > 0 }
+        val relative = if (expected != null) {
+            val ratio = tocChapterCount.toDouble() / expected.toDouble()
+            when {
+                ratio >= 0.95 -> TOC_SIZE_CAUGHT_UP_BONUS
+                ratio >= 0.7 -> TOC_SIZE_NEAR_BONUS
+                ratio >= 0.4 -> 0
+                else -> -TOC_SIZE_BEHIND_PENALTY
+            }
+        } else {
+            0
+        }
+        return continuous + relative
+    }
+
     fun respondSmartBonus(respondTimeMs: Int): Int = when {
         respondTimeMs < 0 -> 0
         respondTimeMs <= 200 -> 8
@@ -608,6 +643,13 @@ object ChangeBookSourceQuality {
 
     private const val LENGTH_SCORE_DIVISOR = 350
     private const val LENGTH_SCORE_CAP = 20
+    private const val TOC_SIZE_SCORE_SCALE = 1.6
+    private const val TOC_SIZE_SCORE_CAP = 8
+    /** Candidate has met/passed the reader's already-known chapter count. */
+    private const val TOC_SIZE_CAUGHT_UP_BONUS = 10
+    private const val TOC_SIZE_NEAR_BONUS = 4
+    /** Candidate is well below the reader's already-known chapter count (stale/incomplete). */
+    private const val TOC_SIZE_BEHIND_PENALTY = 8
     /** Max length bonus when latest tip hard-mismatches local (wrong book). */
     const val WRONG_BOOK_LENGTH_CAP = 4
     /** Hard latest mismatch penalty — must outweigh length/speed on wrong Ok rows. */

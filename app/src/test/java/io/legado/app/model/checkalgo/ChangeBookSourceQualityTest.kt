@@ -863,6 +863,48 @@ class ChangeBookSourceQualityTest {
     }
 
     @Test
+    fun tocSizeSmartBonusRewardsMoreChaptersOverAbsentExpectation() {
+        val few = ChangeBookSourceQuality.tocSizeSmartBonus(108)
+        val many = ChangeBookSourceQuality.tocSizeSmartBonus(2200)
+        assertTrue("few=$few many=$many", few < many)
+    }
+
+    @Test
+    fun tocSizeSmartBonusPenalizesFarBehindReaderProgress() {
+        // Reader already has ~2200 chapters locally; a 108-chapter hit is stale/incomplete.
+        val stale = ChangeBookSourceQuality.tocSizeSmartBonus(108, expectedTocChapterCount = 2200)
+        val caughtUp = ChangeBookSourceQuality.tocSizeSmartBonus(2250, expectedTocChapterCount = 2200)
+        assertTrue("stale=$stale should be penalized", stale < 0)
+        assertTrue("caughtUp=$caughtUp stale=$stale", caughtUp > stale)
+    }
+
+    @Test
+    fun smartScoreDoesNotLetAFewerChapterSourceBeatAMoreCompleteOne() {
+        // Session evidence (无限恐怖之诸天入侵): a 108-chapter hit outranked hits with far
+        // more chapters and word count, because total chapter count was displayed but
+        // never fed into the score. Same verdict/respondTime here — only tocChapterCount
+        // and the reader's already-known progress differ.
+        val fewChapters = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2000,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            respondTimeMs = 400,
+            tocChapterCount = 108,
+            expectedTocChapterCount = 2200,
+        )
+        val manyChapters = ChangeBookSourceQuality.smartScore(
+            measuredChars = 2000,
+            verdict = ChangeBookSourceQuality.QualityVerdict.Ok,
+            respondTimeMs = 400,
+            tocChapterCount = 2500,
+            expectedTocChapterCount = 2200,
+        )
+        assertTrue(
+            "fewChapters=$fewChapters should rank below manyChapters=$manyChapters",
+            fewChapters < manyChapters,
+        )
+    }
+
+    @Test
     fun metricLineKeepsWordCountSeparateFromQuality() {
         val line = ChangeBookSourceQuality.metricLine(53, 320)
         assertTrue(line.contains("字数：53"))

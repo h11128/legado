@@ -39,15 +39,20 @@ class ChangeSourceViewLifecycleContractTest {
 
     @Test
     fun `progress replay is not discarded when a view restarts`() {
-        val dialog = source("ChangeBookSourceDialog.kt")
-        val progress = dialog.section(
+        val book = source("ChangeBookSourceDialog.kt").section(
+            "viewModel.changeSourceProgress",
+            "appDb.bookSourceDao.flowEnabledGroups()",
+        )
+        val chapter = source("ChangeChapterSourceDialog.kt").section(
             "viewModel.changeSourceProgress",
             "appDb.bookSourceDao.flowEnabledGroups()",
         )
 
-        assertFalse(progress.contains(".drop("))
-        assertTrue(progress.contains("if (count == 0 && name.isEmpty())"))
-        assertTrue(progress.contains("callBack?.oldBook?.originName"))
+        listOf(book, chapter).forEach { progress ->
+            assertFalse(progress.contains(".drop("))
+            assertTrue(progress.contains("if (count == 0 && name.isEmpty())"))
+            assertTrue(progress.contains("callBack?.oldBook?.originName"))
+        }
     }
 
     @Test

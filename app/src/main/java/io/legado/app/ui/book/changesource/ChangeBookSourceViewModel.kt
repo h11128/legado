@@ -1483,6 +1483,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             respondTimeMs = searchBook.respondTime,
             userScore = getBookScore(searchBook),
             expectedChars = wordCountEvalContext?.expectedChars,
+            tocChapterCount = searchBook.tocChapterCount,
+            // Reader's own already-known chapter count — a candidate with far fewer
+            // chapters is probably stale/incomplete, not actually "better" for being fast.
+            expectedTocChapterCount = oldBook?.totalChapterNum,
         )
     }
 

@@ -51,7 +51,6 @@ import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -291,15 +290,29 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
 
         owner.lifecycleScope.launch {
             owner.repeatOnLifecycle(STARTED) {
+                // StateFlow replays its current value to every new collector, including the
+                // very first search of a freshly created dialog — dropping "the first element"
+                // (old behavior) discarded that real progress instead of the reset placeholder.
+                // Recognize the placeholder by shape instead: no work done yet, nothing to show.
+                // (StateFlow already conflates for a slow collector; no operator needed.)
                 viewModel.changeSourceProgress
-                    .drop(1)
-                    .conflate()
                     .collect { progress ->
                         val total = viewModel.totalSourceCount.coerceAtLeast(1)
                         binding.refreshProgressBar.bindChangeSourceProgress(
                             completed = progress.completed,
                             total = total,
                         )
+                        val count = progress.completed
+                        val name = progress.label
+                        if (count == 0 && name.isEmpty()) {
+                            if (!progress.finished) {
+                                binding.tvProgressCurrent.text =
+                                    callBack?.oldBook?.originName?.takeIf { it.isNotBlank() }
+                                        ?: getString(R.string.change_source_progress_idle)
+                                delay(100)
+                                return@collect
+                            }
+                        }
                         bindChangeSourceProgressStrip(
                             metricsView = binding.tvProgressMetrics,
                             currentView = binding.tvProgressCurrent,
