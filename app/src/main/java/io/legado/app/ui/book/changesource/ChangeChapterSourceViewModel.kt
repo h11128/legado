@@ -259,6 +259,8 @@ class ChangeChapterSourceViewModel(application: Application) :
     val isAutomationActive: Boolean
         get() = automationSession != null
 
+    override val isChapterMode: Boolean get() = true
+
     override fun initData(arguments: Bundle?, book: Book?, fromReadBookActivity: Boolean) {
         super.initData(arguments, book, fromReadBookActivity)
         arguments?.let { bundle ->
@@ -334,7 +336,6 @@ class ChangeChapterSourceViewModel(application: Application) :
     }
 
     private fun notifySearchFinish(isEmpty: Boolean) {
-        searchFinishCallback?.invoke(isEmpty)
         searchFinishData.postValue(PendingEvent(isEmpty))
     }
 
@@ -393,8 +394,6 @@ class ChangeChapterSourceViewModel(application: Application) :
                 val candidates = searchBooks.filterNot {
                     ReviewCapability.isDedicatedReviewProvider(it.origin)
                 }
-                searchHitCount.set(candidates.size)
-                listPublishCount.set(candidates.size)
                 ChangeSourceLog.i(
                     "verify-start afterSearch=$afterSearch chapter=$chapterKey " +
                         "candidates=${candidates.size} cachedProbes=${probeByOrigin.size} " +

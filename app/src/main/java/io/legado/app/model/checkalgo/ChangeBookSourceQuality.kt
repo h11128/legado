@@ -217,6 +217,17 @@ object ChangeBookSourceQuality {
             else -> null
         }
         book.originName = displayOriginName(book.originName, book.bookUrl)
+        if (book.qualityVerdict == null && book.chapterWordCount >= 0) {
+            val v = verdictFromContentQuality(
+                ChangeChapterVerify.ContentQuality.Ok(book.chapterWordCount),
+                book.chapterWordCount,
+            )
+            book.qualityVerdict = v
+            book.smartScore = smartScore(
+                measuredChars = book.chapterWordCount,
+                verdict = v,
+            )
+        }
     }
 
     /**
