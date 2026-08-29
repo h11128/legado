@@ -154,7 +154,11 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private var screenKey: String = ""
     private var bookSourceParts = arrayListOf<BookSourcePart>()
     val totalSourceCount: Int
-        get() = bookSourceParts.size
+        get() = if (bookSourceParts.isNotEmpty()) {
+            bookSourceParts.size
+        } else {
+            runCatching { appDb.bookSourceDao.allEnabledPart.size }.getOrDefault(0)
+        }
     protected val searchBooks = Collections.synchronizedList(arrayListOf<SearchBook>())
     protected val tocMap = ConcurrentHashMap<String, List<BookChapter>>()
     protected val _changeSourceProgress = MutableStateFlow(ChangeSourceProgressUi())
@@ -180,15 +184,15 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private val deepInFlightNames = ConcurrentHashMap.newKeySet<String>()
     /** Last content digram Jaccard vs local ref (origin → sim); used to suppress tip badges. */
     private val contentRefSimByOrigin = ConcurrentHashMap<String, Double>()
-    private val completedProbeCount = AtomicInteger(0)
+    protected val completedProbeCount = AtomicInteger(0)
     /** Useful content probes (Ok+Weak) toward early-stop「好源」. */
     private val qualityOkCount = AtomicInteger(0)
     /** [completedProbeCount] value when [qualityOkCount] last increased. */
     private val lastUsefulAtCompleted = AtomicInteger(0)
     private val earlyStopped = AtomicBoolean(false)
     /** Session counters for finish summary (logcat / AppLog). */
-    private val searchHitCount = AtomicInteger(0)
-    private val listPublishCount = AtomicInteger(0)
+    protected val searchHitCount = AtomicInteger(0)
+    protected val listPublishCount = AtomicInteger(0)
     private val missEmptyCount = AtomicInteger(0)
     private val missTimeoutCount = AtomicInteger(0)
     private val missErrorCount = AtomicInteger(0)
@@ -445,7 +449,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     protected fun initSearchPoolProtected() = initSearchPool()
 
-    protected fun updateChangeSourceProgress(index: Int, label: String) {
+    protected fun updateChangeSourceProgress(index: Int, label: String, isFinished: Boolean = false) {
+        val hits = searchHitCount.get().takeIf { it > 0 } ?: synchronized(searchBooks) { searchBooks.size }
         _changeSourceProgress.value = ChangeSourceProgressUi(
             completed = index,
             inFlight = 0,
@@ -453,9 +458,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             deepInFlight = deepInFlightNames.size,
             label = label,
             qualityOk = qualityOkCount.get(),
-            hitCount = searchHitCount.get(),
+            hitCount = hits,
             earlyStopped = earlyStopped.get(),
-            finished = false,
+            finished = isFinished,
         )
     }
 
@@ -1884,6 +1889,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
     private fun refreshList(books: List<SearchBook>, operation: Long) {
         val httpLimitsEpoch = raiseHttpLimitsForSearch()
+        completedProbeCount.set(0)
+        searchHitCount.set(books.size)
         task = viewModelScope.launch(searchPool!!) {
             flow {
                 for (searchBook in books) {
@@ -1891,20 +1898,34 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 }
             }.onStart {
                 searchStateData.postValue(true)
+                publishProgress(force = true)
             }.mapParallelSafe(threadCount()) {
-                val source = appDb.bookSourceDao.getBookSource(it.origin)!!
-                // Align with search(): return promptly even if nested Cronet/WebView cleanup lags.
-                val ok = withTimeoutOrNull(AskTimeout.CHANGE_SOURCE_MS) {
-                    loadBookInfo(source, it.toBook())
-                    true
+                val source = appDb.bookSourceDao.getBookSource(it.origin)
+                if (source == null) {
+                    completedProbeCount.incrementAndGet()
+                    publishProgress()
+                    return@mapParallelSafe
                 }
-                if (ok != true) {
-                    noteAskMiss(it.origin, "timeout", processDemote = true)
+                probingNames.add(it.origin)
+                publishProgress()
+                try {
+                    val ok = withTimeoutOrNull(AskTimeout.CHANGE_SOURCE_MS) {
+                        loadBookInfo(source, it.toBook())
+                        true
+                    }
+                    if (ok != true) {
+                        noteAskMiss(it.origin, "timeout", processDemote = true)
+                    }
+                } finally {
+                    probingNames.remove(it.origin)
+                    completedProbeCount.incrementAndGet()
+                    publishProgress()
                 }
             }.onCompletion {
                 try {
                     searchStateData.postValue(false)
                     warnIfRelativeReferenceUnavailable()
+                    publishProgress(finished = true, force = true)
                 } finally {
                     restoreHttpLimitsIfNeeded(httpLimitsEpoch)
                 }

@@ -393,6 +393,8 @@ class ChangeChapterSourceViewModel(application: Application) :
                 val candidates = searchBooks.filterNot {
                     ReviewCapability.isDedicatedReviewProvider(it.origin)
                 }
+                searchHitCount.set(candidates.size)
+                listPublishCount.set(candidates.size)
                 ChangeSourceLog.i(
                     "verify-start afterSearch=$afterSearch chapter=$chapterKey " +
                         "candidates=${candidates.size} cachedProbes=${probeByOrigin.size} " +
@@ -482,11 +484,18 @@ class ChangeChapterSourceViewModel(application: Application) :
                 }
                 applyMultiSourceConsensus(chapterKey)
                 notifySearchAdapter()
-                updateChangeSourceProgress(
-                    contentDone.get().coerceAtLeast(1),
-                    getApplication<Application>().getString(R.string.change_source_verify_done)
-                )
                 val okN = ChangeChapterVerify.countOk(probeByOrigin, candidateOrigins)
+                _changeSourceProgress.value = ChangeSourceProgressUi(
+                    completed = if (afterSearch) completedProbeCount.get() else candidates.size,
+                    inFlight = 0,
+                    concurrency = threadCount(),
+                    deepInFlight = 0,
+                    label = getApplication<Application>().getString(R.string.change_source_verify_done),
+                    qualityOk = okN,
+                    hitCount = candidates.size,
+                    earlyStopped = false,
+                    finished = true,
+                )
                 ChangeSourceLog.i(
                     "verify-finish chapter=$chapterKey list=${searchBooks.size} " +
                         "aligned=$alignedCount contentProbed=${contentDone.get()} ok=$okN"
