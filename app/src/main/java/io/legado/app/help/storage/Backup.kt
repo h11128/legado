@@ -14,6 +14,7 @@ import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.config.ReplacePreviewConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.BookCover
@@ -61,6 +62,9 @@ internal fun selectedBackupFileNames(isEnabled: (String) -> Boolean): List<Strin
         }
         if (isEnabled(BackupConfig.cookieContentKey)) {
             add(BackupConfig.cookieFileName)
+        }
+        if (isEnabled(BackupConfig.runtimeSourceCacheContentKey)) {
+            add(BackupConfig.runtimeSourceCacheFileName)
         }
         if (isEnabled(BackupConfig.ruleContentKey)) {
             addAll(
@@ -198,7 +202,8 @@ object Backup {
                         uploadWebDav = false,
                         contentKeys = BackupConfig.contentKeys
                             .filterNotTo(hashSetOf()) {
-                                it == BackupConfig.cookieContentKey
+                                it == BackupConfig.cookieContentKey ||
+                                    it == BackupConfig.runtimeSourceCacheContentKey
                             },
                     )
                 ) { "生成恢复前备份失败" }
@@ -221,12 +226,23 @@ object Backup {
             }
         if (lanTransfer) {
             enabledContentKeys.remove(BackupConfig.cookieContentKey)
+            enabledContentKeys.remove(BackupConfig.runtimeSourceCacheContentKey)
         }
         val password = LocalConfig.password
-        if (BackupConfig.cookieContentKey in enabledContentKeys &&
-            password.isNullOrBlank()
-        ) {
-            throw NoStackTraceException(appCtx.getString(R.string.cookie_backup_password_required))
+        if (password.isNullOrBlank()) {
+            when {
+                BackupConfig.cookieContentKey in enabledContentKeys -> {
+                    throw NoStackTraceException(
+                        appCtx.getString(R.string.cookie_backup_password_required)
+                    )
+                }
+
+                BackupConfig.runtimeSourceCacheContentKey in enabledContentKeys -> {
+                    throw NoStackTraceException(
+                        appCtx.getString(R.string.source_variables_backup_password_required)
+                    )
+                }
+            }
         }
         if (!lanTransfer) {
             LocalConfig.lastBackup = System.currentTimeMillis()
@@ -272,7 +288,11 @@ object Backup {
         writeListToJson(appDb.bookSourceDao.all, "bookSource.json", backupPath)
         writeListToJson(appDb.rssSourceDao.all, "rssSources.json", backupPath)
         writeListToJson(appDb.rssStarDao.all, "rssStar.json", backupPath)
-        writeListToJson(appDb.replaceRuleDao.all, "replaceRule.json", backupPath)
+        writeListToJson(
+            ReplacePreviewConfig.withSamples(appDb.replaceRuleDao.all),
+            "replaceRule.json",
+            backupPath
+        )
         writeListToJson(appDb.readRecordDao.all, "readRecord.json", backupPath)
         writeListToJson(appDb.searchKeywordDao.all, "searchHistory.json", backupPath)
         writeListToJson(appDb.ruleSubDao.all, "sourceSub.json", backupPath)
@@ -294,6 +314,13 @@ object Backup {
             FileUtils.createFileIfNotExist(
                 backupPath + File.separator + BackupConfig.cookieFileName
             ).writeText(encryptedCookies)
+        }
+        if (BackupConfig.runtimeSourceCacheContentKey in enabledContentKeys) {
+            val runtimeCaches = appDb.cacheDao.getRuntimeSourceCaches(System.currentTimeMillis())
+            val encryptedRuntimeCaches = aes.encryptBase64(GSON.toJson(runtimeCaches))
+            FileUtils.createFileIfNotExist(
+                backupPath + File.separator + BackupConfig.runtimeSourceCacheFileName
+            ).writeText(encryptedRuntimeCaches)
         }
         currentCoroutineContext().ensureActive()
         GSON.toJson(readConfigSnapshot).let {

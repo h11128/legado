@@ -3,6 +3,7 @@ package io.legado.app.service
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import androidx.lifecycle.lifecycleScope
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.connector
@@ -17,6 +18,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.receiver.NetworkChangedListener
 import io.legado.app.utils.NetworkUtils
+import io.legado.app.utils.applyPromotedProgress
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.printOnDebug
@@ -24,6 +26,7 @@ import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.startForegroundServiceCompat
+import io.legado.app.utils.startService
 import io.legado.app.utils.stopService
 import io.legado.app.utils.toastOnUi
 import io.legado.app.web.mcp.McpAccess
@@ -32,12 +35,17 @@ import io.legado.app.web.mcp.McpNsdPublisher
 import io.legado.app.web.mcp.McpToolServer
 import io.legado.app.web.mcp.configureMcp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import splitties.init.appCtx
+import splitties.systemservices.notificationManager
 
 class McpService : BaseService() {
 
     companion object {
+        private const val TERMINAL_NOTIFICATION_DURATION = 4_500L
+
         @Volatile
         var isRun = false
 
@@ -73,7 +81,13 @@ class McpService : BaseService() {
             // User-initiated stop: persist off so App does not auto-restart.
             appCtx.putPrefBoolean(PreferKey.mcpService, false)
             McpWatchdog.cancel(context)
-            context.stopService<McpService>()
+            if (isRun) {
+                context.startService<McpService> {
+                    action = IntentAction.stop
+                }
+            } else {
+                context.stopService<McpService>()
+            }
         }
     }
 
@@ -81,6 +95,9 @@ class McpService : BaseService() {
     private var activeAddressKeys: List<String> = emptyList()
     @Volatile
     private var destroyed = false
+    @Volatile
+    private var stopping = false
+    private var terminalStopJob: Job? = null
     private var notificationList = mutableListOf(appCtx.getString(R.string.service_starting))
     private var startAttempt = 0
     private val nsdPublisher by lazy { McpNsdPublisher(this) }
@@ -91,6 +108,7 @@ class McpService : BaseService() {
     override fun onCreate() {
         super.onCreate()
         destroyed = false
+        stopping = false
         // Promote to FGS during onCreate as well — BOOT_COMPLETED / package-replaced
         // paths can sit in onCreate before onStartCommand and still burn the FGS timer.
         promoteForegroundNotification()
@@ -107,22 +125,24 @@ class McpService : BaseService() {
             if (shouldRestart) scheduleUpMcpServer()
         }
         networkChangedListener.onNetworkChanged = {
-            if (!destroyed) {
-                val addresses = NetworkUtils.getLocalIPAddress()
-                if (isRun) {
-                    val addressKeys = addresses.mapNotNull { it.hostAddress }.sorted()
-                    if (addressKeys != activeAddressKeys) {
-                        // Do not stop CIO while debug/check holds the channel — that is a
-                        // primary hang mode from thread 59f4efb9 (mid-tool engine restart).
-                        if (McpChannelGuard.isBusy()) {
-                            McpChannelGuard.pendingNetworkRestart = true
-                            updateAddresses(addresses)
-                        } else {
-                            scheduleUpMcpServer()
+            synchronized(this) {
+                if (!destroyed && !stopping) {
+                    val addresses = NetworkUtils.getLocalIPAddress()
+                    if (isRun) {
+                        val addressKeys = addresses.mapNotNull { it.hostAddress }.sorted()
+                        if (addressKeys != activeAddressKeys) {
+                            // Do not stop CIO while debug/check holds the channel — that is a
+                            // primary hang mode from thread 59f4efb9 (mid-tool engine restart).
+                            if (McpChannelGuard.isBusy()) {
+                                McpChannelGuard.pendingNetworkRestart = true
+                                updateAddresses(addresses)
+                            } else {
+                                scheduleUpMcpServer()
+                            }
                         }
+                    } else {
+                        updateAddresses(addresses)
                     }
-                } else {
-                    updateAddresses(addresses)
                 }
             }
         }
@@ -138,14 +158,20 @@ class McpService : BaseService() {
         // do not schedule CIO/NSD in that path (same pattern as AudioCacheService).
         if (sticky == START_NOT_STICKY) return sticky
         when (intent?.action) {
-            IntentAction.stop -> {
-                appCtx.putPrefBoolean(PreferKey.mcpService, false)
-                McpWatchdog.cancel(this)
-                stopSelf()
-            }
+            IntentAction.stop -> stopServiceWithNotification()
             "copyHostAddress" -> sendToClip(hostAddress)
-            ACTION_RESTART -> scheduleUpMcpServer()
-            else -> scheduleUpMcpServer()
+            ACTION_RESTART -> {
+                terminalStopJob?.cancel()
+                terminalStopJob = null
+                stopping = false
+                scheduleUpMcpServer()
+            }
+            else -> {
+                terminalStopJob?.cancel()
+                terminalStopJob = null
+                stopping = false
+                scheduleUpMcpServer()
+            }
         }
         return sticky
     }
@@ -163,7 +189,10 @@ class McpService : BaseService() {
 
     @Synchronized
     override fun onDestroy() {
+        terminalStopJob?.cancel()
+        terminalStopJob = null
         destroyed = true
+        stopping = true
         isRun = false
         McpChannelGuard.onBecameIdle = null
         McpChannelGuard.pendingNetworkRestart = false
@@ -196,8 +225,34 @@ class McpService : BaseService() {
     }
 
     @Synchronized
+    private fun stopServiceWithNotification() {
+        appCtx.putPrefBoolean(PreferKey.mcpService, false)
+        McpWatchdog.cancel(this)
+        if (stopping) return
+        stopping = true
+        isRun = false
+        stopEngine()
+        hostAddress = ""
+        activeAddressKeys = emptyList()
+        postEvent(EventBus.MCP_SERVICE, "")
+        val (builder, promoted) = createNotification(terminal = true)
+        if (!promoted) {
+            stopSelf()
+            return
+        }
+        startForeground(NotificationId.McpService, builder.build())
+        terminalStopJob?.cancel()
+        terminalStopJob = lifecycleScope.launch {
+            delay(TERMINAL_NOTIFICATION_DURATION)
+            notificationManager.cancel(NotificationId.McpService)
+            stopSelf()
+        }
+    }
+
+    @Synchronized
     private fun upMcpServer() {
         if (destroyed) return
+        if (stopping) return
         // Re-check under the same lock: a tool may have started since idle notify.
         if (McpChannelGuard.isBusy()) {
             McpChannelGuard.pendingNetworkRestart = true
@@ -302,6 +357,7 @@ class McpService : BaseService() {
         addresses: List<java.net.InetAddress> = NetworkUtils.getLocalIPAddress(),
         port: Int = getPort(),
     ) {
+        if (stopping) return
         notificationList = McpAccess.endpointUrls(addresses, port).toMutableList()
         hostAddress = notificationList.first()
         startForegroundNotification()
@@ -313,18 +369,43 @@ class McpService : BaseService() {
     }
 
     override fun startForegroundNotification() {
+        val (builder, _) = createNotification(terminal = stopping)
+        startForeground(NotificationId.McpService, builder.build())
+    }
+
+    private fun createNotification(terminal: Boolean = false): Pair<NotificationCompat.Builder, Boolean> {
+        val statusText = getString(
+            if (terminal) R.string.mcp_service_live_stopped else R.string.mcp_service_live_started
+        )
         val builder = NotificationCompat.Builder(this, AppConst.channelIdWeb)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setSmallIcon(R.drawable.ic_web_service_noti)
-            .setOngoing(true)
-            .setContentTitle(getString(R.string.mcp_service))
+            .setOngoing(!terminal)
+            .setContentTitle(statusText)
             .setContentText(notificationList.joinToString("\n"))
             .setContentIntent(servicePendingIntent<McpService>("copyHostAddress"))
-        builder.addAction(
-            R.drawable.ic_stop_black_24dp,
-            getString(R.string.cancel),
-            servicePendingIntent<McpService>(IntentAction.stop),
+        val promoted = builder.applyPromotedProgress(
+            this,
+            AppConst.channelIdWeb,
+            eligible = terminal || isRun,
+            ongoing = true,
+            max = 0,
+            progress = 0,
+            criticalText = statusText,
+            terminal = terminal
         )
-        startForeground(NotificationId.McpService, builder.build())
+        if (!promoted) {
+            builder.setContentTitle(getString(R.string.mcp_service))
+        }
+        if (!terminal) {
+            builder.addAction(
+                R.drawable.ic_stop_black_24dp,
+                getString(R.string.cancel),
+                servicePendingIntent<McpService>(IntentAction.stop),
+            )
+        } else if (promoted) {
+            builder.setTimeoutAfter(TERMINAL_NOTIFICATION_DURATION)
+        }
+        return builder to promoted
     }
 }

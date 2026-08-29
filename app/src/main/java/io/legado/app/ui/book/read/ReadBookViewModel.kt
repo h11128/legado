@@ -590,6 +590,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         execute {
             ReadBook.book?.let {
                 ContentProcessor.get(it.name, it.origin).upReplaceRules()
+                ReadBook.clearTextChapter()
                 ReadBook.loadContent(resetPageOffset = false)
             }
         }

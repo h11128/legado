@@ -211,6 +211,14 @@ data class Book(
         return config.reverseToc
     }
 
+    fun setTocExpanded(expanded: Boolean) {
+        config.tocExpanded = expanded
+    }
+
+    fun getTocExpanded(): Boolean {
+        return config.tocExpanded
+    }
+
     fun setUseReplaceRule(useReplaceRule: Boolean) {
         config.useReplaceRule = useReplaceRule
     }
@@ -484,6 +492,7 @@ data class Book(
     @Parcelize
     data class ReadConfig(
         var reverseToc: Boolean = false,
+        var tocExpanded: Boolean = true,
         var pageAnim: Int? = null,
         var reSegment: Boolean = false,
         var imageStyle: String? = null,
@@ -499,7 +508,9 @@ data class Book(
         var closeCredits: Int = 0,       //音频片尾
         var playMode: Int = 0,           //音频播放模式
         var playSpeed: Float = 1.0f,     //音频播放速度
-        var useGlobalAudioSkip: Boolean = false
+        var useGlobalAudioSkip: Boolean = false,
+        // 阅读页手动选择的替换规则；旧书籍配置缺失时保持空集合。
+        var manualReplaceRuleIds: List<Long> = emptyList()
     ) : Parcelable
 
     class Converters {

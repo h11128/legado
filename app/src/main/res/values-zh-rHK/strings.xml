@@ -813,6 +813,7 @@
     <string name="backup_content_persisted_covers">書籍固化封面</string>
     <string name="backup_content_other_covers">其他封面文件</string>
     <string name="backup_content_backgrounds">閱讀背景</string>
+    <string name="backup_content_source_variables">來源變數</string>
     <string name="read_config">閱讀界面設置</string>
     <string name="rule_image_style">圖片樣式 (imageStyle)</string>
     <string name="rule_replace_regex">替換規則 (replaceRegex)</string>
@@ -926,9 +927,14 @@
     <string name="complete">完成</string>
     <string name="show_unread">顯示未讀標誌</string>
     <string name="show_read_progress">顯示閱讀進度</string>
+    <string name="read_progress">閱讀進度</string>
+    <string name="read_progress_hidden">隱藏</string>
+    <string name="read_progress_standard">標準（2dp）</string>
+    <string name="read_progress_enhanced">增強（4dp）</string>
     <string name="use_default_cover">總是使用默認封面</string>
     <string name="use_default_cover_s">總是使用默認封面,唔顯示網路封面</string>
     <string name="title_font_size">字號</string>
+    <string name="title_line_spacing">標題行距</string>
     <string name="title_margin_top">上邊距</string>
     <string name="title_margin_bottom">下邊距</string>
     <string name="show">顯示</string>
@@ -937,6 +943,7 @@
     <string name="diy_source_group">自訂源分組</string>
     <string name="diy_edit_source_group">輸入自訂源分組名稱</string>
     <string name="reverse_toc">反轉目錄</string>
+    <string name="expand_toc">目錄展開</string>
     <string name="show_discovery">顯示發現</string>
     <string name="style">樣式</string>
     <string name="group_style">分組樣式</string>
@@ -1121,6 +1128,7 @@
     <string name="tag_explore_enabled">标志:发现已启用</string>
     <string name="tag_explore_disabled">标志:发现已禁用</string>
     <string name="show_read_title_addition">展示顶部工具栏附加区域</string>
+    <string name="show_read_title_chapter_name_only">附加区域仅显示章节名</string>
     <string name="read_bar_style_follow_page">工具栏样式跟随页面</string>
     <string name="rule_image_decode">图片解密（imageDecode）</string>
     <string name="like_source">赞</string>
@@ -1194,6 +1202,7 @@
     <string name="select_update_source">选中更新源</string>
     <string name="set_local_password">设置本地密码</string>
     <string name="set_local_password_summary">本地密码用来对备份的敏感信息加密和解密,如需在不同设备之间同步,本地密码需一致.</string>
+    <string name="source_variables_backup_password_required">備份或恢復來源變數前，請先設定非空的本地密碼。</string>
     <string name="only_latest_backup_t">仅保留最新备份</string>
     <string name="only_latest_backup_s">本地备份仅保留最新备份文件</string>
     <string name="webdav_application_authorization_error">webDav应用验证失败</string>
@@ -1319,6 +1328,14 @@
     <string name="apply_view_to_manual_order_confirm">將目前列表順序寫入手動順序（customOrder）？這不會單獨改變換源詢問順序；換源按響應時間與置頂排序。</string>
     <string name="apply_view_to_manual_order_need_clear_filter">請先清空搜尋過濾，再寫入手動順序（避免只重排目前篩選子集）。</string>
 
+    <string name="reader_menu_config">自訂閱讀菜單</string>
+    <string name="reader_menu_config_summary">選擇和調整閱讀頁右上角菜單中的操作</string>
+    <string name="reader_menu_more">更多</string>
+    <string name="reader_menu_all_features">全部功能</string>
+    <string name="reader_menu_select_all">全部顯示</string>
+    <string name="reader_menu_select_none">全部移至更多</string>
+    <string name="reader_menu_zone_primary">第一層選單</string>
+    <string name="reader_menu_zone_more">更多選單</string>
     <string name="live_update_notifications">即時更新通知</string>
     <string name="live_update_notifications_summary">在 Android 16 上將系統允許的進度通知提升為即時更新</string>
 </resources>

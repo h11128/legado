@@ -152,6 +152,7 @@ class MoreConfigDialog : BasePrefDialogFragment() {
                 }
 
                 PreferKey.showReadTitleAddition,
+                PreferKey.showReadTitleChapterNameOnly,
                 PreferKey.readBarStyleFollowPage -> {
                     postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
                 }
@@ -189,6 +190,10 @@ class MoreConfigDialog : BasePrefDialogFragment() {
 
                 "customTextMenu" -> {
                     (activity as? ReadBookActivity)?.showTextSelectMenuConfig()
+                }
+
+                "customReaderMenu" -> {
+                    (activity as? ReadBookActivity)?.showReaderMenuConfig()
                 }
 
                 PreferKey.pageTouchSlop -> {

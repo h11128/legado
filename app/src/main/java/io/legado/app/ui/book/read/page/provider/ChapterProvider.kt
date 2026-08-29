@@ -131,6 +131,10 @@ object ChapterProvider {
         private set
 
     @JvmStatic
+    var titleLineSpacingExtra = 1f
+        private set
+
+    @JvmStatic
     var paragraphSpacing = 0
         private set
 
@@ -166,6 +170,15 @@ object ChapterProvider {
 
     @JvmStatic
     var contentPaintFontMetrics = FontMetrics()
+
+    @JvmStatic
+    fun lineSpacingFor(line: TextLine): Float {
+        return if (line.isTitle && !line.isTitleNumber) {
+            titleLineSpacingExtra
+        } else {
+            lineSpacingExtra
+        }
+    }
 
     @JvmStatic
     var typeface: Typeface? = Typeface.DEFAULT
@@ -265,7 +278,14 @@ object ChapterProvider {
      */
     fun upStyle() {
         typeface = getTypeface(ReadBookConfig.textFont)
-        getPaints(typeface).let {
+        val titleTypeface = if (ReadBookConfig.resolvedTitleFont == ReadBookConfig.textFont) {
+            typeface
+        } else {
+            getTypeface(ReadBookConfig.resolvedTitleFont, typeface) {
+                ReadBookConfig.titleFont = ""
+            }
+        }
+        getPaints(titleTypeface, typeface).let {
             titlePaint = it.first
             contentPaint = it.second
             titleNumberPaint = TextPaint(titlePaint).apply {
@@ -285,6 +305,8 @@ object ChapterProvider {
         reviewPaint.isAntiAlias = true
         //间距
         lineSpacingExtra = ReadBookConfig.lineSpacingExtra / 10f
+        titleLineSpacingExtra =
+            (100 + ReadBookConfig.titleLineSpacingExtra.coerceIn(-20, 30)) / 100f
         paragraphSpacing = ReadBookConfig.paragraphSpacing
         titleTopSpacing = ReadBookConfig.titleTopSpacing.dpToPx()
         titleBottomSpacing = ReadBookConfig.titleBottomSpacing.dpToPx()
@@ -578,21 +600,26 @@ object ChapterProvider {
             bitmap
         }
 
-    private fun getTypeface(fontPath: String): Typeface? {
+    private fun getTypeface(
+        fontPath: String,
+        fallback: Typeface? = null,
+        onInvalid: () -> Unit = { ReadBookConfig.textFont = "" },
+    ): Typeface? {
+        val fallbackTypeface = fallback ?: when (AppConfig.systemTypefaces) {
+            1 -> Typeface.SERIF
+            2 -> Typeface.MONOSPACE
+            else -> Typeface.SANS_SERIF
+        }
         return kotlin.runCatching {
             when {
                 fontPath.isNotEmpty() -> loadTypeface(fontPath)
-                else -> when (AppConfig.systemTypefaces) {
-                    1 -> Typeface.SERIF
-                    2 -> Typeface.MONOSPACE
-                    else -> Typeface.SANS_SERIF
-                }
+                else -> fallbackTypeface
             }
         }.getOrElse {
-            ReadBookConfig.textFont = ""
+            onInvalid()
             ReadBookConfig.save()
-            Typeface.SANS_SERIF
-        } ?: Typeface.DEFAULT
+            fallbackTypeface
+        } ?: fallbackTypeface
     }
 
     private fun loadTypeface(fontPath: String): Typeface? = when {
@@ -626,26 +653,30 @@ object ChapterProvider {
         if (fontPath.isNotEmpty()) highlightTypefaceCache.remove(fontPath)
     }
 
-    private fun getPaints(typeface: Typeface?): Pair<TextPaint, TextPaint> {
-        // 字体统一处理
-        val bold = Typeface.create(typeface, Typeface.BOLD)
-        val normal = Typeface.create(typeface, Typeface.NORMAL)
+    private fun getPaints(
+        titleTypeface: Typeface?,
+        textTypeface: Typeface?,
+    ): Pair<TextPaint, TextPaint> {
+        val titleBold = Typeface.create(titleTypeface, Typeface.BOLD)
+        val titleNormal = Typeface.create(titleTypeface, Typeface.NORMAL)
+        val textBold = Typeface.create(textTypeface, Typeface.BOLD)
+        val textNormal = Typeface.create(textTypeface, Typeface.NORMAL)
         val (titleFont, textFont) = when (ReadBookConfig.textBold) {
             1 -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-                    Pair(Typeface.create(typeface, 900, false), bold)
+                    Pair(Typeface.create(titleTypeface, 900, false), textBold)
                 else
-                    Pair(bold, bold)
+                    Pair(titleBold, textBold)
             }
 
             2 -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-                    Pair(normal, Typeface.create(typeface, 300, false))
+                    Pair(titleNormal, Typeface.create(textTypeface, 300, false))
                 else
-                    Pair(normal, normal)
+                    Pair(titleNormal, textNormal)
             }
 
-            else -> Pair(bold, normal)
+            else -> Pair(titleBold, textNormal)
         }
 
         //标题

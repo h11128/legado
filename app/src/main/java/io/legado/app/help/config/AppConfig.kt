@@ -10,6 +10,7 @@ import io.legado.app.data.appDb
 import io.legado.app.model.checkalgo.ChangeBookSourceQuality
 import io.legado.app.utils.GSON
 import io.legado.app.utils.canvasrecorder.CanvasRecorderFactory
+import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefInt
@@ -213,10 +214,25 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.showSearchReadRecord, value)
         }
 
-    var showBookshelfReadProgress: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.showBookshelfReadProgress, true)
+    var bookshelfReadProgressMode: Int
+        get() = BookshelfReadProgressMode.resolve(
+            appCtx.defaultSharedPreferences.all[PreferKey.bookshelfReadProgressMode],
+            appCtx.defaultSharedPreferences.all[PreferKey.showBookshelfReadProgress],
+        )
         set(value) {
-            appCtx.putPrefBoolean(PreferKey.showBookshelfReadProgress, value)
+            val mode = BookshelfReadProgressMode.normalize(value)
+            appCtx.putPrefInt(PreferKey.bookshelfReadProgressMode, mode)
+            appCtx.putPrefBoolean(
+                PreferKey.showBookshelfReadProgress,
+                mode != BookshelfReadProgressMode.HIDDEN,
+            )
+        }
+
+    var showBookshelfReadProgress: Boolean
+        get() = bookshelfReadProgressMode != BookshelfReadProgressMode.HIDDEN
+        set(value) {
+            bookshelfReadProgressMode =
+                if (value) BookshelfReadProgressMode.STANDARD else BookshelfReadProgressMode.HIDDEN
         }
 
     var showBookshelfRecentReading: Boolean
@@ -740,6 +756,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     val replaceEnableDefault get() = appCtx.getPrefBoolean(PreferKey.replaceEnableDefault, true)
 
+    var manualReplaceRule: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.manualReplaceRule, false)
+        set(value) = appCtx.putPrefBoolean(PreferKey.manualReplaceRule, value)
+
     val webDavDir get() = appCtx.getPrefString(PreferKey.webDavDir, "legado")
 
     val webDavDeviceName get() = appCtx.getPrefString(PreferKey.webDavDeviceName, Build.MODEL)
@@ -882,6 +902,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         set(value) {
             appCtx.putPrefBoolean(PreferKey.showReadTitleAddition, value)
         }
+
+    var showReadTitleChapterNameOnly: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.showReadTitleChapterNameOnly, false)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.showReadTitleChapterNameOnly, value)
+        }
+
     var readBarStyleFollowPage: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.readBarStyleFollowPage, false)
         set(value) {

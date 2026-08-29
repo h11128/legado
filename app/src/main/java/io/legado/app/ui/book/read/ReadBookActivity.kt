@@ -18,6 +18,7 @@ import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.view.menu.MenuItemImpl
 import androidx.core.view.doOnLayout
 import androidx.core.view.get
 import androidx.core.view.isGone
@@ -113,8 +114,10 @@ import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.BG_COLOR
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.REVIEW_ICON_COLOR
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.TEXT_ACCENT_COLOR
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.TEXT_COLOR
+import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.UNDERLINE_COLOR
 import io.legado.app.ui.book.read.config.MoreConfigDialog
 import io.legado.app.ui.book.read.config.ReadAloudDialog
+import io.legado.app.ui.book.read.config.ReaderMenuConfigDialog
 import io.legado.app.ui.book.read.config.ReadStyleDialog
 import io.legado.app.ui.book.read.config.TextSelectMenuConfigDialog
 import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TITLE_COLOR
@@ -296,6 +299,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     private val popupAction: PopupAction by lazy {
         PopupAction(this)
     }
+    private var readerOverflowPopup: PopupAction? = null
     override val isInitFinish: Boolean get() = viewModel.isInitFinish
     override val isScroll: Boolean get() = binding.readView.isScroll
     private val isAutoPage get() = binding.readView.isAutoPage
@@ -547,6 +551,11 @@ class ReadBookActivity : BaseReadBookActivity(),
         return super.onCompatCreateOptionsMenu(menu)
     }
 
+    override fun onShowActivityOverflowMenu(anchor: View, menu: Menu): Boolean {
+        showReaderOverflowMenu(anchor, menu)
+        return true
+    }
+
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
         this.menu = menu
         upMenu()
@@ -564,6 +573,8 @@ class ReadBookActivity : BaseReadBookActivity(),
      */
     private fun upMenu() {
         val menu = menu ?: return
+        // Keep configuration reachable if the shared popup must fall back to the native menu.
+        menu.findItem(R.id.menu_reader_all_features)?.isVisible = true
         val book = ReadBook.book ?: return
         val onLine = !book.isLocal
         for (i in 0 until menu.size) {
@@ -574,7 +585,11 @@ class ReadBookActivity : BaseReadBookActivity(),
                 R.id.menu_group_text -> item.isVisible = book.isLocalTxt
                 R.id.menu_group_epub -> item.isVisible = book.isEpub
                 else -> when (item.itemId) {
-                    R.id.menu_enable_replace -> item.isChecked = book.getUseReplaceRule()
+                    R.id.menu_enable_replace -> {
+                        item.isVisible = !AppConfig.manualReplaceRule
+                        item.isChecked = book.getUseReplaceRule()
+                    }
+                    R.id.menu_manual_replace_rule -> item.isVisible = AppConfig.manualReplaceRule
                     R.id.menu_re_segment -> item.isChecked = book.getReSegment()
 //                    R.id.menu_enable_review -> {
 //                        item.isVisible = BuildConfig.DEBUG
@@ -593,7 +608,126 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
             menu.findItem(R.id.menu_get_progress)?.isVisible = show
             menu.findItem(R.id.menu_cover_progress)?.isVisible = show
+            menu.findItem(R.id.menu_reader_more)?.isVisible = hasHiddenReaderItems(menu)
         }
+        menu.findItem(R.id.menu_reader_more)?.isVisible = hasHiddenReaderItems(menu)
+    }
+
+    @SuppressLint("RestrictedApi")
+    private fun showReaderOverflowMenu(anchor: View, menu: Menu) {
+        val overflowItems = menu.visibleReaderOverflowItems()
+        val visibleByKey = menu.readerOverflowItemsByKey()
+        val config = loadReaderMenuConfig(this)
+        val primaryItems = config.primary.mapNotNull { visibleByKey[it] }.toMutableList()
+        val moreItems = config.more.mapNotNull { visibleByKey[it] }
+        val placedIds = (primaryItems + moreItems).mapTo(HashSet()) { it.itemId }
+
+        // Keep newly added overflow actions available until they get a config entry.
+        overflowItems
+            .filter { item ->
+                item.itemId !in placedIds &&
+                    item.itemId != R.id.menu_reader_more &&
+                    item.itemId != R.id.menu_reader_all_features
+            }
+            .forEach { primaryItems += it }
+
+        val popupItems = buildList {
+            addAll(primaryItems.map(::toReaderPopupItem))
+            if (moreItems.isNotEmpty()) {
+                add(
+                    PopupAction.PopupActionItem(
+                        title = getString(R.string.reader_menu_more),
+                        value = ACTION_READER_MORE
+                    )
+                )
+            }
+            add(
+                PopupAction.PopupActionItem(
+                    title = getString(R.string.reader_menu_all_features),
+                    value = ACTION_READER_CONFIG
+                )
+            )
+        }
+        readerOverflowPopup?.dismiss()
+        val popup = PopupAction(this)
+        readerOverflowPopup = popup
+        popup.setVertical(true)
+        popup.setActionItems(popupItems)
+        popup.onActionClick = { action ->
+            popup.dismiss()
+            when {
+                action == ACTION_READER_MORE -> showReaderMoreMenu(anchor, menu)
+                action == ACTION_READER_CONFIG -> showReaderMenuConfig()
+                action.startsWith(ACTION_READER_ITEM_PREFIX) -> action
+                    .removePrefix(ACTION_READER_ITEM_PREFIX)
+                    .toIntOrNull()
+                    ?.let { id -> menu.findItem(id)?.let(::onCompatOptionsItemSelected) }
+            }
+        }
+        popup.setOnDismissListener {
+            if (readerOverflowPopup === popup) readerOverflowPopup = null
+        }
+        popup.showAsDropDown(anchor, 0, 4.dpToPx())
+    }
+
+    @SuppressLint("RestrictedApi")
+    private fun showReaderMoreMenu(anchor: View, menu: Menu) {
+        val visibleByKey = menu.readerOverflowItemsByKey()
+        val config = loadReaderMenuConfig(this)
+        val moreItems = config.more.mapNotNull { visibleByKey[it] }
+        if (moreItems.isEmpty()) return
+        readerOverflowPopup?.dismiss()
+        val popup = PopupAction(this)
+        readerOverflowPopup = popup
+        popup.setVertical(true)
+        popup.setActionItems(moreItems.map(::toReaderPopupItem))
+        popup.onActionClick = { action ->
+            popup.dismiss()
+            action.removePrefix(ACTION_READER_ITEM_PREFIX)
+                .toIntOrNull()
+                ?.let { id -> menu.findItem(id)?.let(::onCompatOptionsItemSelected) }
+        }
+        popup.setOnDismissListener {
+            if (readerOverflowPopup === popup) readerOverflowPopup = null
+        }
+        popup.showAsDropDown(anchor, 0, 4.dpToPx())
+    }
+
+    private fun toReaderPopupItem(item: MenuItem): PopupAction.PopupActionItem {
+        return PopupAction.PopupActionItem(
+            title = item.title?.toString().orEmpty(),
+            value = ACTION_READER_ITEM_PREFIX + item.itemId,
+            icon = item.icon?.constantState?.newDrawable()?.mutate(),
+            enabled = item.isEnabled,
+            checkable = item.isCheckable,
+            checked = item.isChecked
+        )
+    }
+
+    private fun hasHiddenReaderItems(menu: Menu): Boolean {
+        val visibleKeys = menu.readerOverflowItemsByKey().keys
+        return loadReaderMenuConfig(this).more.any(visibleKeys::contains)
+    }
+
+    @SuppressLint("RestrictedApi")
+    private fun Menu.visibleReaderOverflowItems(): List<MenuItem> {
+        return (0 until size()).mapNotNull { index ->
+            getItem(index).takeIf { item ->
+                if (!item.isVisible) return@takeIf false
+                val impl = item as? MenuItemImpl ?: return@takeIf false
+                impl.requiresOverflow() || impl.requestsActionButton() && !impl.isActionButton
+            }
+        }
+    }
+
+    @SuppressLint("RestrictedApi")
+    private fun Menu.readerOverflowItemsByKey(): Map<String, MenuItem> {
+        val overflowIds = visibleReaderOverflowItems().mapTo(HashSet()) { it.itemId }
+        return ReaderMenuItem.entries.mapNotNull { descriptor ->
+            descriptor.findVisible(this)
+                ?.takeIf { it.itemId in overflowIds }
+                ?.let { descriptor.key to it }
+        }.toMap()
     }
 
     private fun showChangeSourceMenu(anchor: View) {
@@ -692,6 +826,17 @@ class ReadBookActivity : BaseReadBookActivity(),
      */
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.menu_reader_more -> {
+                val toolbar = binding.readMenu.findViewById<View>(R.id.toolbar)
+                menu?.let { showReaderMoreMenu(toolbar, it) }
+                return true
+            }
+
+            R.id.menu_reader_all_features -> {
+                showReaderMenuConfig()
+                return true
+            }
+
             R.id.menu_change_source -> showBookChangeSource()
 
             R.id.menu_refresh -> refreshDurChapter()
@@ -715,6 +860,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
 
             R.id.menu_enable_replace -> changeReplaceRuleState()
+            R.id.menu_manual_replace_rule -> showDialogFragment<ManualReplaceRulesDialog>()
             R.id.menu_re_segment -> ReadBook.book?.let {
                 it.setReSegment(!it.getReSegment())
                 item.isChecked = it.getReSegment()
@@ -1248,6 +1394,14 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     fun showTextSelectMenuConfig() {
         showDialogFragment(TextSelectMenuConfigDialog())
+    }
+
+    fun showReaderMenuConfig() {
+        showDialogFragment(ReaderMenuConfigDialog())
+    }
+
+    fun refreshReaderMenu() {
+        invalidateOptionsMenu()
     }
 
     private fun speak(text: String) {
@@ -2798,6 +2952,11 @@ class ReadBookActivity : BaseReadBookActivity(),
                 postEvent(EventBus.UP_CONFIG, arrayListOf(8, 9, 11))
             }
 
+            UNDERLINE_COLOR -> {
+                ReadBookConfig.underlineColor = color
+                postEvent(EventBus.UP_CONFIG, arrayListOf(6, 9, 11))
+            }
+
             HighlightStyleDialog.HL_FILL,
             HighlightStyleDialog.HL_TEXT,
             HighlightStyleDialog.HL_UNDERLINE,
@@ -3222,6 +3381,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         tts?.clearTts()
         textActionMenu.dismiss()
         popupAction.dismiss()
+        readerOverflowPopup?.dismiss()
         highlightPopup?.dismiss()
         binding.readView.onDestroy()
         ReadBook.unregister(this)
@@ -3259,7 +3419,10 @@ class ReadBookActivity : BaseReadBookActivity(),
                     3 -> readView.upBgAlpha()
                     4 -> readView.upPageSlopSquare()
                     5 -> if (isInitFinish) {
-                        ReadBook.loadContent(resetPageOffset = ReadBook.isScroll)
+                        ReadBook.loadContent(
+                            resetPageOffset = ReadBook.isScroll,
+                            readPositionVersion = readView.getReadPositionVersion(),
+                        )
                     }
                     6 -> readView.upContent(resetPageOffset = false)
                     8 -> ChapterProvider.upStyle()
@@ -3366,6 +3529,9 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     companion object {
         const val RESULT_DELETED = 100
+        private const val ACTION_READER_ITEM_PREFIX = "readerItem:"
+        private const val ACTION_READER_MORE = "readerMore"
+        private const val ACTION_READER_CONFIG = "readerConfig"
         private const val ACTION_HIGHLIGHT_STYLE = "highlightStyle"
         private const val ACTION_HIGHLIGHT_NOTE = "highlightNote"
         private const val ACTION_HIGHLIGHT_CREATE_RULE = "highlightCreateRule"

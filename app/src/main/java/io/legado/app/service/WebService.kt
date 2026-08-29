@@ -7,6 +7,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseService
 import io.legado.app.constant.AppConst
@@ -16,6 +17,7 @@ import io.legado.app.constant.NotificationId
 import io.legado.app.constant.PreferKey
 import io.legado.app.receiver.NetworkChangedListener
 import io.legado.app.utils.NetworkUtils
+import io.legado.app.utils.applyPromotedProgress
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.postEvent
@@ -29,15 +31,20 @@ import io.legado.app.utils.toastOnUi
 import io.legado.app.web.HttpServer
 import io.legado.app.web.WebSocketServer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import splitties.init.appCtx
 import splitties.systemservices.powerManager
 import splitties.systemservices.wifiManager
+import splitties.systemservices.notificationManager
 import java.io.IOException
 
 class WebService : BaseService() {
 
     companion object {
+        private const val TERMINAL_NOTIFICATION_DURATION = 4_500L
+
         @Volatile
         var isRun = false
 
@@ -57,7 +64,13 @@ class WebService : BaseService() {
         }
 
         fun stop(context: Context) {
-            context.stopService<WebService>()
+            if (isRun) {
+                context.startService<WebService> {
+                    action = IntentAction.stop
+                }
+            } else {
+                context.stopService<WebService>()
+            }
         }
 
         fun serve() {
@@ -86,6 +99,9 @@ class WebService : BaseService() {
     private var notificationList = mutableListOf(appCtx.getString(R.string.service_starting))
     @Volatile
     private var destroyed = false
+    @Volatile
+    private var stopping = false
+    private var terminalStopJob: Job? = null
     private var startAttempt = 0
     private val networkChangedListener by lazy {
         NetworkChangedListener(this)
@@ -95,6 +111,7 @@ class WebService : BaseService() {
     override fun onCreate() {
         super.onCreate()
         destroyed = false
+        stopping = false
         promoteForegroundNotification()
         if (useWakeLock) {
             wakeLock.acquire()
@@ -103,7 +120,7 @@ class WebService : BaseService() {
         upTile(true)
         networkChangedListener.register()
         networkChangedListener.onNetworkChanged = {
-            if (!destroyed) {
+            if (!destroyed && !stopping) {
                 refreshAddressNotification()
             }
         }
@@ -116,23 +133,34 @@ class WebService : BaseService() {
         val sticky = super.onStartCommand(intent, flags, startId)
         if (sticky == START_NOT_STICKY) return sticky
         when (intent?.action) {
-            IntentAction.stop -> stopSelf()
+            IntentAction.stop -> stopServiceWithNotification()
             "copyHostAddress" -> sendToClip(hostAddress)
             "serve" -> {
                 if (useWakeLock) {
                     wakeLock.acquire()
                     wifiLock?.acquire()
                 }
+                terminalStopJob?.cancel()
+                terminalStopJob = null
+                stopping = false
                 scheduleUpWebServer()
             }
-            else -> scheduleUpWebServer()
+            else -> {
+                terminalStopJob?.cancel()
+                terminalStopJob = null
+                stopping = false
+                scheduleUpWebServer()
+            }
         }
         return sticky
     }
 
     @Synchronized
     override fun onDestroy() {
+        terminalStopJob?.cancel()
+        terminalStopJob = null
         destroyed = true
+        stopping = true
         if (useWakeLock) {
             wakeLock.release()
             wifiLock?.release()
@@ -140,6 +168,7 @@ class WebService : BaseService() {
         networkChangedListener.unRegister()
         isRun = false
         stopServers()
+        hostAddress = ""
         postEvent(EventBus.WEB_SERVICE, "")
         upTile(false)
         super.onDestroy()
@@ -152,9 +181,32 @@ class WebService : BaseService() {
         }
     }
 
+    private fun stopServiceWithNotification() {
+        if (stopping) return
+        stopping = true
+        stopServers()
+        isRun = false
+        hostAddress = ""
+        postEvent(EventBus.WEB_SERVICE, "")
+        upTile(false)
+        val (builder, promoted) = createNotification(terminal = true)
+        if (!promoted) {
+            stopSelf()
+            return
+        }
+        startForeground(NotificationId.WebService, builder.build())
+        terminalStopJob?.cancel()
+        terminalStopJob = lifecycleScope.launch {
+            delay(TERMINAL_NOTIFICATION_DURATION)
+            notificationManager.cancel(NotificationId.WebService)
+            stopSelf()
+        }
+    }
+
     @Synchronized
     private fun upWebServer() {
         if (destroyed) return
+        if (stopping) return
         stopServers()
         val addressList = NetworkUtils.getLocalIPAddress()
         if (addressList.isEmpty()) {
@@ -254,22 +306,46 @@ class WebService : BaseService() {
      * 更新通知
      */
     override fun startForegroundNotification() {
+        val (builder, _) = createNotification(terminal = stopping)
+        startForeground(NotificationId.WebService, builder.build())
+    }
+
+    private fun createNotification(terminal: Boolean = false): Pair<NotificationCompat.Builder, Boolean> {
+        val statusText = getString(
+            if (terminal) R.string.web_service_live_stopped else R.string.web_service_live_started
+        )
         val builder = NotificationCompat.Builder(this, AppConst.channelIdWeb)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setSmallIcon(R.drawable.ic_web_service_noti)
-            .setOngoing(true)
-            .setContentTitle(getString(R.string.web_service))
+            .setOngoing(!terminal)
+            .setContentTitle(statusText)
             .setContentText(notificationList.joinToString("\n"))
             .setContentIntent(
                 servicePendingIntent<WebService>("copyHostAddress")
             )
-        builder.addAction(
-            R.drawable.ic_stop_black_24dp,
-            getString(R.string.cancel),
-            servicePendingIntent<WebService>(IntentAction.stop)
+        val promoted = builder.applyPromotedProgress(
+            this,
+            AppConst.channelIdWeb,
+            eligible = terminal || httpServer?.isAlive == true,
+            ongoing = true,
+            max = 0,
+            progress = 0,
+            criticalText = statusText,
+            terminal = terminal
         )
-        val notification = builder.build()
-        startForeground(NotificationId.WebService, notification)
+        if (!promoted) {
+            builder.setContentTitle(getString(R.string.web_service))
+        }
+        if (!terminal) {
+            builder.addAction(
+                R.drawable.ic_stop_black_24dp,
+                getString(R.string.cancel),
+                servicePendingIntent<WebService>(IntentAction.stop)
+            )
+        } else if (promoted) {
+            builder.setTimeoutAfter(TERMINAL_NOTIFICATION_DURATION)
+        }
+        return builder to promoted
     }
 
     @SuppressLint("ObsoleteSdkInt")

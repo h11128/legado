@@ -16,8 +16,10 @@ import io.legado.app.data.entities.SearchBook
 import io.legado.app.databinding.ItemChangeSourceBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.checkalgo.ChangeBookSourceQuality
 import io.legado.app.ui.widget.popupActionMenu
+import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
@@ -69,7 +71,12 @@ class ChangeBookSourceAdapter(
                 bindCatalogLine(this, item)
                 bindMetricAndTags(this, item)
                 bindSmartScore(this, item)
-                if (callBack.oldBookUrl == item.bookUrl) {
+                val isCurrent = callBack.oldBookUrl == item.bookUrl
+                viewSelectedBackground.setBackgroundColor(
+                    ColorUtils.withAlpha(context.accentColor, 0.1f)
+                )
+                viewSelectedBackground.visibility = if (isCurrent) View.VISIBLE else View.INVISIBLE
+                if (isCurrent) {
                     ivChecked.visible()
                 } else {
                     ivChecked.invisible()
@@ -81,10 +88,11 @@ class ChangeBookSourceAdapter(
                         when (it) {
                             "name" -> tvOrigin.text = item.originName
                             "latest" -> bindCatalogLine(this@apply, item)
-                            "upCurSource" -> if (callBack.oldBookUrl == item.bookUrl) {
-                                ivChecked.visible()
-                            } else {
-                                ivChecked.invisible()
+                            "upCurSource" -> {
+                                val isCurrent = callBack.oldBookUrl == item.bookUrl
+                                viewSelectedBackground.visibility =
+                                    if (isCurrent) View.VISIBLE else View.INVISIBLE
+                                if (isCurrent) ivChecked.visible() else ivChecked.invisible()
                             }
                         }
                     }
