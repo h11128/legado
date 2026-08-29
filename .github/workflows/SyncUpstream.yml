@@ -2,8 +2,8 @@ name: Sync Upstream (LegadoTeam/legado)
 
 on:
   schedule:
-    # 每天 UTC 02:00 运行一次。有上游更新才 merge，否则自动 skip。
-    - cron: '0 2 * * *'
+    # 每周一 UTC 02:00 运行一次。有上游更新才 merge，否则自动 skip。
+    - cron: '0 2 * * 1'
   workflow_dispatch: {}  # 支持手动触发
 
 permissions:
