@@ -24,6 +24,26 @@ __pycache__/
 # DHCP / local token — regenerate via scripts/mcp-ensure.py
 /config/mcp_defaults.json
 
+# Agent tool dirs (Codex/Antigravity/Cursor non-rule state) — local config, not source
+.agents/
+.codex/
+.cursor/notes/
+.cursor/hooks.bak
+.cursor/rules/*.bak
+.cursor/rules/*.mdc.bak
+
+# Throwaway debug / build outputs that should never be tracked
+*.bak
+temp/
+temp_*.json
+.local-scripts/
+.gradle-home-local/
+.gradle-home-test/
+
+# Room schema exports — these belong in app/schemas/<db>/<N>.json but are
+# build artifacts; keep them out of git when they sneak alongside sources
+/app/schemas/
+
 # BEGIN shared-cursor-rules-projections
 # Hardlinks from E:/shared-cursor-rules. Commit only in that SOT repo.
 # Managed by ensure-projection-gitignore.ps1 (called from sync-rules.ps1).
