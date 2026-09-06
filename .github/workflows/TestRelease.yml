@@ -41,6 +41,7 @@ jobs:
       versionCode: ${{ steps.set-ver.outputs.versionCode }}
       label: ${{ steps.set-ver.outputs.label }}
       commit: ${{ steps.set-ver.outputs.commit }}
+      has_credentials: ${{ steps.check-creds.outputs.has_credentials }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -94,7 +95,8 @@ jobs:
           echo "label=${branch}_${COMMIT_SHA:0:7}" >> "$GITHUB_OUTPUT"
           echo "commit=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Verify Release Credentials
+      - name: Check Release Credentials
+        id: check-creds
         env:
           RELEASE_KEY_STORE: ${{ secrets.RELEASE_KEY_STORE }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
@@ -103,17 +105,22 @@ jobs:
           LANZOU_PSD: ${{ secrets.LANZOU_PSD }}
           LANZOU_FOLDER_ID: ${{ secrets.LANZOU_FOLDER_ID }}
         run: |
+          # This fork doesn't publish signed test releases, so missing signing/
+          # Lanzou secrets skip build+publish instead of failing the whole run.
+          has_credentials=true
           for name in \
             RELEASE_KEY_STORE RELEASE_KEY_PASSWORD RELEASE_STORE_PASSWORD \
             LANZOU_ID LANZOU_PSD LANZOU_FOLDER_ID; do
             if [ -z "${!name}" ]; then
-              echo "Missing required secret: $name"
-              exit 1
+              echo "Missing secret: $name — skipping build/publish"
+              has_credentials=false
             fi
           done
+          echo "has_credentials=$has_credentials" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
+    if: needs.prepare.outputs.has_credentials == 'true'
     strategy:
       matrix:
         product: [app]
@@ -245,6 +252,7 @@ jobs:
 
   publish:
     needs: [prepare, build]
+    if: needs.prepare.outputs.has_credentials == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
