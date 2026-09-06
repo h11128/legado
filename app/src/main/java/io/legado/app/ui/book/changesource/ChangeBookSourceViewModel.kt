@@ -2138,48 +2138,6 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }
 
-    fun changeSource(book: Book) {
-        changeSourceTask?.cancel()
-        changeSourceCancelable.value = true
-        changeSourceLoading.value = true
-        changeSourceTask = execute {
-            if (book.isWebFile) {
-                val source = appDb.bookSourceDao.getBookSource(book.origin)
-                    ?: throw NoStackTraceException("书源不存在")
-                Triple(book, emptyList(), source)
-            } else {
-                val (toc, source) = tocMap[book.primaryStr()]?.let { toc ->
-                    val source = appDb.bookSourceDao.getBookSource(book.origin)
-                        ?: throw NoStackTraceException("书源不存在")
-                    toc to source
-                } ?: getToc(book).getOrThrow().also { result ->
-                    tocMap[book.primaryStr()] = result.first
-                }
-                Triple(book, toc, source)
-            }
-        }.onSuccess { (resultBook, toc, source) ->
-            changeSourceTask = null
-            changeSourceLoading.value = false
-            changeSourceCancelable.value = true
-            changeSourceResult.value = PendingEvent(
-                SourceChangeResult.Success(resultBook, toc, source, dismissDialog = true)
-            )
-        }.onError { throwable ->
-            changeSourceTask = null
-            changeSourceLoading.value = false
-            changeSourceCancelable.value = true
-            changeSourceResult.value = PendingEvent(SourceChangeResult.Error(throwable))
-        }
-    }
-
-    fun cancelChangeSource() {
-        if (changeSourceCancelable.value == false) return
-        changeSourceTask?.cancel()
-        changeSourceTask = null
-        changeSourceLoading.value = false
-        changeSourceCancelable.value = true
-    }
-
     fun setBookScore(searchBook: SearchBook, score: Int) {
         execute {
             SourceConfig.setBookScore(searchBook.origin, searchBook.name, searchBook.author, score)
