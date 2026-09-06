@@ -50,6 +50,7 @@ object PreferKey {
     const val nextKeys = "nextKeyCodes"
     const val showDiscovery = "showDiscovery"
     const val showDiscoveryFastScroller = "showDiscoveryFastScroller"
+    const val showExploreCategories = "showExploreCategories"
     const val enableReview = "enableReview"
     /** RFC-004: master switch for cross-source review overlay */
     const val reviewOverlayEnabled = "reviewOverlayEnabled"
@@ -259,10 +260,12 @@ object PreferKey {
     const val tNavBarN = "transparentNavBarNight"
     const val wallpaperColorFollow = "wallpaperColorFollow"
     const val wallpaperColorAutoUpdate = "wallpaperColorAutoUpdate"
+    const val disablePredictiveBack = "disablePredictiveBack"
 
     const val showReadTitleAddition = "showReadTitleAddition"
     const val showReadTitleChapterNameOnly = "showReadTitleChapterNameOnly"
     const val readBarStyleFollowPage = "readBarStyleFollowPage"
+    const val wallpaperColorBackup = "wallpaperColorBackup"
     const val contentSelectSpeakMod = "contentReadAloudMod"
     const val highlightLastStyle = "highlightLastStyle"
     const val editFontScale = "editFontScale"

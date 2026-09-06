@@ -1,5 +1,6 @@
 package io.legado.app.model
 
+import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PageAnim.scrollPageAnim
@@ -13,6 +14,7 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.HighlightRule
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.ReadRecord
+import io.legado.app.data.entities.updateSnapshot
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.HighlightAnchor
 import io.legado.app.help.HighlightRuleMatcher
@@ -172,6 +174,7 @@ object ReadBook : CoroutineScope by MainScope() {
         val positionAnchor = pendingHighlightAnchor
         releaseAndCancel()
         ReadBook.book = book
+        readRecord.deviceId = AppConst.androidId
         loadHighlights(book)
         loadHighlightRules(book)
         readRecord.bookName = book.name
@@ -618,11 +621,13 @@ object ReadBook : CoroutineScope by MainScope() {
             return
         }
         val author = book?.author.orEmpty()
+        val currentBook = book ?: return
         executor.execute {
             readRecord.author = author
             readRecord.readTime = readRecord.readTime + System.currentTimeMillis() - readStartTime
             readStartTime = System.currentTimeMillis()
             readRecord.lastRead = System.currentTimeMillis()
+            readRecord.updateSnapshot(currentBook, durChapterIndex, durChapterPos)
             appDb.readRecordDao.insert(readRecord)
         }
     }
@@ -1287,7 +1292,9 @@ object ReadBook : CoroutineScope by MainScope() {
             )
             ensureActive()
             val textChapter = ChapterProvider.getTextChapterAsync(
-                this, book, chapter, displayTitle, contents, simulatedChapterSize
+                this, book, chapter, displayTitle, contents, simulatedChapterSize,
+                hasBodyContent = contents.textList.isNotEmpty() &&
+                        !content.isContentLoadFailurePlaceholder(),
             )
             when (val offset = chapter.index - durChapterIndex) {
                 0 -> curChapterLoadingLock.withLock {
@@ -1420,7 +1427,9 @@ object ReadBook : CoroutineScope by MainScope() {
                 contentReplaceRulesOverride = manualRules?.content,
             )
             val textChapter = ChapterProvider.getTextChapterAsync(
-                this@ReadBook, book, chapter, displayTitle, contents, simulatedChapterSize
+                this@ReadBook, book, chapter, displayTitle, contents, simulatedChapterSize,
+                hasBodyContent = contents.textList.isNotEmpty() &&
+                        !content.isContentLoadFailurePlaceholder(),
             )
             when (val offset = chapter.index - durChapterIndex) {
                 0 -> {
@@ -1833,6 +1842,9 @@ object ReadBook : CoroutineScope by MainScope() {
     }
 
 }
+
+internal fun String.isContentLoadFailurePlaceholder(): Boolean =
+    startsWith("获取正文失败\n") || startsWith("加载正文失败\n")
 
 internal fun BookHighlight.isForBook(book: Book?): Boolean {
     return book != null && bookUrl == book.bookUrl

@@ -8,6 +8,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -333,6 +334,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
     private var reviewSummaryAppliedKey: String? = null
     private var reviewSummaryLoadingKey: String? = null
+    private var lastReviewDialogRequestAt = 0L
     private var reviewSummaryRequestToken = 0L
     /**
      * True when overlay applied chapter-bucket only because layout was not ready for P2 hard-map.
@@ -2094,8 +2096,22 @@ class ReadBookActivity : BaseReadBookActivity(),
             return
         }
         val source = ReadBook.bookSource ?: return
+        val reviewDialogTag = ReviewDetailDialog::class.simpleName
+        val fragmentManager = supportFragmentManager
+        fun showReviewDialog(dialog: ReviewDetailDialog) {
+            val now = SystemClock.uptimeMillis()
+            val taggedDialog = fragmentManager.findFragmentByTag(reviewDialogTag)
+            val existingDialog = taggedDialog != null || fragmentManager.fragments.any {
+                it is ReviewDetailDialog && !it.isRemoving
+            }
+            if (fragmentManager.isStateSaved || existingDialog ||
+                now - lastReviewDialogRequestAt < REVIEW_DIALOG_REQUEST_COOLDOWN_MS
+            ) return
+            lastReviewDialogRequestAt = now
+            dialog.showNow(fragmentManager, reviewDialogTag)
+        }
         if (source.isJsSource()) {
-            showDialogFragment(
+            showReviewDialog(
                 ReviewDetailDialog(
                     paragraphNum = paragraphNum,
                     totalCount = count,
@@ -2124,7 +2140,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             toastOnUi(R.string.review_detail_rule_missing)
             return
         }
-        showDialogFragment(
+        showReviewDialog(
             ReviewDetailDialog(
                 paragraphNum = paragraphNum,
                 totalCount = count,
@@ -3528,6 +3544,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     companion object {
+        private const val REVIEW_DIALOG_REQUEST_COOLDOWN_MS = 1500L
         const val RESULT_DELETED = 100
         private const val ACTION_READER_ITEM_PREFIX = "readerItem:"
         private const val ACTION_READER_MORE = "readerMore"

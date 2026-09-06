@@ -889,6 +889,9 @@
     <string name="import_default_rule">导入默认规则</string>
     <string name="name">名称</string>
     <string name="regex">正则</string>
+    <string name="content_search_match_case">区分大小写</string>
+    <string name="content_search_invalid_regex">正则表达式无效</string>
+    <string name="content_edit_position">正文位置</string>
     <string name="more_menu">更多菜单</string>
     <string name="reduce">减</string>
     <string name="plus">加</string>
@@ -1052,6 +1055,8 @@
     <string name="save_night_theme_summary">保存夜间主题配置以供调用和分享</string>
     <string name="theme_list">主题列表</string>
     <string name="theme_list_summary">使用、保存、导入或分享主题</string>
+    <string name="disable_predictive_back">禁用预测性返回动画</string>
+    <string name="disable_predictive_back_summary">开启后全局禁用预测性返回动画</string>
     <string name="wallpaper_color_follow">跟随壁纸配色</string>
     <string name="wallpaper_color_follow_summary">使用系统壁纸色板生成日间和夜间主题（Android 12+）</string>
     <string name="wallpaper_color_auto_update">壁纸变化时自动更新</string>
@@ -1755,4 +1760,5 @@
     <string name="import_status_error">替换错误</string>
     <string name="live_update_notifications">实时更新通知</string>
     <string name="live_update_notifications_summary">在 Android 16 上将系统允许的进度通知提升为实时更新</string>
+    <string name="show_explore_categories">显示全部分类</string>
 </resources>

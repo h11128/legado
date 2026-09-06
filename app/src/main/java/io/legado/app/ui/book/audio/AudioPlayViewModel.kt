@@ -12,6 +12,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.saveReadRecordSnapshot
 import io.legado.app.help.book.SearchBookShelfHelp
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.getBookSource
@@ -195,6 +196,7 @@ class AudioPlayViewModel(application: Application) : BaseViewModel(application) 
     fun removeFromBookshelf(success: (() -> Unit)?) {
         execute {
             AudioPlay.book?.let {
+                it.saveReadRecordSnapshot()
                 appDb.bookDao.delete(it)
             }
         }.onSuccess {

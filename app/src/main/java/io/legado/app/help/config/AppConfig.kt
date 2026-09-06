@@ -33,7 +33,8 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     private const val JS_SOURCE_API_PREFS = "js_source_api_credentials"
     private const val JS_SOURCE_API_TOKEN = "token"
 
-    val isCronet = appCtx.getPrefBoolean(PreferKey.cronet)
+    val isCronet: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.cronet)
     var useAntiAlias = appCtx.getPrefBoolean(PreferKey.antiAlias)
     var userAgent: String = getPrefUserAgent()
     var customHosts = appCtx.getPrefString(PreferKey.customHosts)
@@ -282,6 +283,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val immNavigationBar: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.immNavigationBar, true)
 
+    val disablePredictiveBack: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.disablePredictiveBack, false)
+
     val screenOrientation: String?
         get() = appCtx.getPrefString(PreferKey.screenOrientation)
 
@@ -348,6 +352,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     val showDiscoveryFastScroller: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showDiscoveryFastScroller, false)
+
+    var showExploreCategories: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.showExploreCategories, false)
+        set(value) = appCtx.putPrefBoolean(PreferKey.showExploreCategories, value)
 
     val showRSS: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showRss, true)

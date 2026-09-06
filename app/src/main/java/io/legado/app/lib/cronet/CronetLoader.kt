@@ -22,17 +22,35 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.CountDownLatch
 
 internal class CronetDownloadState {
+    private val lock = Any()
     private val running = AtomicBoolean(false)
+    private var completion = CountDownLatch(0)
 
     val isRunning: Boolean
         get() = running.get()
 
-    fun tryStart(): Boolean = running.compareAndSet(false, true)
+    fun tryStart(): Boolean = synchronized(lock) {
+        if (!running.compareAndSet(false, true)) {
+            false
+        } else {
+            completion = CountDownLatch(1)
+            true
+        }
+    }
+
+    fun awaitCompletion() {
+        val current = synchronized(lock) { completion }
+        current.await()
+    }
 
     fun finish() {
-        running.set(false)
+        synchronized(lock) {
+            running.set(false)
+            completion.countDown()
+        }
     }
 }
 
@@ -54,6 +72,7 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
 
     @Volatile
     private var cacheInstall = false
+    private val installRetry = AtomicBoolean(false)
 
     init {
         soUrl = ("https://storage.googleapis.com/chromium-cronet/android/"
@@ -73,6 +92,9 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
      * 判断Cronet是否安装完成
      */
     override fun install(): Boolean {
+        if (downloadState.isRunning) {
+            downloadState.awaitCompletion()
+        }
         synchronized(this) {
             if (cacheInstall) {
                 return true
@@ -87,20 +109,36 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
         return cacheInstall
     }
 
+    /** Retry one failed dynamic library install in the current process. */
+    internal fun installWithRetry(): Boolean {
+        if (install()) {
+            installRetry.set(false)
+            return true
+        }
+        if (!installRetry.compareAndSet(false, true)) {
+            return install()
+        }
+        preDownload()
+        val installed = install()
+        if (installed) {
+            installRetry.set(false)
+        }
+        return installed
+    }
+
 
     /**
      * 预加载Cronet
      */
     override fun preDownload() {
-        Coroutine.async {
-            //md5 = getUrlMd5(md5Url)
-            if (soFile.exists() && md5 == getFileMD5(soFile)) {
-                DebugLog.d(javaClass.simpleName, "So 库已存在")
-            } else {
-                download(soUrl, md5, downloadFile, soFile)
-            }
-            DebugLog.d(javaClass.simpleName, soName)
+        // Start the download before install() checks the state, so the first
+        // Cronet request can wait for the same task instead of racing it.
+        if (soFile.exists() && md5 == getFileMD5(soFile)) {
+            DebugLog.d(javaClass.simpleName, "So 库已存在")
+        } else {
+            download(soUrl, md5, downloadFile, soFile)
         }
+        DebugLog.d(javaClass.simpleName, soName)
     }
 
     private fun getMd5(context: Context): String {
@@ -143,6 +181,11 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
             if (!soFile.exists() || !soFile.isFile) {
                 soFile.delete()
                 download(soUrl, md5, downloadFile, soFile)
+                downloadState.awaitCompletion()
+                if (install()) {
+                    System.load(soFile.absolutePath)
+                    return
+                }
                 //如果文件不存在或不是文件，则调用系统行为进行加载
                 System.loadLibrary(libName)
                 return
@@ -161,6 +204,11 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
             }
             //不存在则下载
             download(soUrl, md5, downloadFile, soFile)
+            downloadState.awaitCompletion()
+            if (install()) {
+                System.load(soFile.absolutePath)
+                return
+            }
             //使用系统加载方法
             System.loadLibrary(libName)
         } finally {
