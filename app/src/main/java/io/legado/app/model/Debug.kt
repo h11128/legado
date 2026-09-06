@@ -16,6 +16,7 @@ import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.stackTraceStr
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
@@ -281,7 +282,9 @@ object Debug {
         activeCheckSourceUrls.clear()
         activeCheckResults.clear()
         // Drain any 换源/search success writes that were gated during the check.
-        Coroutine.async {
+        // executeContext=IO: this is a background DB flush, not a UI callback — it must
+        // not depend on Dispatchers.Main, which isn't installed under plain JVM unit tests.
+        Coroutine.async(executeContext = Dispatchers.IO) {
             RespondTimeUpdater.flush()
         }
         return true

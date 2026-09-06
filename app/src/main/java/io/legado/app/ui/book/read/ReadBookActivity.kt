@@ -32,6 +32,7 @@ import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.BuildConfig
 import io.legado.app.R
+import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
@@ -2007,6 +2008,23 @@ class ReadBookActivity : BaseReadBookActivity(),
             return
         }
         val contentBook = ReadBook.book ?: return
+        val fragmentManager = supportFragmentManager
+        // Single synchronous, tagged entry point for every review dialog (overlay or
+        // declarative-rule) so we never stack duplicate dialogs or call showNow() after
+        // fragmentManager state has been saved.
+        fun showReviewDialog(dialog: BaseDialogFragment) {
+            val reviewDialogTag = dialog::class.simpleName
+            val now = SystemClock.uptimeMillis()
+            val taggedDialog = fragmentManager.findFragmentByTag(reviewDialogTag)
+            val existingDialog = taggedDialog != null || fragmentManager.fragments.any {
+                it is ReviewDetailDialog && !it.isRemoving
+            }
+            if (fragmentManager.isStateSaved || existingDialog ||
+                now - lastReviewDialogRequestAt < REVIEW_DIALOG_REQUEST_COOLDOWN_MS
+            ) return
+            lastReviewDialogRequestAt = now
+            dialog.showNow(fragmentManager, reviewDialogTag)
+        }
         val bindings = ReviewOverlayBindings.listEnabled(contentBook.bookUrl)
         val mode = ReviewOverlayResolver.resolve(
             contentBook,
@@ -2026,7 +2044,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                 // is in the merge session (even if only one has a bucket), so we never
                 // fall through to paragraphPrimary which may lack chapterBucket.
                 if (merge != null && merge.providers.size > 1 && withBucket.isNotEmpty()) {
-                    showDialogFragment(
+                    showReviewDialog(
                         ReviewMergeDetailDialog(
                             totalCount = count,
                             sourceCount = withBucket.size,
@@ -2048,7 +2066,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                     } else {
                         providerSource.ruleReview?.hashCode() ?: return
                     }
-                    showDialogFragment(
+                    showReviewDialog(
                         ReviewDetailDialog(
                             paragraphNum = ref.providerParaIndex,
                             totalCount = count,
@@ -2082,7 +2100,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             } else {
                 providerSource.ruleReview?.hashCode() ?: return
             }
-            showDialogFragment(
+            showReviewDialog(
                 ReviewDetailDialog(
                     paragraphNum = ref.providerParaIndex,
                     totalCount = count,
@@ -2096,20 +2114,6 @@ class ReadBookActivity : BaseReadBookActivity(),
             return
         }
         val source = ReadBook.bookSource ?: return
-        val reviewDialogTag = ReviewDetailDialog::class.simpleName
-        val fragmentManager = supportFragmentManager
-        fun showReviewDialog(dialog: ReviewDetailDialog) {
-            val now = SystemClock.uptimeMillis()
-            val taggedDialog = fragmentManager.findFragmentByTag(reviewDialogTag)
-            val existingDialog = taggedDialog != null || fragmentManager.fragments.any {
-                it is ReviewDetailDialog && !it.isRemoving
-            }
-            if (fragmentManager.isStateSaved || existingDialog ||
-                now - lastReviewDialogRequestAt < REVIEW_DIALOG_REQUEST_COOLDOWN_MS
-            ) return
-            lastReviewDialogRequestAt = now
-            dialog.showNow(fragmentManager, reviewDialogTag)
-        }
         if (source.isJsSource()) {
             showReviewDialog(
                 ReviewDetailDialog(

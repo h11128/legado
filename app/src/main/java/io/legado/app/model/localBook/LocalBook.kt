@@ -43,6 +43,7 @@ import io.legado.app.utils.FileDoc
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.MD5Utils
+import io.legado.app.utils.realPathOrNearestExistingAncestor
 import io.legado.app.utils.delete
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.exists
@@ -89,7 +90,10 @@ internal fun findExactRemoteBook(
 internal fun resolveLocalBookOutputFile(root: File, relativePath: String): File {
     val canonicalRoot = root.canonicalFile
     val outputFile = File(canonicalRoot, relativePath).canonicalFile
-    if (!outputFile.toPath().startsWith(canonicalRoot.toPath())) {
+    if (!outputFile.toPath().startsWith(canonicalRoot.toPath()) ||
+        !outputFile.realPathOrNearestExistingAncestor()
+            .startsWith(canonicalRoot.realPathOrNearestExistingAncestor())
+    ) {
         throw SecurityException("书籍文件只能保存到指定路径")
     }
     return outputFile

@@ -5,7 +5,6 @@ import io.legado.app.data.entities.BookChapter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
@@ -69,10 +68,11 @@ class BookInfoLoadingIndicatorTest {
                 isNamespaceAware = true
             }.newDocumentBuilder().parse(projectFile(layoutPath))
             val indicators = document.getElementsByTagName(PROGRESS_TAG)
+                .let { nodeList -> (0 until nodeList.length).map { nodeList.item(it) as Element } }
+                .filter { it.androidAttribute("id") == "@+id/refresh_progress_bar" }
 
-            assertEquals(layoutPath, 1, indicators.length)
-            val indicator = indicators.item(0) as Element
-            assertEquals("@+id/refresh_progress_bar", indicator.androidAttribute("id"))
+            assertEquals(layoutPath, 1, indicators.size)
+            val indicator = indicators[0]
             assertEquals("match_parent", indicator.androidAttribute("layout_width"))
             assertEquals("2dp", indicator.androidAttribute("layout_height"))
             assertEquals("top", indicator.androidAttribute("layout_gravity"))
@@ -81,7 +81,11 @@ class BookInfoLoadingIndicatorTest {
             assertEquals("FrameLayout", parent.tagName)
             assertEquals("0dp", parent.androidAttribute("layout_height"))
             assertEquals("1", parent.androidAttribute("layout_weight"))
-            assertSame(indicator, parent.elementChildren().last())
+            // refresh_progress_bar and the auto_change_progress_bar overlay both draw on top
+            // of the scrollable content, so everything drawn after this indicator must also
+            // be a progress bar (not other content sneaking on top of it).
+            val siblingsAfter = parent.elementChildren().dropWhile { it !== indicator }.drop(1)
+            assertTrue(siblingsAfter.all { it.tagName == PROGRESS_TAG })
         }
     }
 

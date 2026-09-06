@@ -65,9 +65,9 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
                 }
             }
 
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             // Timeout / cancel must NOT fall back to OkHttp (would stack another ~60s).
-            if (CronetHardStop.isHardStop(e) || chain.call().isCanceled()) {
+            if (e is Exception && (CronetHardStop.isHardStop(e) || chain.call().isCanceled())) {
                 throw CronetHardStop.asIOException(e)
             }
             // A cancellation not already covered by the hard-stop check above (e.g. the

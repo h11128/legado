@@ -20,7 +20,7 @@ class BookInfoIconLayoutTest {
             val labels = document.getElementsByTagName("TextView").asElements()
                 .filter { it.androidAttribute("id") in LABEL_IDS }
 
-            assertEquals(ICON_SOURCES.size, icons.size)
+            assertEquals(TOTAL_ICON_COUNT, icons.size)
             assertEquals(ICON_SOURCES, icons.map { it.androidAttribute("src") }.toSet())
             icons.forEach { icon ->
                 assertEquals("18dp", icon.androidAttribute("layout_width"))
@@ -67,9 +67,15 @@ class BookInfoIconLayoutTest {
         private val LABEL_IDS = setOf(
             "@+id/tv_author",
             "@+id/tv_origin",
+            "@+id/tv_review_origin",
             "@+id/tv_lasted",
             "@+id/tv_group",
             "@+id/tv_toc",
         )
+
+        // ic_web_outline is reused by both the origin row (iv_web) and the review-origin
+        // row (iv_review_origin) added for RFC-004 review bindings, so the icon count is one
+        // more than the number of distinct icon drawables.
+        private val TOTAL_ICON_COUNT = ICON_SOURCES.size + 1
     }
 }

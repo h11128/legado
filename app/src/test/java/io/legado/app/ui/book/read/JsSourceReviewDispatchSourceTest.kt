@@ -48,8 +48,12 @@ class JsSourceReviewDispatchSourceTest {
             .substringBefore("private fun buildDetailItemKey(")
 
         assertTrue(loadBlock.contains("if (source.mainJs.hashCode() != ruleHash)"))
-        assertTrue(loadBlock.contains("if (book.bookUrl != bookUrl)"))
-        assertTrue(loadBlock.contains("getChapter(book.bookUrl, chapterIndex)"))
+        assertTrue(loadBlock.contains("val book = resolveReviewBook(bookUrl) ?: return@async null"))
+        assertTrue(
+            loadBlock.contains(
+                "val chapter = resolveReviewChapter(bookUrl, chapterIndex) ?: return@async null"
+            )
+        )
         assertTrue(loadBlock.contains("paragraphData = paragraphData"))
         assertTrue(loadBlock.contains("hasNextPageRule = true"))
         assertTrue(loadBlock.contains("hasReplyUrl = JsSourceReview.hasReviewRepliesCapability(source)"))

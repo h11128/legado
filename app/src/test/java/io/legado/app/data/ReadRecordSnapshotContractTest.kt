@@ -16,7 +16,7 @@ class ReadRecordSnapshotContractTest {
 
         val database = projectFile("src/main/java/io/legado/app/data/AppDatabase.kt")
         assertTrue(database.contains("version = 105"))
-        assertTrue(database.contains("AutoMigration(from = 104, to = 105)"))
+        assertTrue(database.contains("AutoMigration(from = 103, to = 105)"))
     }
 
     @Test

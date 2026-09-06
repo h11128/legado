@@ -5,6 +5,8 @@ package io.legado.app.utils
 import android.net.Uri
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.Path
 
 fun File.getFile(vararg subDirFiles: String): File {
     val path = FileUtils.getPath(this, *subDirFiles)
@@ -18,6 +20,23 @@ fun File.exists(vararg subDirFiles: String): Boolean {
 internal fun File.isSameOrDescendantOf(parent: File): Boolean {
     val parentPath = parent.canonicalFile.toPath()
     return canonicalFile.toPath().startsWith(parentPath)
+}
+
+/**
+ * Resolves symlinks/junctions along this path, walking up to the nearest existing ancestor
+ * first when the path itself doesn't exist yet (e.g. a file about to be created).
+ *
+ * `File.canonicalFile` alone is not enough for a path-traversal check: on Windows it does not
+ * reliably dereference NTFS reparse points (symlinks/junctions) the way it does on Unix, so a
+ * symlinked file or directory can slip past a canonical-path containment check that works fine
+ * in CI (Linux). `Path.toRealPath()` always follows links but requires the path to exist.
+ */
+internal fun File.realPathOrNearestExistingAncestor(): Path {
+    var path = toPath()
+    while (!Files.exists(path)) {
+        path = path.parent ?: return path
+    }
+    return path.toRealPath()
 }
 
 @Throws(Exception::class)

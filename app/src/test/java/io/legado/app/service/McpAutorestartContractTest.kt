@@ -12,7 +12,7 @@ class McpAutorestartContractTest {
         val service = projectFile("app/src/main/java/io/legado/app/service/McpService.kt")
         assertTrue(service.contains("Do not persist mcpService=false"))
         assertTrue(service.contains("User-initiated stop: persist off"))
-        assertTrue(service.contains("IntentAction.stop -> {"))
+        assertTrue(service.contains("IntentAction.stop -> stopServiceWithNotification()"))
         assertTrue(service.contains("appCtx.putPrefBoolean(PreferKey.mcpService, false)"))
         assertTrue(service.contains("appCtx.putPrefBoolean(PreferKey.mcpService, true)"))
         assertTrue(service.contains("private fun failStart"))

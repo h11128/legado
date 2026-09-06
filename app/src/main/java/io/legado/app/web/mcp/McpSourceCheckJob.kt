@@ -89,7 +89,13 @@ object McpSourceCheckJob {
 
     @Volatile private var running = false
     @Volatile private var total = 0
-    @Volatile private var keyword = CheckSource.keyword
+    // Placeholder only — real value is always set from CheckSource.keyword when a check
+    // session actually starts (see startCheckJob). Reading CheckSource.keyword here at
+    // McpSourceCheckJob's own class-init time would force-load CheckSource, which eagerly
+    // reads several CacheManager-backed prefs and needs a real Android appCtx; that breaks
+    // any code path (e.g. the MCP health endpoint) that merely references this object
+    // under a plain JVM unit test.
+    @Volatile private var keyword = "我的"
     @Volatile private var threadCount = 1
     @Volatile private var startedAt: Long? = null
     @Volatile private var finishedAt: Long? = null

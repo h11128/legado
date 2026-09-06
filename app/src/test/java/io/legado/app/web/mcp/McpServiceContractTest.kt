@@ -69,7 +69,7 @@ class McpServiceContractTest {
     }
 
     @Test
-    fun `server exposes the expected thirteen tools on current safe APIs`() {
+    fun `server exposes the expected fourteen tools on current safe APIs`() {
         val tools = projectFile("app/src/main/java/io/legado/app/web/mcp/McpToolServer.kt")
         val registrations = tools.substringAfter("private fun registerTools")
         val names = Regex("name = \\\"([a-z_]+)\\\"")
@@ -91,6 +91,7 @@ class McpServiceContractTest {
                 "set_cookie",
                 "clear_cookies",
                 "eval_js",
+                "cleanup_author_placeholders",
                 "check_source",
             ),
             names,
@@ -198,7 +199,8 @@ class McpServiceContractTest {
                 "list_sources", "get_source", "get_http_logs", "get_http_log", "get_cookies"
             ),
             "localWriteToolAnnotations" to listOf(
-                "delete_sources", "set_http_log_recording", "set_cookie", "clear_cookies"
+                "delete_sources", "set_http_log_recording", "set_cookie", "clear_cookies",
+                "cleanup_author_placeholders"
             ),
             "openWorldWriteToolAnnotations" to listOf(
                 "save_source", "debug_source", "eval_js", "check_source"

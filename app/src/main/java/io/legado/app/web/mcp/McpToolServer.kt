@@ -750,6 +750,7 @@ object McpToolServer {
             inputSchema = ToolSchema(
                 properties = buildJsonObject {},
             ),
+            toolAnnotations = localWriteToolAnnotations,
         ) { _ ->
             try {
                 val report = withContext(Dispatchers.IO) {

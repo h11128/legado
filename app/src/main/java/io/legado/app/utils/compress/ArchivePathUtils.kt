@@ -1,6 +1,7 @@
 package io.legado.app.utils.compress
 
 import io.legado.app.utils.isSameOrDescendantOf
+import io.legado.app.utils.realPathOrNearestExistingAncestor
 import java.io.File
 import java.io.FileNotFoundException
 
@@ -18,7 +19,10 @@ internal fun resolveArchiveEntryFile(destDir: File, entryName: String): File {
 
     val canonicalDestDir = destDir.canonicalFile
     val canonicalEntryFile = File(canonicalDestDir, entryName).canonicalFile
-    if (!canonicalEntryFile.isSameOrDescendantOf(canonicalDestDir)) {
+    if (!canonicalEntryFile.isSameOrDescendantOf(canonicalDestDir) ||
+        !canonicalEntryFile.realPathOrNearestExistingAncestor()
+            .startsWith(canonicalDestDir.realPathOrNearestExistingAncestor())
+    ) {
         throw SecurityException(INVALID_ARCHIVE_PATH)
     }
     return canonicalEntryFile
